@@ -11,6 +11,7 @@ import {
   applyEdgeChanges,
   type NodeChange,
   type EdgeChange,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -121,6 +122,7 @@ function Canvas() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map());
   const [laying, setLaying] = useState(false);
+  const { fitView } = useReactFlow();
 
   const cell = design?.cells.get(currentCell);
 
@@ -157,6 +159,19 @@ function Canvas() {
     if (mode === 'net') setFocusNet(null);
   }, [mode, setSelection, setFocusNet]);
 
+  // "F" key → fit view (standard EDA shortcut)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'f' || e.key === 'F') {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        fitView({ padding: 0.15, duration: 300 });
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [fitView]);
+
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       {laying && <div className="layout-spinner">Computing layout…</div>}
@@ -182,6 +197,13 @@ function Canvas() {
         <div className="legend-row"><span className="legend-line gnd" />ground net</div>
         <div className="legend-row"><span className="legend-line sel" />selected / focus</div>
       </div>
+      <button
+        className="fit-btn"
+        onClick={() => fitView({ padding: 0.15, duration: 300 })}
+        title="Fit view (F)"
+      >
+        ⊡ Fit  <kbd>F</kbd>
+      </button>
       <div className="canvas-hint">click a block to select · double-click to descend · click a wire to focus net</div>
     </div>
   );
