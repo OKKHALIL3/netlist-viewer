@@ -257,14 +257,6 @@ body {
   background: var(--panel);
   overflow: hidden;
 }
-.insp-tabs { display: flex; border-bottom: 1px solid var(--line); }
-.insp-tabs button {
-  flex: 1; background: none; border: none; color: var(--txt-dim);
-  padding: 12px; font-size: 12px; cursor: pointer; font-family: 'Sora';
-  border-bottom: 2px solid transparent;
-}
-.insp-tabs button.on { color: var(--txt); border-bottom-color: var(--accent); }
-
 .insp-body { flex: 1; overflow-y: auto; padding: 16px 15px; }
 
 .insp-empty {
@@ -317,23 +309,6 @@ body {
   padding: 3px 7px; border-radius: 5px; background: #1a2029; color: var(--txt-dim);
 }
 
-.addbtn {
-  width: 100%; margin-top: 18px;
-  background: var(--accent-soft); color: #cfe3ff;
-  border: 1px solid #2c4a6e; padding: 9px; border-radius: 7px;
-  cursor: pointer; font-size: 12.5px; font-family: 'Sora';
-}
-.addbtn:hover { background: #234063; }
-
-.rev-item {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 10px; background: var(--panel-2);
-  border: 1px solid var(--line-soft); border-radius: 7px;
-  margin-bottom: 7px; font-size: 12px;
-}
-.rev-id { font-family: 'Space Mono', monospace; flex: 1; }
-.rev-remove { color: var(--txt-faint); cursor: pointer; margin-left: auto; }
-.rev-remove:hover { color: var(--txt); }
 
 /* ── Drop zone (empty state) ───────────────────────────────── */
 .dropzone {

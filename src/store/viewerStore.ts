@@ -8,11 +8,6 @@ export type SelectionType =
   | { type: 'primitive'; id: string }
   | { type: 'net'; name: string };
 
-export interface ReviewItem {
-  type: 'instance' | 'primitive' | 'net';
-  id: string;
-}
-
 export interface BreadcrumbEntry {
   label: string;
   cellName: string;
@@ -26,7 +21,6 @@ interface ViewerState {
   hideSupply: boolean;
   focusNet: string | null;
   selection: SelectionType | null;
-  reviewList: ReviewItem[];
   warnings: string[];
 
   // actions
@@ -37,8 +31,6 @@ interface ViewerState {
   toggleHideSupply: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
-  addToReview: (item: ReviewItem) => void;
-  removeFromReview: (index: number) => void;
   getCell: () => Cell | undefined;
 }
 
@@ -50,7 +42,6 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   hideSupply: true,
   focusNet: null,
   selection: null,
-  reviewList: [],
   warnings: [],
 
   loadDesign: (design) => {
@@ -61,7 +52,6 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       selection: null,
       focusNet: null,
       warnings: design.warnings,
-      reviewList: [],
     });
   },
 
@@ -97,18 +87,6 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setFocusNet: (net) => set({ focusNet: net }),
 
   setSelection: (sel) => set({ selection: sel }),
-
-  addToReview: (item) => {
-    const { reviewList } = get();
-    if (!reviewList.some(r => r.type === item.type && r.id === item.id)) {
-      set({ reviewList: [...reviewList, item] });
-    }
-  },
-
-  removeFromReview: (index) => {
-    const { reviewList } = get();
-    set({ reviewList: reviewList.filter((_, i) => i !== index) });
-  },
 
   getCell: () => {
     const { design, currentCell } = get();

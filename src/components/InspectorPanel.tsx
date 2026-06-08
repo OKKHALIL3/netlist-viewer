@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useViewerStore } from '../store/viewerStore';
 
 function EmptyState() {
@@ -6,14 +5,12 @@ function EmptyState() {
     <div className="insp-empty">
       <div className="insp-empty-icon">＋</div>
       Select a block, net, or device on the canvas to inspect it.
-      <br /><br />
-      Selections can be pushed into the Review list.
     </div>
   );
 }
 
 function InstanceDetail() {
-  const { selection, design, currentCell, descend, addToReview, setSelection } = useViewerStore();
+  const { selection, design, currentCell, descend, setSelection } = useViewerStore();
   if (selection?.type !== 'instance') return null;
 
   const cell = design?.cells.get(currentCell);
@@ -24,14 +21,6 @@ function InstanceDetail() {
   const childCount = masterCell
     ? masterCell.instances.length + masterCell.primitives.length
     : '—';
-
-  const handleDescend = () => {
-    if (masterCell) descend(inst.id, inst.master);
-  };
-
-  const handleNetClick = (net: string) => {
-    setSelection({ type: 'net', name: net });
-  };
 
   return (
     <div>
@@ -44,7 +33,7 @@ function InstanceDetail() {
         <span className="kv-key">Master cell</span>
         <span
           className={`kv-val${masterCell ? ' link' : ''}`}
-          onClick={masterCell ? handleDescend : undefined}
+          onClick={masterCell ? () => descend(inst.id, inst.master) : undefined}
         >
           {inst.master}
         </span>
@@ -66,29 +55,31 @@ function InstanceDetail() {
       {Object.entries(inst.conn).map(([pin, net]) => (
         <div key={pin} className="conn-row">
           <span className="conn-pin">{pin}</span>
-          <span className="conn-net" onClick={() => handleNetClick(net)}>{net}</span>
+          <span
+            className="conn-net"
+            onClick={() => setSelection({ type: 'net', name: net })}
+          >
+            {net}
+          </span>
         </div>
       ))}
-
-      <button
-        className="addbtn"
-        onClick={() => addToReview({ type: 'instance', id: inst.id })}
-      >
-        + Add to Review (zone)
-      </button>
     </div>
   );
 }
 
 function NetDetail() {
-  const { selection, design, currentCell, addToReview, setMode } = useViewerStore();
+  const { selection, design, currentCell } = useViewerStore();
   if (selection?.type !== 'net') return null;
 
   const cell = design?.cells.get(currentCell);
   const net = cell?.nets.find(n => n.name === selection.name);
   if (!net) return null;
 
-  const kindColor = net.kind === 'power' ? 'var(--net-pwr)' : net.kind === 'ground' ? 'var(--net-gnd)' : 'var(--net-sig)';
+  const kindColor = net.kind === 'power'
+    ? 'var(--net-pwr)'
+    : net.kind === 'ground'
+    ? 'var(--net-gnd)'
+    : 'var(--net-sig)';
   const realEps = net.endpoints.filter(([id]) => id !== '__port__');
 
   return (
@@ -114,19 +105,12 @@ function NetDetail() {
           <span className="conn-net">{pin}</span>
         </div>
       ))}
-
-      <button
-        className="addbtn"
-        onClick={() => { setMode('net'); addToReview({ type: 'net', id: net.name }); }}
-      >
-        + Focus &amp; Add to Review
-      </button>
     </div>
   );
 }
 
 function PrimitiveDetail() {
-  const { selection, design, currentCell, addToReview } = useViewerStore();
+  const { selection, design, currentCell } = useViewerStore();
   if (selection?.type !== 'primitive') return null;
 
   const cell = design?.cells.get(currentCell);
@@ -159,72 +143,30 @@ function PrimitiveDetail() {
         </div>
       ))}
 
-      <div className="insp-subhead">Parameters</div>
-      <div className="pill-row">
-        {Object.entries(prim.params).map(([k, v]) => (
-          <span key={k} className="pill">{k}={v}</span>
-        ))}
-      </div>
-
-      <button className="addbtn" onClick={() => addToReview({ type: 'primitive', id: prim.id })}>
-        + Add to Review (zone)
-      </button>
-    </div>
-  );
-}
-
-function ReviewList() {
-  const { reviewList, removeFromReview } = useViewerStore();
-
-  if (reviewList.length === 0) {
-    return (
-      <div className="insp-empty">
-        <div className="insp-empty-icon">▦</div>
-        No items in review yet.
-        <br />Add nets / instances from the canvas.
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {reviewList.map((item, i) => (
-        <div key={i} className="rev-item">
-          <span className={`insp-tag ${item.type === 'net' ? 'net' : item.type === 'primitive' ? 'prim' : 'inst'}`}>
-            {item.type}
-          </span>
-          <span className="rev-id">{item.id}</span>
-          <span className="rev-remove" onClick={() => removeFromReview(i)}>✕</span>
-        </div>
-      ))}
-      <button className="addbtn" onClick={() => alert(`Handing ${reviewList.length} items to zone-creation flow`)}>
-        Create Zone from {reviewList.length} item{reviewList.length !== 1 ? 's' : ''}
-      </button>
+      {Object.keys(prim.params).length > 0 && (
+        <>
+          <div className="insp-subhead">Parameters</div>
+          <div className="pill-row">
+            {Object.entries(prim.params).map(([k, v]) => (
+              <span key={k} className="pill">{k}={v}</span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 export function InspectorPanel() {
-  const { selection, reviewList } = useViewerStore();
-  const [tab, setTab] = useState<'sel' | 'rev'>('sel');
-
-  const selCount = selection ? 1 : 0;
+  const { selection } = useViewerStore();
 
   return (
     <div className="panel-right">
-      <div className="insp-tabs">
-        <button className={tab === 'sel' ? 'on' : ''} onClick={() => setTab('sel')}>
-          Current Selection ({selCount})
-        </button>
-        <button className={tab === 'rev' ? 'on' : ''} onClick={() => setTab('rev')}>
-          Review ({reviewList.length})
-        </button>
+      <div className="panel-head">
+        <h3>Inspector</h3>
       </div>
-
       <div className="insp-body">
-        {tab === 'rev' ? (
-          <ReviewList />
-        ) : selection?.type === 'instance' ? (
+        {selection?.type === 'instance' ? (
           <InstanceDetail />
         ) : selection?.type === 'net' ? (
           <NetDetail />
@@ -237,4 +179,3 @@ export function InspectorPanel() {
     </div>
   );
 }
-
