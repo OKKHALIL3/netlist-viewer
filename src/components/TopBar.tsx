@@ -49,17 +49,6 @@ export function TopBar() {
         ACE
       </div>
 
-      {/* Steps */}
-      <div className="steps">
-        <span className="step active">1 · Schematic</span>
-        <span className="step-sep">—</span>
-        <span className="step">2 Flavor</span>
-        <span className="step-sep">—</span>
-        <span className="step">3 Coupling Caps</span>
-        <span className="step-sep">—</span>
-        <span className="step">4 Termination</span>
-      </div>
-
       {/* Breadcrumb (center) */}
       {design && (
         <div className="breadcrumb">
