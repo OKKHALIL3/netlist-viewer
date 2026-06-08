@@ -58,6 +58,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   descend: (instanceId, masterCell) => {
     const { breadcrumb, design } = get();
     if (!design?.cells.has(masterCell)) return;
+    // Already at this instance — don't push duplicate entry
+    if (breadcrumb[breadcrumb.length - 1]?.label === instanceId) return;
     set({
       currentCell: masterCell,
       breadcrumb: [...breadcrumb, { label: instanceId, cellName: masterCell }],
