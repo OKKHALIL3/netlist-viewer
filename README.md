@@ -1,0 +1,121 @@
+# CDL Schematic Viewer
+
+**Step 1 of the ACE workflow — interactive CDL netlist browser.**
+
+Live demo → **[okkhalil3.github.io/cdl-netlist](https://okkhalil3.github.io/cdl-netlist)**
+
+---
+
+## What it does
+
+Drag a CDL netlist file onto the window (or click **Open CDL…**) and the viewer:
+
+- Parses the full hierarchy — subcircuits, instances, primitive devices (M/R/C), and nets
+- Draws an interactive schematic canvas with ELK-computed layout
+- Lets you navigate the hierarchy top-down via breadcrumb or the left tree panel
+- Lets you inspect any block, wire, or device in the right panel
+
+No server, no install, no data leaves your machine — everything runs in the browser.
+
+---
+
+## Running locally
+
+```bash
+npm install
+npm run dev        # → http://localhost:5173
+```
+
+Production build:
+
+```bash
+npm run build      # outputs to dist/
+npm run preview    # serve the build locally
+```
+
+---
+
+## CDL dialect support
+
+All four major CDL dialects are handled:
+
+| Dialect | Notes |
+|---|---|
+| auCdl (slash-form) | Nets before `/`, master on `+` continuation line |
+| ICnet / LVS | Lowercase keywords, `[n]` bus indices, no slash |
+| Slash-form large hierarchies | `XR*` sub-circuit resistors (`rhim_m` model) |
+| CRLF + native passives | Windows line endings, native `CC*` capacitors |
+
+The parser handles:
+
+- `+` continuation lines
+- `*.PININFO` pin-direction comments (before or after `.SUBCKT`)
+- `<n>` and `[n]` bus instance scalarisation — grouped back into a single tree row
+- `X*` pseudo-devices: resistors and capacitors inferred from model name (`rhim`, `rpoly`, `mim`, `cfmom`, …); cell names containing `_mac` are **not** confused with MOSFETs
+- Native `M*` / `C*` / `R*` primitive lines
+- Top-cell detection: header comment `* Top Cell Name: X` → last unreferenced cell → last defined cell
+
+---
+
+## Interface
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  ACE  1·Schematic  ──  breadcrumb  ──  mode buttons  [Load file] │
+├─────────────┬────────────────────────────────┬───────────────────┤
+│  HIERARCHY  │                                │  INSPECTOR        │
+│             │      Schematic canvas          │                   │
+│  tree of    │      (React Flow + ELK)        │  Current          │
+│  instances  │                                │  Selection / Review│
+└─────────────┴────────────────────────────────┴───────────────────┘
+```
+
+**Left panel — Hierarchy browser**
+- Click a row to navigate into that cell
+- Bus instances (`XI1<5:0>`) are collapsed into a single row
+
+**Center — Schematic canvas**
+- Sub-circuit instances render as blocks with pin → net tables
+- Primitive devices (MOSFET, resistor, capacitor) render as labelled glyphs
+- Scroll / pinch to zoom; drag to pan
+- Double-click a block to descend; click breadcrumb to ascend
+- Click a wire to inspect or focus that net
+
+**Right panel — Inspector**
+- Instance: master cell (clickable to descend), parent, child count, full pin → net map
+- Net: kind (signal / power / ground), fanout, all connected pins
+- Primitive: model, terminals, parameters
+
+**View modes**
+
+| Mode | Shows |
+|---|---|
+| Instances | Blocks only — structural overview |
+| Nets + Instances | Blocks + wires (default) |
+| Net focus | Click a wire to highlight one net; everything else dims |
+
+**Hide supply nets** toggle removes power/ground wires from the canvas — useful for large cells where every instance ties to VDD/VSS.
+
+---
+
+## Parser test results
+
+```
+Level 2 — flat cell extraction    10/10
+Level 3 — hierarchy               7/7
+Level 4 — connectivity            11/11
+
+Stress tests (edge cases)         62/62
+```
+
+Tested against: empty files, unclosed subckts, CRLF/CR line endings, `$` characters in IDs, long pcell hashes, diamond dependencies, deep chains, `.PARAM`/`.GLOBAL`/`.MODEL` directive skip, and all device-classification edge cases.
+
+---
+
+## Scope
+
+A standalone, read-only CDL viewer. It does not edit, simulate, or reconstruct the designer's original schematic drawing.
+
+Out of scope:
+- Transistor-level beautified analog symbols
+- Pixel-perfect reconstruction of the original layout
