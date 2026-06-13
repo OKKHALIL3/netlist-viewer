@@ -342,6 +342,30 @@ body {
 .conn-net { color: var(--accent); cursor: pointer; }
 .conn-net:hover { text-decoration: underline; }
 
+.ai-desc-text {
+  font-size: 12px; line-height: 1.6; color: var(--txt-dim);
+  margin: 0 0 10px; white-space: pre-wrap;
+}
+.ai-desc-error {
+  font-size: 11.5px; color: var(--net-pwr); margin: 0 0 10px;
+}
+.ai-desc-keyform { display: flex; gap: 6px; }
+.ai-desc-keyform input {
+  flex: 1; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 6px; color: var(--txt); font-size: 12px;
+  padding: 6px 9px; font-family: 'Space Mono', monospace;
+}
+.ai-desc-keyform input:focus { outline: none; border-color: var(--accent); }
+
+.btn-secondary {
+  background: var(--panel-2); color: var(--txt); font-weight: 500;
+  border: 1px solid var(--line); padding: 6px 14px; border-radius: 7px;
+  cursor: pointer; font-size: 12px; font-family: 'Sora';
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-secondary:disabled { cursor: default; opacity: 0.6; }
+
 .pill-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 4px; }
 .pill {
   font-size: 10px; font-family: 'Space Mono', monospace;

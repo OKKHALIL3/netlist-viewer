@@ -1,4 +1,66 @@
+import { useState, useEffect, useCallback } from 'react';
 import { useViewerStore } from '../store/viewerStore';
+import { describeCell, getApiKey, getCachedDescription, setApiKey } from '../ai/describeCell';
+import type { Cell } from '../parser/types';
+
+// Keyed by cell.name from the caller so a remount resets state when the
+// selected instance's master cell changes.
+function CellDescription({ cell }: { cell: Cell }) {
+  const [description, setDescription] = useState<string | null>(() => getCachedDescription(cell.name));
+  const [keyInput, setKeyInput] = useState('');
+  const [hasKey, setHasKey] = useState(() => !!getApiKey());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const saveKey = () => {
+    if (!keyInput.trim()) return;
+    setApiKey(keyInput.trim());
+    setHasKey(true);
+    setKeyInput('');
+  };
+
+  const generate = useCallback(async (target: Cell, force: boolean) => {
+    setLoading(true);
+    setError(null);
+    try {
+      setDescription(await describeCell(target, force));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Every instance gets its description automatically: generate it on first
+  // view if we don't already have a cached one (and a key is set).
+  useEffect(() => {
+    if (!description && hasKey) void Promise.resolve().then(() => generate(cell, false));
+  }, [cell, description, hasKey, generate]);
+
+  return (
+    <>
+      <div className="insp-subhead">Functional description</div>
+      {description && <p className="ai-desc-text">{description}</p>}
+      {error && <p className="ai-desc-error">{error}</p>}
+      {!hasKey ? (
+        <div className="ai-desc-keyform">
+          <input
+            type="password"
+            placeholder="Anthropic API key"
+            value={keyInput}
+            onChange={e => setKeyInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && saveKey()}
+          />
+          <button className="btn-secondary" onClick={saveKey}>Save key</button>
+        </div>
+      ) : (
+        <button className="btn-secondary" onClick={() => generate(cell, !!description)} disabled={loading}>
+          {loading ? 'Generating…' : description ? 'Regenerate' : 'Generate with AI'}
+        </button>
+      )}
+    </>
+  );
+}
 
 function EmptyState() {
   return (
@@ -50,6 +112,8 @@ function InstanceDetail() {
         <span className="kv-key">Pins</span>
         <span className="kv-val">{Object.keys(inst.conn).length}</span>
       </div>
+
+      {masterCell && <CellDescription key={masterCell.name} cell={masterCell} />}
 
       <div className="insp-subhead">Pin → Net mapping</div>
       {Object.entries(inst.conn).map(([pin, net]) => (
