@@ -335,6 +335,9 @@ body {
 .dropzone-title { font-size: 22px; font-weight: 600; color: var(--txt); }
 .dropzone-sub { font-size: 14px; color: var(--txt-dim); }
 .dropzone-hint { font-size: 12px; color: var(--txt-faint); font-family: 'Space Mono', monospace; }
+.dropzone-error { font-size: 12px; color: var(--net-pwr); font-family: 'Space Mono', monospace; max-width: 80%; text-align: center; }
+
+.badge-error { color: var(--net-pwr); border-color: var(--net-pwr); }
 
 /* ── Warnings bar ──────────────────────────────────────────── */
 .warnings-bar {

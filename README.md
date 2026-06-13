@@ -15,7 +15,7 @@ Drag a CDL netlist file onto the window (or click **Open CDL…**) and the viewe
 - Lets you navigate the hierarchy top-down via breadcrumb or the left tree panel
 - Lets you inspect any block, wire, or device in the right panel
 
-No server, no install, no data leaves your machine — everything runs in the browser.
+No server, no install, no data leaves your machine — everything runs in the browser. The parser ([`eda-netlist-parser`](https://pypi.org/project/eda-netlist-parser/)) runs in-browser via [Pyodide](https://pyodide.org) (Python compiled to WASM), in a Web Worker — the first file you load downloads the Python runtime (~10 MB, cached after that).
 
 ---
 
@@ -46,7 +46,8 @@ All four major CDL dialects are handled:
 | Slash-form large hierarchies | `XR*` sub-circuit resistors (`rhim_m` model) |
 | CRLF + native passives | Windows line endings, native `CC*` capacitors |
 
-The parser handles:
+Parsing is `eda-netlist-parser` (open-source Python) plus a small adapter
+(`src/parser/pyodide/cdl_adapter.py`) that adds CDL-specific handling on top:
 
 - `+` continuation lines
 - `*.PININFO` pin-direction comments (before or after `.SUBCKT`)
@@ -101,14 +102,10 @@ The parser handles:
 ## Parser test results
 
 ```
-Level 2 — flat cell extraction    10/10
-Level 3 — hierarchy               7/7
-Level 4 — connectivity            11/11
-
-Stress tests (edge cases)         62/62
+npm test   →   65/65 (test-adapter.mjs)
 ```
 
-Tested against: empty files, unclosed subckts, CRLF/CR line endings, `$` characters in IDs, long pcell hashes, diamond dependencies, deep chains, `.PARAM`/`.GLOBAL`/`.MODEL` directive skip, and all device-classification edge cases.
+Tested against: empty files, unclosed subckts, CRLF/CR line endings, `$` characters in IDs, long pcell hashes, diamond dependencies, deep chains, `.PARAM`/`.GLOBAL`/`.MODEL` directive skip, all device-classification edge cases, and bus notation (`<n>`/`[n]`) — run through the real `eda-netlist-parser` + adapter via Pyodide under Node. Also validated against the 4 real sample CDL files and live in-browser.
 
 ---
 

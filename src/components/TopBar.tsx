@@ -1,39 +1,46 @@
 import { useRef } from 'react';
 import { useViewerStore } from '../store/viewerStore';
-import { parseCDL } from '../parser/cdl';
+import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 
 export function TopBar() {
   const {
-    design, currentCell, breadcrumb, mode, hideSupply,
-    ascendTo, setMode, toggleHideSupply, loadDesign,
+    design, currentCell, breadcrumb, mode, hideSupply, parsing, parseError,
+    ascendTo, setMode, toggleHideSupply, loadDesign, setParsing, setParseError,
   } = useViewerStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const cell = design?.cells.get(currentCell);
   const netCount = cell?.nets.length ?? 0;
 
+  const loadFile = async (text: string) => {
+    setParseError(null);
+    setParsing(true);
+    try {
+      const d = await parseCDLAsync(text);
+      loadDesign(d);
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      const d = parseCDL(text);
-      loadDesign(d);
-    };
+    reader.onload = (ev) => loadFile(ev.target?.result as string);
     reader.readAsText(file);
     e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (parsing) return;
     const file = e.dataTransfer.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string;
-      loadDesign(parseCDL(text));
-    };
+    reader.onload = (ev) => loadFile(ev.target?.result as string);
     reader.readAsText(file);
   };
 
@@ -68,6 +75,9 @@ export function TopBar() {
 
       {/* Right side */}
       <div className="topbar-right">
+        {parseError && <span className="badge badge-error">{parseError}</span>}
+        {parsing && <span className="badge">Parsing…</span>}
+
         {design && (
           <>
             {/* Hide supply toggle */}
@@ -106,7 +116,7 @@ export function TopBar() {
           style={{ display: 'none' }}
           onChange={handleFile}
         />
-        <button className="btn-primary" onClick={() => fileRef.current?.click()}>
+        <button className="btn-primary" disabled={parsing} onClick={() => fileRef.current?.click()}>
           {design ? 'Load file' : 'Open CDL…'}
         </button>
       </div>

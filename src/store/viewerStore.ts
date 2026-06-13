@@ -22,6 +22,8 @@ interface ViewerState {
   focusNet: string | null;
   selection: SelectionType | null;
   warnings: string[];
+  parsing: boolean;
+  parseError: string | null;
 
   // actions
   loadDesign: (design: Design) => void;
@@ -31,6 +33,8 @@ interface ViewerState {
   toggleHideSupply: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
+  setParsing: (parsing: boolean) => void;
+  setParseError: (error: string | null) => void;
   getCell: () => Cell | undefined;
 }
 
@@ -43,6 +47,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   focusNet: null,
   selection: null,
   warnings: [],
+  parsing: false,
+  parseError: null,
 
   loadDesign: (design) => {
     set({
@@ -89,6 +95,10 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setFocusNet: (net) => set({ focusNet: net }),
 
   setSelection: (sel) => set({ selection: sel }),
+
+  setParsing: (parsing) => set({ parsing }),
+
+  setParseError: (error) => set({ parseError: error }),
 
   getCell: () => {
     const { design, currentCell } = get();
