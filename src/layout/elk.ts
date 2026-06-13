@@ -12,6 +12,8 @@ export interface NodePosition {
 
 const NODE_WIDTH = 180;
 const PRIM_SIZE = 56;
+const PORT_WIDTH = 70;
+const PORT_HEIGHT = 54;
 const HEADER_H = 42;
 const PIN_ROW_H = 20;
 const BODY_PAD = 10;
@@ -40,6 +42,11 @@ export async function layoutCell(cell: Cell): Promise<Map<string, NodePosition>>
       width: PRIM_SIZE,
       height: PRIM_SIZE + 24,
     })),
+    ...cell.ports.map(port => ({
+      id: `__port__:${port.name}`,
+      width: PORT_WIDTH,
+      height: PORT_HEIGHT,
+    })),
   ];
 
   if (children.length === 0) return new Map();
@@ -47,12 +54,16 @@ export async function layoutCell(cell: Cell): Promise<Map<string, NodePosition>>
   const seenEdge = new Set<string>();
   const edges: ElkExtendedEdge[] = [];
 
+  // Cell-boundary connections (the "__port__" pseudo-node) get their own
+  // layout node per port (`__port__:<name>`) so a pin whose only other
+  // connection is the cell's I/O boundary is still laid out next to a wire,
+  // instead of floating with no edges at all.
   for (const net of cell.nets) {
-    const realEps = net.endpoints.filter(([id]) => id !== '__port__');
-    if (realEps.length < 2) continue;
-    for (let i = 0; i < realEps.length - 1; i++) {
-      const src = realEps[i][0];
-      const tgt = realEps[i + 1][0];
+    const eps = net.endpoints.map(([id, pin]) => (id === '__port__' ? `__port__:${pin}` : id));
+    if (eps.length < 2) continue;
+    for (let i = 0; i < eps.length - 1; i++) {
+      const src = eps[i];
+      const tgt = eps[i + 1];
       if (src === tgt) continue;
       const key = `${src}→${tgt}`;
       if (seenEdge.has(key)) continue;

@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { Primitive } from '../../parser/types';
@@ -5,6 +6,7 @@ import type { Primitive } from '../../parser/types';
 export interface PrimitiveNodeData extends Record<string, unknown> {
   primitive: Primitive;
   isSelected: boolean;
+  isConnected: boolean;
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -15,7 +17,7 @@ const KIND_COLOR: Record<string, string> = {
 
 export function PrimitiveNode({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
-  const { primitive, isSelected } = d;
+  const { primitive, isSelected, isConnected } = d;
   const { setSelection } = useViewerStore();
 
   const color = KIND_COLOR[primitive.kind] ?? 'var(--txt-dim)';
@@ -29,30 +31,46 @@ export function PrimitiveNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`prim-node${isSelected ? ' sel' : ''}`}
+      className={`prim-node${isSelected ? ' sel' : isConnected ? ' connected' : ''}`}
       onClick={handleClick}
       style={{ '--prim-color': color } as React.CSSProperties}
     >
-      {/* Left-side handles (first half of terminals) */}
+      {/* Left-side terminals (first half) — visible target handle plus an
+          invisible source handle at the same spot, so an edge that picks
+          this terminal as its "source" still has a handle to anchor to. */}
       {primitive.terms.slice(0, Math.ceil(midPoint)).map(([term], i) => (
-        <Handle
-          key={`t-${term}`}
-          type="target"
-          position={Position.Left}
-          id={`${term}-tgt`}
-          style={{ top: 8 + i * 16, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
-        />
+        <Fragment key={`l-${term}`}>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`${term}-tgt`}
+            style={{ top: 8 + i * 16, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Left}
+            id={`${term}-src`}
+            style={{ top: 8 + i * 16, width: 7, height: 7, opacity: 0, pointerEvents: 'none' }}
+          />
+        </Fragment>
       ))}
 
-      {/* Right-side handles (second half of terminals) */}
+      {/* Right-side terminals (second half) — same pairing, mirrored. */}
       {primitive.terms.slice(Math.ceil(midPoint)).map(([term], i) => (
-        <Handle
-          key={`s-${term}`}
-          type="source"
-          position={Position.Right}
-          id={`${term}-src`}
-          style={{ top: 8 + i * 16, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
-        />
+        <Fragment key={`r-${term}`}>
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`${term}-src`}
+            style={{ top: 8 + i * 16, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
+          />
+          <Handle
+            type="target"
+            position={Position.Right}
+            id={`${term}-tgt`}
+            style={{ top: 8 + i * 16, width: 7, height: 7, opacity: 0, pointerEvents: 'none' }}
+          />
+        </Fragment>
       ))}
 
       <div className="prim-glyph">{primitive.kind}</div>

@@ -15,14 +15,15 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useViewerStore } from '../store/viewerStore';
+import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
-import type { Cell, Net } from '../parser/types';
+import { PortNode, type PortNodeData } from './nodes/PortNode';
+import type { Cell, Design, Net } from '../parser/types';
 import type { NodePosition } from '../layout/elk';
 
-const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode };
+const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode };
 
 function netColor(net: Net): string {
   if (net.kind === 'power') return 'var(--net-pwr)';
@@ -34,28 +35,65 @@ function pinIsOutput(name: string): boolean {
   return /^(out|y|z|q|qb?|do|dout|co|cout|s|sum|f|g)$/i.test(name) || /(_o|_out|_y)$/i.test(name);
 }
 
+// A cell-boundary connection appears in a net's endpoints as ["__port__", portName].
+// Give each port its own node id so it can be laid out and drawn like any
+// other node, instead of being dropped (which left boundary-connected pins
+// looking unconnected).
+function portNodeId(pin: string): string {
+  return `__port__:${pin}`;
+}
+
+// Selecting a node or net highlights everything electrically connected to it:
+// the nets touching the selected node (or, for a selected net, that net
+// itself) and every node those nets touch.
+function computeHighlight(cell: Cell, selection: SelectionType | null): { nets: Set<string>; nodes: Set<string> } {
+  const nets = new Set<string>();
+  const nodes = new Set<string>();
+  if (!selection) return { nets, nodes };
+
+  const addNet = (net: Net) => {
+    nets.add(net.name);
+    for (const [id, pin] of net.endpoints) {
+      nodes.add(id === '__port__' ? portNodeId(pin) : id);
+    }
+  };
+
+  if (selection.type === 'net') {
+    const net = cell.nets.find(n => n.name === selection.name);
+    if (net) addNet(net);
+    return { nets, nodes };
+  }
+
+  for (const net of cell.nets) {
+    if (net.endpoints.some(([id]) => id === selection.id)) addNet(net);
+  }
+  return { nets, nodes };
+}
+
 function buildGraph(
   cell: Cell,
-  selection: ReturnType<typeof useViewerStore.getState>['selection'],
+  selection: SelectionType | null,
   mode: string,
   hideSupply: boolean,
   focusNet: string | null,
-  design: ReturnType<typeof useViewerStore.getState>['design'],
+  design: Design | null,
   positions: Map<string, NodePosition>,
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
+  const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
 
   for (const inst of cell.instances) {
     const pos = positions.get(inst.id);
     if (!pos) continue;
     const masterPorts = design?.cells.get(inst.master)?.ports ?? [];
     const isSelected = selection?.type === 'instance' && selection.id === inst.id;
+    const isConnected = !isSelected && highlightedNodes.has(inst.id);
     nodes.push({
       id: inst.id,
       type: 'instanceNode',
       position: { x: pos.x, y: pos.y },
-      data: { instance: inst, masterPorts, isSelected } as InstanceNodeData,
+      data: { instance: inst, masterPorts, isSelected, isConnected } as InstanceNodeData,
       style: { width: pos.width },
     });
   }
@@ -64,33 +102,58 @@ function buildGraph(
     const pos = positions.get(prim.id);
     if (!pos) continue;
     const isSelected = selection?.type === 'primitive' && selection.id === prim.id;
+    const isConnected = !isSelected && highlightedNodes.has(prim.id);
     nodes.push({
       id: prim.id,
       type: 'primitiveNode',
       position: { x: pos.x, y: pos.y },
-      data: { primitive: prim, isSelected } as PrimitiveNodeData,
+      data: { primitive: prim, isSelected, isConnected } as PrimitiveNodeData,
     });
   }
 
   if (mode !== 'inst') {
+    const addedPorts = new Set<string>();
+
     for (const net of cell.nets) {
       if (hideSupply && net.kind !== 'signal' && mode !== 'net') continue;
-      const realEps = net.endpoints.filter(([id]) => id !== '__port__');
-      if (realEps.length < 2) continue;
 
       const isFocused = focusNet === net.name;
+      const isHighlighted = highlightedNets.has(net.name);
       const isDimmed = focusNet !== null && !isFocused && mode === 'net';
-      const color = isFocused ? 'var(--sel)' : netColor(net);
-      const opacity = isDimmed ? 0.05 : 0.65;
-      const strokeWidth = isFocused ? 2.4 : 1.6;
 
-      const outIdx = realEps.findIndex(([, pin]) => pinIsOutput(pin));
+      const eps = net.endpoints.map(([id, pin]) =>
+        id === '__port__' ? { nodeId: portNodeId(pin), handle: 'port', portName: pin } : { nodeId: id, handle: pin, portName: null }
+      );
+
+      // Render a node for each cell-boundary port this net touches.
+      for (const ep of eps) {
+        if (!ep.portName || addedPorts.has(ep.nodeId)) continue;
+        const pos = positions.get(ep.nodeId);
+        const port = cell.ports.find(p => p.name === ep.portName);
+        if (!pos || !port) continue;
+        addedPorts.add(ep.nodeId);
+        nodes.push({
+          id: ep.nodeId,
+          type: 'portNode',
+          position: { x: pos.x, y: pos.y },
+          data: { port, netKind: net.kind, isFocused, isHighlighted } as PortNodeData,
+        });
+      }
+
+      const realEps = eps.filter(ep => positions.has(ep.nodeId));
+      if (realEps.length < 2) continue;
+
+      const color = (isFocused || isHighlighted) ? 'var(--sel)' : netColor(net);
+      const opacity = isDimmed ? 0.05 : (isFocused || isHighlighted) ? 0.95 : 0.65;
+      const strokeWidth = (isFocused || isHighlighted) ? 2.4 : 1.6;
+
+      const outIdx = realEps.findIndex(ep => pinIsOutput(ep.handle));
       const srcIdx = outIdx !== -1 ? outIdx : 0;
-      const [srcId, srcPin] = realEps[srcIdx];
+      const { nodeId: srcId, handle: srcPin } = realEps[srcIdx];
 
       for (let i = 0; i < realEps.length; i++) {
         if (i === srcIdx) continue;
-        const [tgtId, tgtPin] = realEps[i];
+        const { nodeId: tgtId, handle: tgtPin } = realEps[i];
         edges.push({
           id: `e_${net.name}_${i}`,
           source: srcId,
@@ -104,7 +167,7 @@ function buildGraph(
             fontSize: 9,
             fontFamily: 'Space Mono, monospace',
           },
-          labelBgStyle: { fill: '#10141a', fillOpacity: isFocused ? 0.9 : 0 },
+          labelBgStyle: { fill: '#10141a', fillOpacity: (isFocused || isHighlighted) ? 0.9 : 0 },
           style: { stroke: color, strokeWidth, opacity },
           data: { netName: net.name },
         });
@@ -204,7 +267,7 @@ function Canvas() {
       >
         ⊡ Fit  <kbd>F</kbd>
       </button>
-      <div className="canvas-hint">click a block to select · double-click to descend · click a wire to focus net</div>
+      <div className="canvas-hint">click a block, port, or net to highlight its connections · double-click to descend · click a wire to focus net</div>
     </div>
   );
 }
