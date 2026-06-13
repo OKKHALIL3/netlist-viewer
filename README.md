@@ -78,12 +78,15 @@ Parsing is `eda-netlist-parser` (open-source Python) plus a small adapter
 **Center — Schematic canvas**
 - Sub-circuit instances render as blocks with pin → net tables
 - Primitive devices (MOSFET, resistor, capacitor) render as labelled glyphs
+- Cell-boundary I/O pins render as small port nodes, so pins only connected to the cell's own ports still show a wire
+- Click a block, port, or net to highlight everything electrically connected to it
 - Scroll / pinch to zoom; drag to pan
 - Double-click a block to descend; click breadcrumb to ascend
 - Click a wire to inspect or focus that net
 
 **Right panel — Inspector**
 - Instance: master cell (clickable to descend), parent, child count, full pin → net map
+- AI-generated functional description of the selected instance's master cell (e.g. "2-input NAND gate") — requires an Anthropic API key, entered once and stored only in your browser's localStorage
 - Net: kind (signal / power / ground), fanout, all connected pins
 - Primitive: model, terminals, parameters
 
