@@ -232,19 +232,26 @@ body {
 .inst-node.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
 .inst-node.connected { border-color: var(--sel); box-shadow: 0 0 0 1px rgba(255,210,63,0.4); }
 
+/* Header and rows use FIXED heights that must match the HEADER_H (42) and
+   PIN_ROW_H (20) constants in InstanceNode.tsx (handle positions) and
+   layout/elk.ts (reserved node height). Pin handles are absolutely
+   positioned from those constants, so if the rendered DOM drifts (e.g. via
+   default line-heights or gaps) the wires land off their rows. */
 .inst-head {
-  padding: 8px 11px 7px;
+  height: 42px;
+  padding: 6px 11px;
   border-bottom: 1px solid #232c38;
 }
-.inst-id { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; display: block; }
+.inst-id { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; line-height: 16px; display: block; }
 .inst-master {
-  font-family: 'Space Mono', monospace; font-size: 10px; color: #7fb4ff; display: block; margin-top: 2px;
+  font-family: 'Space Mono', monospace; font-size: 10px; line-height: 12px; color: #7fb4ff; display: block; margin-top: 1px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.inst-body { padding: 6px 11px 8px; display: flex; flex-direction: column; gap: 4px; }
+.inst-body { padding: 0 11px 10px; display: flex; flex-direction: column; }
 .pin-row {
-  display: flex; justify-content: space-between; gap: 8px;
+  height: 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
   font-size: 10.5px; font-family: 'Space Mono', monospace; color: var(--txt-dim);
 }
 .pin-name {
@@ -270,13 +277,15 @@ body {
 
 /* A collapsed bus row (e.g. "D<23:0>") reads as a stack of pin rows behind
    each other — two offset "cards" peek out from behind the visible row. */
+/* Stays within the fixed 20px row pitch (box-sizing: border-box pulls the
+   border inside); the offset "card" pseudo-elements peek out behind it. */
 .pin-row.bus {
   position: relative;
   background: #1c2430;
   border: 1px solid #2e3a4a;
   border-radius: 3px;
-  padding: 1px 4px;
-  margin: 1px 4px 3px -4px;
+  padding: 0 4px;
+  margin: 0 4px 0 -4px;
 }
 .pin-row.bus::before,
 .pin-row.bus::after {
