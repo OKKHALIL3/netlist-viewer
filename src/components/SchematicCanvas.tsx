@@ -33,6 +33,14 @@ function netColor(net: Net): string {
   return 'var(--net-sig)';
 }
 
+// Selected/focused nets aren't a separate golden color — they're a brighter
+// neon version of the net's own category color.
+function netColorHi(net: Net): string {
+  if (net.kind === 'power') return 'var(--net-pwr-hi)';
+  if (net.kind === 'ground') return 'var(--net-gnd-hi)';
+  return 'var(--net-sig-hi)';
+}
+
 // A cell-boundary connection appears in a net's endpoints as ["__port__", portName].
 // Give each port its own node id so it can be laid out and drawn like any
 // other node, instead of being dropped (which left boundary-connected pins
@@ -159,7 +167,9 @@ function buildGraph(
     const pendingSmooth: PendingSmoothEdge[] = [];
 
     for (const net of cell.nets) {
-      if (hideSupply && net.kind !== 'signal' && mode !== 'net') continue;
+      // "Hide supply nets" hides the supply/ground WIRES only — the pins (block
+      // pins via InstanceNode, and the boundary ports added below) stay visible.
+      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net';
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
@@ -191,10 +201,14 @@ function buildGraph(
         });
       }
 
+      // Pins/ports for this net are now placed; for hidden supply nets we stop
+      // here so no wires are drawn.
+      if (wiresHidden) continue;
+
       const realEps = eps.filter(ep => positions.has(ep.nodeId));
       if (realEps.length < 2) continue;
 
-      const color = isActive ? 'var(--sel)' : netColor(net);
+      const color = isActive ? netColorHi(net) : netColor(net);
       const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
       const strokeWidth = isActive ? 2.4 : 1.6;
 
@@ -208,7 +222,8 @@ function buildGraph(
         fontFamily: 'Space Mono, monospace',
       };
       const labelBgStyle = { fill: '#10141a', fillOpacity: isActive ? 0.9 : 0 };
-      const edgeStyle = { stroke: color, strokeWidth, opacity };
+      // Active nets get a neon glow in their own (brighter) category color.
+      const edgeStyle = { stroke: color, strokeWidth, opacity, filter: isActive ? `drop-shadow(0 0 3px ${color})` : undefined };
 
       for (let i = 0; i < realEps.length; i++) {
         if (i === srcIdx) continue;
@@ -267,7 +282,7 @@ function buildGraph(
 }
 
 function Canvas() {
-  const { design, currentCell, mode, hideSupply, focusNet, selection, setSelection, setFocusNet, focusRequest } =
+  const { design, currentCell, mode, nodeLayout, hideSupply, focusNet, selection, setSelection, setFocusNet, focusRequest } =
     useViewerStore();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -285,8 +300,8 @@ function Canvas() {
   useEffect(() => {
     if (!cell) return;
     setLaying(true);
-    layoutCell(cell, design).then(pos => { setPositions(pos); setLaying(false); });
-  }, [currentCell, design]);
+    layoutCell(cell, design, nodeLayout).then(pos => { setPositions(pos); setLaying(false); });
+  }, [currentCell, design, nodeLayout]);
 
   useEffect(() => {
     if (!cell || positions.size === 0) return;
@@ -393,7 +408,7 @@ function Canvas() {
         <div className={`legend-row${supplyHidden ? ' muted' : ''}`}>
           <span className="legend-line gnd" />ground net{supplyHidden && ' (hidden)'}
         </div>
-        <div className="legend-row"><span className="legend-line sel" />selected / focus</div>
+        <div className="legend-row legend-note">selected / focus → brighter</div>
       </div>
       <button
         className="fit-btn"
