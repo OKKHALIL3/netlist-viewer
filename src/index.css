@@ -249,6 +249,20 @@ body {
 }
 
 .inst-body { padding: 0 11px 10px; display: flex; flex-direction: column; }
+
+/* Pins are grouped into IN / OUT / PWR / GND sections. The header is a fixed
+   16px (SECTION_H in pinGroups.ts) so the absolutely-positioned pin handles,
+   computed from the same constant, line up with their rendered rows. */
+.pin-section-head {
+  height: 16px;
+  display: flex;
+  align-items: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.8;
+}
 .pin-row {
   height: 20px;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;

@@ -17,11 +17,12 @@ import '@xyflow/react/dist/style.css';
 
 import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
-import { groupPinConnections, clusterBusRibbons } from '../layout/busGrouping';
+import { clusterBusRibbons } from '../layout/busGrouping';
+import { computeInstanceLayout, pinDirection } from '../layout/pinGroups';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
-import type { Cell, Design, Net } from '../parser/types';
+import type { Cell, Design, Net, Port } from '../parser/types';
 import type { NodePosition } from '../layout/elk';
 
 const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode };
@@ -30,10 +31,6 @@ function netColor(net: Net): string {
   if (net.kind === 'power') return 'var(--net-pwr)';
   if (net.kind === 'ground') return 'var(--net-gnd)';
   return 'var(--net-sig)';
-}
-
-function pinIsOutput(name: string): boolean {
-  return /^(out|y|z|q|qb?|do|dout|co|cout|s|sum|f|g)$/i.test(name) || /(_o|_out|_y)$/i.test(name);
 }
 
 // A cell-boundary connection appears in a net's endpoints as ["__port__", portName].
@@ -92,15 +89,24 @@ function buildGraph(
   // path loops around the block and passes near other pins.
   const activeNet = selection?.type === 'net' ? selection.name : focusNet;
 
-  // Collapsed pin-table rows (see InstanceNode) merge runs of bus-bit pins
-  // into one row with a single handle anchored at the row's first pin
-  // (repPin). Map every bus-bit pin to its row's repPin so net endpoints
-  // resolve to a handle that actually exists on the node.
+  const netKindOf = (net: string) => cell.nets.find(n => n.name === net)?.kind ?? 'signal';
+
+  // The sectioned pin layout (see pinGroups/InstanceNode) merges runs of
+  // bus-bit pins into one row with a single handle anchored at the row's
+  // first pin (repPin). Map every bus-bit pin to its row's repPin so net
+  // endpoints resolve to a handle that actually exists on the node — using
+  // the same layout the node renders so the ids always match. Also remember
+  // each instance's master ports for picking a net's source endpoint.
   const pinRepMap = new Map<string, Map<string, string>>();
+  const instancePorts = new Map<string, Port[]>();
   for (const inst of cell.instances) {
+    const masterPorts = design?.cells.get(inst.master)?.ports ?? [];
+    instancePorts.set(inst.id, masterPorts);
     const repMap = new Map<string, string>();
-    for (const row of groupPinConnections(Object.entries(inst.conn))) {
-      for (const pin of row.pins) repMap.set(pin, row.repPin);
+    for (const section of computeInstanceLayout(inst.conn, masterPorts, netKindOf).sections) {
+      for (const { row } of section.rows) {
+        for (const pin of row.pins) repMap.set(pin, row.repPin);
+      }
     }
     pinRepMap.set(inst.id, repMap);
   }
@@ -192,7 +198,7 @@ function buildGraph(
       const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
       const strokeWidth = isActive ? 2.4 : 1.6;
 
-      const outIdx = realEps.findIndex(ep => pinIsOutput(ep.handle));
+      const outIdx = realEps.findIndex(ep => pinDirection(ep.handle, instancePorts.get(ep.nodeId) ?? []) === 'O');
       const srcIdx = outIdx !== -1 ? outIdx : 0;
       const { nodeId: srcId, handle: srcPin } = realEps[srcIdx];
 
@@ -274,8 +280,8 @@ function Canvas() {
   useEffect(() => {
     if (!cell) return;
     setLaying(true);
-    layoutCell(cell).then(pos => { setPositions(pos); setLaying(false); });
-  }, [currentCell]);
+    layoutCell(cell, design).then(pos => { setPositions(pos); setLaying(false); });
+  }, [currentCell, design]);
 
   useEffect(() => {
     if (!cell || positions.size === 0) return;

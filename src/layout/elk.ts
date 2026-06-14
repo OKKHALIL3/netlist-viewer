@@ -1,8 +1,8 @@
 // Use the self-contained browser bundle (no web-worker dependency)
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs';
-import type { Cell, Instance } from '../parser/types';
-import { groupPinConnections } from './busGrouping';
+import type { Cell, Design } from '../parser/types';
+import { computeInstanceLayout } from './pinGroups';
 
 export interface NodePosition {
   x: number;
@@ -15,14 +15,6 @@ const NODE_WIDTH = 180;
 const PRIM_SIZE = 56;
 const PORT_WIDTH = 70;
 const PORT_HEIGHT = 54;
-const HEADER_H = 42;
-const PIN_ROW_H = 20;
-const BODY_PAD = 10;
-
-export function instanceHeight(conn: Instance['conn']): number {
-  const numRows = groupPinConnections(Object.entries(conn)).length;
-  return HEADER_H + numRows * PIN_ROW_H + BODY_PAD;
-}
 
 let elkInstance: InstanceType<typeof ELK> | null = null;
 function getElk() {
@@ -30,14 +22,23 @@ function getElk() {
   return elkInstance;
 }
 
-export async function layoutCell(cell: Cell): Promise<Map<string, NodePosition>> {
+export async function layoutCell(cell: Cell, design: Design | null): Promise<Map<string, NodePosition>> {
   const elk = getElk();
+
+  const netKindOf = (() => {
+    const kinds = new Map(cell.nets.map(n => [n.name, n.kind]));
+    return (net: string) => kinds.get(net) ?? 'signal';
+  })();
 
   const children: ElkNode[] = [
     ...cell.instances.map(inst => ({
       id: inst.id,
       width: NODE_WIDTH,
-      height: instanceHeight(inst.conn),
+      height: computeInstanceLayout(
+        inst.conn,
+        design?.cells.get(inst.master)?.ports ?? [],
+        netKindOf,
+      ).height,
     })),
     ...cell.primitives.map(prim => ({
       id: prim.id,
