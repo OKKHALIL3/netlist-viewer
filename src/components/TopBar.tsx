@@ -4,8 +4,8 @@ import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 
 export function TopBar() {
   const {
-    design, currentCell, breadcrumb, mode, hideSupply, parsing, parseError,
-    ascendTo, setMode, toggleHideSupply, loadDesign, setParsing, setParseError, setSearchOpen,
+    design, currentCell, breadcrumb, mode, hideSupply, nodeLayout, parsing, parseError,
+    ascendTo, setMode, toggleHideSupply, toggleNodeLayout, loadDesign, setParsing, setParseError, setSearchOpen,
   } = useViewerStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +84,18 @@ export function TopBar() {
             <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
               ⌕ Search <kbd>/</kbd>
             </button>
+
+            {/* Block layout toggle: beta = pins around 4 edges, off = classic sections */}
+            <div className="supply-toggle">
+              <span className="supply-label">Compact pins<sup className="beta-tag">beta</sup></span>
+              <div
+                className={`toggle-sw${nodeLayout === 'beta' ? ' on' : ''}`}
+                onClick={toggleNodeLayout}
+                title="Arrange pins around the block edges (inputs left, outputs right, supply top, ground bottom)"
+              >
+                <i />
+              </div>
+            </div>
 
             {/* Hide supply toggle */}
             <div className="supply-toggle">
