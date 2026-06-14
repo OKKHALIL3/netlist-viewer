@@ -157,7 +157,6 @@ function buildGraph(
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
-      const isActive = isFocused || isHighlighted;
       const isDimmed = focusNet !== null && !isFocused && mode === 'net';
       // When something is selected/focused, fade unrelated wires further so
       // the active net's path reads as an isolated wire rather than one of
@@ -188,9 +187,13 @@ function buildGraph(
       const realEps = eps.filter(ep => positions.has(ep.nodeId));
       if (realEps.length < 2) continue;
 
-      const color = isActive ? 'var(--sel)' : netColor(net);
-      const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
-      const strokeWidth = isActive ? 2.4 : 1.6;
+      // Only the exact focused net (a search match, or the selected net
+      // itself) gets the bright selection color — nets merely connected to
+      // the selected node are shown in their normal color so they don't read
+      // as additional matches.
+      const color = isFocused ? 'var(--sel)' : netColor(net);
+      const opacity = isDimmed ? 0.05 : isFocused ? 0.95 : isHighlighted ? 0.75 : hasFocus ? 0.15 : 0.65;
+      const strokeWidth = isFocused ? 2.4 : isHighlighted ? 2 : 1.6;
 
       const outIdx = realEps.findIndex(ep => pinIsOutput(ep.handle));
       const srcIdx = outIdx !== -1 ? outIdx : 0;
@@ -201,7 +204,7 @@ function buildGraph(
         fontSize: 9,
         fontFamily: 'Space Mono, monospace',
       };
-      const labelBgStyle = { fill: '#10141a', fillOpacity: isActive ? 0.9 : 0 };
+      const labelBgStyle = { fill: '#10141a', fillOpacity: isFocused ? 0.9 : 0 };
       const edgeStyle = { stroke: color, strokeWidth, opacity };
 
       for (let i = 0; i < realEps.length; i++) {
