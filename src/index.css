@@ -507,6 +507,7 @@ body {
 .kind-primitive { background: #2a2538; color: #cdb6ff; }
 .kind-net { background: #1f2e22; color: #9fe6ad; }
 .kind-cell { background: #2e2517; color: #f0c98a; }
+.kind-pin { background: #1f2630; color: #8fb8d6; }
 .search-id { font-family: 'Space Mono', monospace; font-size: 12.5px; color: var(--txt); flex-shrink: 0; }
 .search-detail { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--txt-dim); }
 .search-loc {

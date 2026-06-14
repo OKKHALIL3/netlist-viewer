@@ -8,6 +8,7 @@ const KIND_LABELS: Record<SearchResult['kind'], string> = {
   primitive: 'Primitive',
   net: 'Net',
   cell: 'Cell',
+  pin: 'Pin',
 };
 
 const MAX_RESULTS = 40;
@@ -15,7 +16,7 @@ const MAX_RESULTS = 40;
 // Mounted only while open (see SearchPalette below), so its local state
 // starts fresh every time the palette is opened — no reset effect needed.
 function SearchModal({ design, onClose }: { design: Design; onClose: () => void }) {
-  const { goToPath } = useViewerStore();
+  const { goToPath, setFocusNet } = useViewerStore();
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,7 +28,10 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     const q = query.trim().toLowerCase();
     if (!q) return [];
     return index
-      .filter(r => r.id.toLowerCase().includes(q) || r.detail.toLowerCase().includes(q))
+      // Pins only match on their own name — their detail carries the
+      // connected net name, and matching that too would flood results with
+      // every pin tied to a common net (e.g. "vdd!") whenever that net is searched.
+      .filter(r => r.id.toLowerCase().includes(q) || (r.kind !== 'pin' && r.detail.toLowerCase().includes(q)))
       .slice(0, MAX_RESULTS);
   }, [index, query]);
 
@@ -49,12 +53,19 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     const targetCell = result.kind === 'cell' ? result.id : result.cellName;
     const path = findPath(design, targetCell);
     if (!path) return;
+    // A pin result jumps to the specific instance/primitive that owns it
+    // (so two matches of the same pin name, e.g. on X9 and X10, land on
+    // distinct targets) and focuses its net so the matched pin row is
+    // highlighted there, rather than highlighting every node on that net.
     const selection: SelectionType | null =
       result.kind === 'instance' ? { type: 'instance', id: result.id } :
       result.kind === 'primitive' ? { type: 'primitive', id: result.id } :
       result.kind === 'net' ? { type: 'net', name: result.id } :
-      null;
+      result.kind === 'pin'
+        ? (result.ownerKind === 'primitive' ? { type: 'primitive', id: result.ownerId! } : { type: 'instance', id: result.ownerId! })
+        : null;
     goToPath(path, selection);
+    if (result.kind === 'pin' && result.netName) setFocusNet(result.netName);
     onClose();
   };
 
