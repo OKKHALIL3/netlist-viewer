@@ -4,8 +4,8 @@ import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 
 export function TopBar() {
   const {
-    design, currentCell, breadcrumb, mode, hideSupply, parsing, parseError,
-    ascendTo, setMode, toggleHideSupply, loadDesign, setParsing, setParseError,
+    design, currentCell, breadcrumb, mode, diagramStyle, hideSupply, parsing, parseError,
+    ascendTo, setMode, setDiagramStyle, toggleHideSupply, loadDesign, setParsing, setParseError, setSearchOpen,
   } = useViewerStore();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -80,6 +80,21 @@ export function TopBar() {
 
         {design && (
           <>
+            {/* Design-wide search */}
+            <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
+              ⌕ Search <kbd>/</kbd>
+            </button>
+
+            {/* Diagram style */}
+            <div className="mode-btns">
+              <button className={diagramStyle === 'simple' ? 'on' : ''} onClick={() => setDiagramStyle('simple')} title="Collapsed blocks, wires take the shortest path">
+                Simple
+              </button>
+              <button className={diagramStyle === 'detailed' ? 'on' : ''} onClick={() => setDiagramStyle('detailed')} title="Full pin tables, wires routed pin-to-pin">
+                Detailed
+              </button>
+            </div>
+
             {/* Hide supply toggle */}
             <div className="supply-toggle">
               <span className="supply-label">Hide supply nets</span>

@@ -19,6 +19,7 @@
   --r: #d6a85f;
   --c: #9b7fe0;
   --m: #5fd0a0;
+  --port: #2dd4bf;
   --sel: #ffd23f;
   --radius: 10px;
 }
@@ -209,6 +210,11 @@ body {
 .react-flow__controls button:hover { background: var(--panel); }
 .react-flow__edge-path { cursor: pointer; }
 
+.floating-edge-label {
+  font-size: 9px; font-family: 'Space Mono', monospace; color: var(--txt-faint);
+  padding: 1px 4px; border-radius: 3px; white-space: nowrap;
+}
+
 /* ── Instance node ─────────────────────────────────────────── */
 .inst-node {
   background: linear-gradient(180deg, #1a212c, #161c25);
@@ -218,6 +224,7 @@ body {
   cursor: pointer;
   transition: border-color 0.12s, box-shadow 0.12s;
   position: relative;
+  overflow: hidden;
 }
 .inst-node:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(0,0,0,0.5); }
 .inst-node.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
@@ -227,16 +234,26 @@ body {
   padding: 8px 11px 7px;
   border-bottom: 1px solid #232c38;
 }
+.inst-node.collapsed .inst-head { border-bottom: none; padding-bottom: 8px; }
 .inst-id { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; display: block; }
-.inst-master { font-family: 'Space Mono', monospace; font-size: 10px; color: #7fb4ff; display: block; margin-top: 2px; }
+.inst-master {
+  font-family: 'Space Mono', monospace; font-size: 10px; color: #7fb4ff; display: block; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .inst-body { padding: 6px 11px 8px; display: flex; flex-direction: column; gap: 4px; }
 .pin-row {
-  display: flex; justify-content: space-between;
+  display: flex; justify-content: space-between; gap: 8px;
   font-size: 10.5px; font-family: 'Space Mono', monospace; color: var(--txt-dim);
 }
-.pin-name { color: var(--txt); }
-.net-name { color: var(--txt-faint); }
+.pin-name {
+  color: var(--txt); flex: 0 1 auto; max-width: 50%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.net-name {
+  color: var(--txt-faint); flex: 1 1 auto; min-width: 0; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 /* ── Primitive node ────────────────────────────────────────── */
 .prim-node {
@@ -266,7 +283,9 @@ body {
   font-size: 9.5px; font-family: 'Space Mono', monospace;
   color: var(--txt-dim); margin-top: 4px; text-align: center;
   display: flex; flex-direction: column; gap: 1px;
+  max-width: 80px;
 }
+.prim-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prim-model { color: var(--txt-faint); }
 
 /* ── Port node (cell-boundary connection) ─────────────────────── */

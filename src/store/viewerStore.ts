@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Design, Cell } from '../parser/types';
 
 export type ViewMode = 'inst' | 'both' | 'net';
+export type DiagramStyle = 'simple' | 'detailed';
 
 export type SelectionType =
   | { type: 'instance'; id: string }
@@ -18,23 +19,31 @@ interface ViewerState {
   currentCell: string;
   breadcrumb: BreadcrumbEntry[];
   mode: ViewMode;
+  diagramStyle: DiagramStyle;
   hideSupply: boolean;
   focusNet: string | null;
   selection: SelectionType | null;
   warnings: string[];
   parsing: boolean;
   parseError: string | null;
+  searchOpen: boolean;
+  // Bumped whenever the canvas should pan/zoom to the current selection
+  // (e.g. after jumping to a search result), even if the cell didn't change.
+  focusRequest: number;
 
   // actions
   loadDesign: (design: Design) => void;
   descend: (instanceId: string, masterCell: string) => void;
   ascendTo: (index: number) => void;
+  goToPath: (path: BreadcrumbEntry[], selection: SelectionType | null) => void;
   setMode: (mode: ViewMode) => void;
+  setDiagramStyle: (style: DiagramStyle) => void;
   toggleHideSupply: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
   setParsing: (parsing: boolean) => void;
   setParseError: (error: string | null) => void;
+  setSearchOpen: (open: boolean) => void;
   getCell: () => Cell | undefined;
 }
 
@@ -43,12 +52,15 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   currentCell: '',
   breadcrumb: [],
   mode: 'both',
+  diagramStyle: 'simple',
   hideSupply: true,
   focusNet: null,
   selection: null,
   warnings: [],
   parsing: false,
   parseError: null,
+  searchOpen: false,
+  focusRequest: 0,
 
   loadDesign: (design) => {
     set({
@@ -86,9 +98,25 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
     });
   },
 
+  // Used by design-wide search to jump straight to a result anywhere in the
+  // hierarchy — replaces the breadcrumb wholesale instead of pushing one level.
+  goToPath: (path, selection) => {
+    const entry = path[path.length - 1];
+    if (!entry) return;
+    set(s => ({
+      currentCell: entry.cellName,
+      breadcrumb: path,
+      selection,
+      focusNet: null,
+      focusRequest: s.focusRequest + 1,
+    }));
+  },
+
   setMode: (mode) => {
     set({ mode, focusNet: mode !== 'net' ? null : get().focusNet });
   },
+
+  setDiagramStyle: (style) => set({ diagramStyle: style }),
 
   toggleHideSupply: () => set(s => ({ hideSupply: !s.hideSupply })),
 
@@ -99,6 +127,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setParsing: (parsing) => set({ parsing }),
 
   setParseError: (error) => set({ parseError: error }),
+
+  setSearchOpen: (open) => set({ searchOpen: open }),
 
   getCell: () => {
     const { design, currentCell } = get();

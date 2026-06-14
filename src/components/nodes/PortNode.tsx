@@ -1,28 +1,21 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
-import type { Net, Port } from '../../parser/types';
+import type { Port } from '../../parser/types';
 
 export interface PortNodeData extends Record<string, unknown> {
   port: Port;
-  netKind: Net['kind'] | null;
   isFocused: boolean;
   isHighlighted: boolean;
 }
 
-const KIND_COLOR: Record<Net['kind'], string> = {
-  power: 'var(--net-pwr)',
-  ground: 'var(--net-gnd)',
-  signal: 'var(--net-sig)',
-};
-
 export function PortNode({ data }: NodeProps) {
   const d = data as PortNodeData;
-  const { port, netKind, isFocused, isHighlighted } = d;
+  const { port, isFocused, isHighlighted } = d;
   const { mode, setSelection, setFocusNet } = useViewerStore();
 
-  const color = isFocused || isHighlighted
-    ? 'var(--sel)'
-    : netKind ? KIND_COLOR[netKind] : 'var(--line)';
+  // Cell-boundary ports always use a dedicated color, distinct from net/pin
+  // colors, so they read as "this is a cell I/O" at a glance.
+  const color = isFocused || isHighlighted ? 'var(--sel)' : 'var(--port)';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -38,6 +31,8 @@ export function PortNode({ data }: NodeProps) {
     >
       <Handle type="target" position={Position.Left} id="port-tgt" style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Left} id="port-src" style={{ opacity: 0, pointerEvents: 'none' }} />
+      <Handle type="source" position={Position.Left} id="float-src" style={{ left: '50%', top: '50%', width: 1, height: 1, opacity: 0, pointerEvents: 'none', transform: 'translate(-50%, -50%)' }} />
+      <Handle type="target" position={Position.Left} id="float-tgt" style={{ left: '50%', top: '50%', width: 1, height: 1, opacity: 0, pointerEvents: 'none', transform: 'translate(-50%, -50%)' }} />
       <div className="port-glyph" style={{ borderColor: color, color }}>{port.dir ?? '?'}</div>
       <div className="port-label">{port.name}</div>
     </div>
