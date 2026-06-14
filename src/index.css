@@ -217,11 +217,6 @@ body {
   filter: drop-shadow(0 2px 0 rgba(127, 180, 255, 0.22)) drop-shadow(0 4px 0 rgba(127, 180, 255, 0.1));
 }
 
-.floating-edge-label {
-  font-size: 9px; font-family: 'Space Mono', monospace; color: var(--txt-faint);
-  padding: 1px 4px; border-radius: 3px; white-space: nowrap;
-}
-
 /* ── Instance node ─────────────────────────────────────────── */
 .inst-node {
   background: linear-gradient(180deg, #1a212c, #161c25);
@@ -241,7 +236,6 @@ body {
   padding: 8px 11px 7px;
   border-bottom: 1px solid #232c38;
 }
-.inst-node.collapsed .inst-head { border-bottom: none; padding-bottom: 8px; }
 .inst-id { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 13px; display: block; }
 .inst-master {
   font-family: 'Space Mono', monospace; font-size: 10px; color: #7fb4ff; display: block; margin-top: 2px;

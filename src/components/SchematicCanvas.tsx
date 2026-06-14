@@ -15,22 +15,16 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useViewerStore, type SelectionType, type DiagramStyle } from '../store/viewerStore';
+import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
 import { groupPinConnections, clusterBusRibbons } from '../layout/busGrouping';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
-import { FloatingEdge, type FloatingEdgeData } from './edges/FloatingEdge';
 import type { Cell, Design, Net } from '../parser/types';
 import type { NodePosition } from '../layout/elk';
 
 const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode };
-const edgeTypes = { floating: FloatingEdge };
-
-// Extra perpendicular spacing applied to parallel floating edges between the
-// same pair of nodes, so they don't draw exactly on top of each other.
-const FLOAT_PARALLEL_OFFSET = 14;
 
 function netColor(net: Net): string {
   if (net.kind === 'power') return 'var(--net-pwr)';
@@ -88,7 +82,6 @@ function buildGraph(
   focusNet: string | null,
   design: Design | null,
   positions: Map<string, NodePosition>,
-  diagramStyle: DiagramStyle,
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -118,17 +111,12 @@ function buildGraph(
     const masterPorts = design?.cells.get(inst.master)?.ports ?? [];
     const isSelected = selection?.type === 'instance' && selection.id === inst.id;
     const isConnected = !isSelected && highlightedNodes.has(inst.id);
-    // Simple mode collapses instances to a header-only card unless selected,
-    // in which case the card expands in place (overlaying neighbors, hence
-    // the bumped zIndex) to show its full pin table.
-    const isExpanded = diagramStyle === 'detailed' || isSelected;
     nodes.push({
       id: inst.id,
       type: 'instanceNode',
       position: { x: pos.x, y: pos.y },
-      data: { instance: inst, masterPorts, isSelected, isConnected, isExpanded, activeNet } as InstanceNodeData,
+      data: { instance: inst, masterPorts, isSelected, isConnected, activeNet } as InstanceNodeData,
       style: { width: pos.width },
-      zIndex: diagramStyle === 'simple' && isExpanded ? 1000 : undefined,
     });
   }
 
@@ -148,23 +136,7 @@ function buildGraph(
   if (mode !== 'inst') {
     const addedPorts = new Set<string>();
 
-    // Simple mode: collect floating-edge endpoints first, then group by node
-    // pair below so parallel edges between the same two nodes can be spread
-    // apart instead of drawing exactly on top of each other.
-    interface PendingFloatEdge {
-      id: string;
-      srcId: string;
-      tgtId: string;
-      label: string;
-      netName: string;
-      isBus: boolean;
-      labelStyle: Record<string, unknown>;
-      labelBgStyle: Record<string, unknown>;
-      style: Record<string, unknown>;
-    }
-    const pendingFloat: PendingFloatEdge[] = [];
-
-    // Detailed mode: collect per-pin smoothstep edges first, then merge runs
+    // Collect per-pin smoothstep edges first, then merge runs
     // that land on the same (collapsed) handle pair and form a contiguous
     // bus into a single labeled "ribbon" edge below.
     interface PendingSmoothEdge {
@@ -231,21 +203,6 @@ function buildGraph(
         if (i === srcIdx) continue;
         const { nodeId: tgtId, handle: tgtPin } = realEps[i];
 
-        if (diagramStyle === 'simple') {
-          pendingFloat.push({
-            id: `e_${net.name}_${i}`,
-            srcId,
-            tgtId,
-            label: net.name,
-            netName: net.name,
-            isBus: false,
-            labelStyle,
-            labelBgStyle,
-            style: edgeStyle,
-          });
-          continue;
-        }
-
         pendingSmooth.push({
           id: `e_${net.name}_${i}`,
           source: srcId,
@@ -293,66 +250,13 @@ function buildGraph(
         }
       }
     }
-
-    // Spread parallel floating edges (same node pair, either direction)
-    // apart perpendicular to the line between them — but first merge
-    // same-direction parallel bus-bit wires into single ribbons so a wide
-    // bus draws as one offset wire pair instead of one per bit.
-    if (pendingFloat.length > 0) {
-      const pairGroups = new Map<string, PendingFloatEdge[]>();
-      for (const pe of pendingFloat) {
-        const key = [pe.srcId, pe.tgtId].sort().join('|');
-        const group = pairGroups.get(key);
-        if (group) group.push(pe);
-        else pairGroups.set(key, [pe]);
-      }
-      for (const pairGroup of pairGroups.values()) {
-        const dirGroups = new Map<string, PendingFloatEdge[]>();
-        for (const pe of pairGroup) {
-          const key = `${pe.srcId}->${pe.tgtId}`;
-          const group = dirGroups.get(key);
-          if (group) group.push(pe);
-          else dirGroups.set(key, [pe]);
-        }
-        const merged: PendingFloatEdge[] = [];
-        for (const dirGroup of dirGroups.values()) {
-          for (const ribbon of clusterBusRibbons(dirGroup, pe => pe.netName)) {
-            const rep = ribbon.members[0];
-            if (ribbon.members.length > 1) {
-              merged.push({ ...rep, label: ribbon.label, isBus: true, style: { ...rep.style, strokeWidth: (rep.style.strokeWidth as number) + 2 } });
-            } else {
-              merged.push(rep);
-            }
-          }
-        }
-
-        const n = merged.length;
-        merged.forEach((pe, idx) => {
-          const offset = n > 1 ? (idx - (n - 1) / 2) * FLOAT_PARALLEL_OFFSET : 0;
-          edges.push({
-            id: pe.id,
-            source: pe.srcId,
-            sourceHandle: 'float-src',
-            target: pe.tgtId,
-            targetHandle: 'float-tgt',
-            type: 'floating',
-            label: pe.label,
-            labelStyle: pe.labelStyle,
-            labelBgStyle: pe.labelBgStyle,
-            style: pe.style,
-            className: pe.isBus ? 'bus-edge' : undefined,
-            data: { netName: pe.netName, offset } as FloatingEdgeData,
-          });
-        });
-      }
-    }
   }
 
   return { nodes, edges };
 }
 
 function Canvas() {
-  const { design, currentCell, mode, diagramStyle, hideSupply, focusNet, selection, setSelection, setFocusNet, focusRequest } =
+  const { design, currentCell, mode, hideSupply, focusNet, selection, setSelection, setFocusNet, focusRequest } =
     useViewerStore();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -365,15 +269,15 @@ function Canvas() {
   useEffect(() => {
     if (!cell) return;
     setLaying(true);
-    layoutCell(cell, diagramStyle).then(pos => { setPositions(pos); setLaying(false); });
-  }, [currentCell, diagramStyle]);
+    layoutCell(cell).then(pos => { setPositions(pos); setLaying(false); });
+  }, [currentCell]);
 
   useEffect(() => {
     if (!cell || positions.size === 0) return;
-    const { nodes: n, edges: e } = buildGraph(cell, selection, mode, hideSupply, focusNet, design, positions, diagramStyle);
+    const { nodes: n, edges: e } = buildGraph(cell, selection, mode, hideSupply, focusNet, design, positions);
     setNodes(n);
     setEdges(e);
-  }, [cell, positions, selection, mode, hideSupply, focusNet, design, diagramStyle]);
+  }, [cell, positions, selection, mode, hideSupply, focusNet, design]);
 
   // Pan/zoom the viewport to the current selection whenever the cell changed
   // (descend/ascend/search jumped here) or a search jump landed on a result
@@ -385,23 +289,18 @@ function Canvas() {
   // as setNodes would otherwise act on unmeasured nodes and silently no-op.
   const prevCellRef = useRef<string | null>(null);
   const prevFocusRef = useRef(focusRequest);
-  const prevStyleRef = useRef(diagramStyle);
   useEffect(() => {
     if (!cell || positions.size === 0) return;
     const cellChanged = prevCellRef.current !== currentCell;
     const navRequested = prevFocusRef.current !== focusRequest;
-    // Simple/Detailed reflows the whole cell (instance sizes change), so
-    // refit to everything rather than just the current selection.
-    const styleChanged = prevStyleRef.current !== diagramStyle;
-    if (!cellChanged && !navRequested && !styleChanged) return;
+    if (!cellChanged && !navRequested) return;
     prevCellRef.current = currentCell;
     prevFocusRef.current = focusRequest;
-    prevStyleRef.current = diagramStyle;
 
     let targetIds: string[] = [];
-    if (!styleChanged && (selection?.type === 'instance' || selection?.type === 'primitive')) {
+    if (selection?.type === 'instance' || selection?.type === 'primitive') {
       targetIds = [selection.id];
-    } else if (!styleChanged && selection?.type === 'net') {
+    } else if (selection?.type === 'net') {
       targetIds = [...computeHighlight(cell, selection).nodes];
     }
     if (targetIds.length === 0) targetIds = [...positions.keys()];
@@ -416,7 +315,7 @@ function Canvas() {
       { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) },
       { padding: 0.3, duration: 400 },
     );
-  }, [positions, currentCell, focusRequest, diagramStyle, selection, cell, fitBounds]);
+  }, [positions, currentCell, focusRequest, selection, cell, fitBounds]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes(nds => applyNodeChanges(changes, nds));
@@ -460,7 +359,6 @@ function Canvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         fitView

@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import type { Design, Cell } from '../parser/types';
 
 export type ViewMode = 'inst' | 'both' | 'net';
-export type DiagramStyle = 'simple' | 'detailed';
 
 export type SelectionType =
   | { type: 'instance'; id: string }
@@ -19,7 +18,6 @@ interface ViewerState {
   currentCell: string;
   breadcrumb: BreadcrumbEntry[];
   mode: ViewMode;
-  diagramStyle: DiagramStyle;
   hideSupply: boolean;
   focusNet: string | null;
   selection: SelectionType | null;
@@ -37,7 +35,6 @@ interface ViewerState {
   ascendTo: (index: number) => void;
   goToPath: (path: BreadcrumbEntry[], selection: SelectionType | null) => void;
   setMode: (mode: ViewMode) => void;
-  setDiagramStyle: (style: DiagramStyle) => void;
   toggleHideSupply: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
@@ -52,7 +49,6 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   currentCell: '',
   breadcrumb: [],
   mode: 'both',
-  diagramStyle: 'simple',
   hideSupply: true,
   focusNet: null,
   selection: null,
@@ -115,8 +111,6 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setMode: (mode) => {
     set({ mode, focusNet: mode !== 'net' ? null : get().focusNet });
   },
-
-  setDiagramStyle: (style) => set({ diagramStyle: style }),
 
   toggleHideSupply: () => set(s => ({ hideSupply: !s.hideSupply })),
 

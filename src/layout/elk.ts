@@ -2,7 +2,6 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs';
 import type { Cell, Instance } from '../parser/types';
-import type { DiagramStyle } from '../store/viewerStore';
 import { groupPinConnections } from './busGrouping';
 
 export interface NodePosition {
@@ -20,37 +19,9 @@ const HEADER_H = 42;
 const PIN_ROW_H = 20;
 const BODY_PAD = 10;
 
-// In simple mode, instances render header-only (no pin table) unless
-// selected, so lay them out at a fixed collapsed height regardless of pin
-// count — the expanded card overlays on top via CSS without affecting layout.
-const COLLAPSED_INST_H = HEADER_H + 14;
-
-export function instanceHeight(conn: Instance['conn'], diagramStyle: DiagramStyle = 'detailed'): number {
-  if (diagramStyle === 'simple') return COLLAPSED_INST_H;
+export function instanceHeight(conn: Instance['conn']): number {
   const numRows = groupPinConnections(Object.entries(conn)).length;
   return HEADER_H + numRows * PIN_ROW_H + BODY_PAD;
-}
-
-export function rectCenter(rect: NodePosition): { x: number; y: number } {
-  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-}
-
-// Where a ray from a rect's center toward (towardX, towardY) exits the rect's
-// border — used to anchor "floating" edges at the nearest point on each node
-// facing the other node, instead of fixed per-pin handle positions.
-export function rectExitPoint(rect: NodePosition, towardX: number, towardY: number): { x: number; y: number } {
-  const cx = rect.x + rect.width / 2;
-  const cy = rect.y + rect.height / 2;
-  const dx = towardX - cx;
-  const dy = towardY - cy;
-  if (dx === 0 && dy === 0) return { x: cx, y: cy };
-  const hw = rect.width / 2;
-  const hh = rect.height / 2;
-  const scale = Math.min(
-    dx !== 0 ? Math.abs(hw / dx) : Infinity,
-    dy !== 0 ? Math.abs(hh / dy) : Infinity,
-  );
-  return { x: cx + dx * scale, y: cy + dy * scale };
 }
 
 let elkInstance: InstanceType<typeof ELK> | null = null;
@@ -59,14 +30,14 @@ function getElk() {
   return elkInstance;
 }
 
-export async function layoutCell(cell: Cell, diagramStyle: DiagramStyle = 'detailed'): Promise<Map<string, NodePosition>> {
+export async function layoutCell(cell: Cell): Promise<Map<string, NodePosition>> {
   const elk = getElk();
 
   const children: ElkNode[] = [
     ...cell.instances.map(inst => ({
       id: inst.id,
       width: NODE_WIDTH,
-      height: instanceHeight(inst.conn, diagramStyle),
+      height: instanceHeight(inst.conn),
     })),
     ...cell.primitives.map(prim => ({
       id: prim.id,

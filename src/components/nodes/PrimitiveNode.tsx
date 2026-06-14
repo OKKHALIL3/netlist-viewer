@@ -15,13 +15,6 @@ const KIND_COLOR: Record<string, string> = {
   C: 'var(--c)',
 };
 
-// Invisible handle pair every node carries so "floating" edges (simple mode)
-// always have a valid anchor, independent of per-terminal handles.
-const FLOAT_HANDLE_STYLE = {
-  left: '50%', top: '50%', width: 1, height: 1,
-  opacity: 0, pointerEvents: 'none' as const, transform: 'translate(-50%, -50%)',
-};
-
 export function PrimitiveNode({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
   const { primitive, isSelected, isConnected } = d;
@@ -42,9 +35,6 @@ export function PrimitiveNode({ data }: NodeProps) {
       onClick={handleClick}
       style={{ '--prim-color': color } as React.CSSProperties}
     >
-      <Handle type="source" position={Position.Left} id="float-src" style={FLOAT_HANDLE_STYLE} />
-      <Handle type="target" position={Position.Left} id="float-tgt" style={FLOAT_HANDLE_STYLE} />
-
       {/* Left-side terminals (first half) — visible target handle plus an
           invisible source handle at the same spot, so an edge that picks
           this terminal as its "source" still has a handle to anchor to. */}

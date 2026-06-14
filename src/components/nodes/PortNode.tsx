@@ -31,8 +31,6 @@ export function PortNode({ data }: NodeProps) {
     >
       <Handle type="target" position={Position.Left} id="port-tgt" style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Left} id="port-src" style={{ opacity: 0, pointerEvents: 'none' }} />
-      <Handle type="source" position={Position.Left} id="float-src" style={{ left: '50%', top: '50%', width: 1, height: 1, opacity: 0, pointerEvents: 'none', transform: 'translate(-50%, -50%)' }} />
-      <Handle type="target" position={Position.Left} id="float-tgt" style={{ left: '50%', top: '50%', width: 1, height: 1, opacity: 0, pointerEvents: 'none', transform: 'translate(-50%, -50%)' }} />
       <div className="port-glyph" style={{ borderColor: color, color }}>{port.dir ?? '?'}</div>
       <div className="port-label">{port.name}</div>
     </div>
