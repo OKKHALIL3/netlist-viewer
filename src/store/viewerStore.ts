@@ -3,6 +3,13 @@ import type { Design, Cell } from '../parser/types';
 
 export type ViewMode = 'inst' | 'both' | 'net';
 
+// How each instance block arranges its pins. 'classic' (default) is the stacked
+// IN/OUT/PWR/GND section list. 'beta' places the four pin groups around the
+// block edges — inputs left, outputs right, supply top, ground bottom — which is
+// more compact only when inputs/outputs are roughly balanced; for big IO blocks
+// that are nearly all inputs it doesn't help yet (needs multi-column wrapping).
+export type NodeLayout = 'beta' | 'classic';
+
 export type SelectionType =
   | { type: 'instance'; id: string }
   | { type: 'primitive'; id: string }
@@ -18,6 +25,7 @@ interface ViewerState {
   currentCell: string;
   breadcrumb: BreadcrumbEntry[];
   mode: ViewMode;
+  nodeLayout: NodeLayout;
   hideSupply: boolean;
   focusNet: string | null;
   selection: SelectionType | null;
@@ -35,6 +43,7 @@ interface ViewerState {
   ascendTo: (index: number) => void;
   goToPath: (path: BreadcrumbEntry[], selection: SelectionType | null) => void;
   setMode: (mode: ViewMode) => void;
+  toggleNodeLayout: () => void;
   toggleHideSupply: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
@@ -49,6 +58,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   currentCell: '',
   breadcrumb: [],
   mode: 'both',
+  nodeLayout: 'classic',
   hideSupply: true,
   focusNet: null,
   selection: null,
@@ -111,6 +121,8 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setMode: (mode) => {
     set({ mode, focusNet: mode !== 'net' ? null : get().focusNet });
   },
+
+  toggleNodeLayout: () => set(s => ({ nodeLayout: s.nodeLayout === 'beta' ? 'classic' : 'beta' })),
 
   toggleHideSupply: () => set(s => ({ hideSupply: !s.hideSupply })),
 
