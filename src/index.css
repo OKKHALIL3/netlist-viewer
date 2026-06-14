@@ -210,6 +210,13 @@ body {
 .react-flow__controls button:hover { background: var(--panel); }
 .react-flow__edge-path { cursor: pointer; }
 
+/* Merged bus-bit "ribbon" wires (e.g. "D<23:0>") get a stacked-shadow trail
+   so they read as several parallel wires bundled into one. */
+.bus-edge .react-flow__edge-path,
+.react-flow__edge-path.bus-edge {
+  filter: drop-shadow(0 2px 0 rgba(127, 180, 255, 0.22)) drop-shadow(0 4px 0 rgba(127, 180, 255, 0.1));
+}
+
 .floating-edge-label {
   font-size: 9px; font-family: 'Space Mono', monospace; color: var(--txt-faint);
   padding: 1px 4px; border-radius: 3px; white-space: nowrap;
@@ -254,6 +261,29 @@ body {
   color: var(--txt-faint); flex: 1 1 auto; min-width: 0; text-align: right;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* A collapsed bus row (e.g. "D<23:0>") reads as a stack of pin rows behind
+   each other — two offset "cards" peek out from behind the visible row. */
+.pin-row.bus {
+  position: relative;
+  background: #1c2430;
+  border: 1px solid #2e3a4a;
+  border-radius: 3px;
+  padding: 1px 4px;
+  margin: 1px 4px 3px -4px;
+}
+.pin-row.bus::before,
+.pin-row.bus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid #2e3a4a;
+  border-radius: 3px;
+  background: #161c25;
+  z-index: -1;
+}
+.pin-row.bus::before { transform: translate(2px, 2px); }
+.pin-row.bus::after { transform: translate(4px, 4px); }
 
 /* ── Primitive node ────────────────────────────────────────── */
 .prim-node {

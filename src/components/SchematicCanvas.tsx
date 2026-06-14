@@ -17,6 +17,7 @@ import '@xyflow/react/dist/style.css';
 
 import { useViewerStore, type SelectionType, type DiagramStyle } from '../store/viewerStore';
 import { layoutCell, rectCenter, rectExitPoint } from '../layout/elk';
+import { groupPinConnections, clusterBusRibbons } from '../layout/busGrouping';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
@@ -93,6 +94,19 @@ function buildGraph(
   const edges: Edge[] = [];
   const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
 
+  // Collapsed pin-table rows (see InstanceNode) merge runs of bus-bit pins
+  // into one row with a single handle anchored at the row's first pin
+  // (repPin). Map every bus-bit pin to its row's repPin so net endpoints
+  // resolve to a handle that actually exists on the node.
+  const pinRepMap = new Map<string, Map<string, string>>();
+  for (const inst of cell.instances) {
+    const repMap = new Map<string, string>();
+    for (const row of groupPinConnections(Object.entries(inst.conn))) {
+      for (const pin of row.pins) repMap.set(pin, row.repPin);
+    }
+    pinRepMap.set(inst.id, repMap);
+  }
+
   for (const inst of cell.instances) {
     const pos = positions.get(inst.id);
     if (!pos) continue;
@@ -139,11 +153,29 @@ function buildGraph(
       sourcePoint: { x: number; y: number };
       targetPoint: { x: number; y: number };
       label: string;
+      netName: string;
+      isBus: boolean;
       labelStyle: Record<string, unknown>;
       labelBgStyle: Record<string, unknown>;
       style: Record<string, unknown>;
     }
     const pendingFloat: PendingFloatEdge[] = [];
+
+    // Detailed mode: collect per-pin smoothstep edges first, then merge runs
+    // that land on the same (collapsed) handle pair and form a contiguous
+    // bus into a single labeled "ribbon" edge below.
+    interface PendingSmoothEdge {
+      id: string;
+      source: string;
+      sourceHandle: string;
+      target: string;
+      targetHandle: string;
+      netName: string;
+      labelStyle: Record<string, unknown>;
+      labelBgStyle: Record<string, unknown>;
+      style: Record<string, unknown>;
+    }
+    const pendingSmooth: PendingSmoothEdge[] = [];
 
     for (const net of cell.nets) {
       if (hideSupply && net.kind !== 'signal' && mode !== 'net') continue;
@@ -153,7 +185,9 @@ function buildGraph(
       const isDimmed = focusNet !== null && !isFocused && mode === 'net';
 
       const eps = net.endpoints.map(([id, pin]) =>
-        id === '__port__' ? { nodeId: portNodeId(pin), handle: 'port', portName: pin } : { nodeId: id, handle: pin, portName: null }
+        id === '__port__'
+          ? { nodeId: portNodeId(pin), handle: 'port', portName: pin }
+          : { nodeId: id, handle: pinRepMap.get(id)?.get(pin) ?? pin, portName: null }
       );
 
       // Render a node for each cell-boundary port this net touches.
@@ -207,6 +241,8 @@ function buildGraph(
             sourcePoint: rectExitPoint(srcPos, tgtCenter.x, tgtCenter.y),
             targetPoint: rectExitPoint(tgtPos, srcCenter.x, srcCenter.y),
             label: net.name,
+            netName: net.name,
+            isBus: false,
             labelStyle,
             labelBgStyle,
             style: edgeStyle,
@@ -214,35 +250,88 @@ function buildGraph(
           continue;
         }
 
-        edges.push({
+        pendingSmooth.push({
           id: `e_${net.name}_${i}`,
           source: srcId,
           sourceHandle: `${srcPin}-src`,
           target: tgtId,
           targetHandle: `${tgtPin}-tgt`,
-          type: 'smoothstep',
-          label: net.name,
+          netName: net.name,
           labelStyle,
           labelBgStyle,
           style: edgeStyle,
-          data: { netName: net.name },
         });
       }
     }
 
-    // Spread parallel floating edges (same node pair, either direction)
-    // apart perpendicular to the line between them.
-    if (pendingFloat.length > 0) {
-      const groups = new Map<string, PendingFloatEdge[]>();
-      for (const pe of pendingFloat) {
-        const key = [pe.srcId, pe.tgtId].sort().join('|');
+    // Detailed mode: merge per-pin edges that land on the same (collapsed)
+    // handle pair and whose net names form a contiguous bus into a single
+    // "<hi:lo>"-labeled ribbon edge — the wire-side counterpart of the
+    // collapsed pin-table rows.
+    if (pendingSmooth.length > 0) {
+      const groups = new Map<string, PendingSmoothEdge[]>();
+      for (const pe of pendingSmooth) {
+        const key = `${pe.source}|${pe.sourceHandle}|${pe.target}|${pe.targetHandle}`;
         const group = groups.get(key);
         if (group) group.push(pe);
         else groups.set(key, [pe]);
       }
       for (const group of groups.values()) {
-        const n = group.length;
-        group.forEach((pe, idx) => {
+        for (const ribbon of clusterBusRibbons(group, pe => pe.netName)) {
+          const rep = ribbon.members[0];
+          const isBus = ribbon.members.length > 1;
+          edges.push({
+            id: rep.id,
+            source: rep.source,
+            sourceHandle: rep.sourceHandle,
+            target: rep.target,
+            targetHandle: rep.targetHandle,
+            type: 'smoothstep',
+            label: ribbon.label,
+            labelStyle: rep.labelStyle,
+            labelBgStyle: rep.labelBgStyle,
+            style: isBus ? { ...rep.style, strokeWidth: (rep.style.strokeWidth as number) + 2 } : rep.style,
+            className: isBus ? 'bus-edge' : undefined,
+            data: { netName: rep.netName },
+          });
+        }
+      }
+    }
+
+    // Spread parallel floating edges (same node pair, either direction)
+    // apart perpendicular to the line between them — but first merge
+    // same-direction parallel bus-bit wires into single ribbons so a wide
+    // bus draws as one offset wire pair instead of one per bit.
+    if (pendingFloat.length > 0) {
+      const pairGroups = new Map<string, PendingFloatEdge[]>();
+      for (const pe of pendingFloat) {
+        const key = [pe.srcId, pe.tgtId].sort().join('|');
+        const group = pairGroups.get(key);
+        if (group) group.push(pe);
+        else pairGroups.set(key, [pe]);
+      }
+      for (const pairGroup of pairGroups.values()) {
+        const dirGroups = new Map<string, PendingFloatEdge[]>();
+        for (const pe of pairGroup) {
+          const key = `${pe.srcId}->${pe.tgtId}`;
+          const group = dirGroups.get(key);
+          if (group) group.push(pe);
+          else dirGroups.set(key, [pe]);
+        }
+        const merged: PendingFloatEdge[] = [];
+        for (const dirGroup of dirGroups.values()) {
+          for (const ribbon of clusterBusRibbons(dirGroup, pe => pe.netName)) {
+            const rep = ribbon.members[0];
+            if (ribbon.members.length > 1) {
+              merged.push({ ...rep, label: ribbon.label, isBus: true, style: { ...rep.style, strokeWidth: (rep.style.strokeWidth as number) + 2 } });
+            } else {
+              merged.push(rep);
+            }
+          }
+        }
+
+        const n = merged.length;
+        merged.forEach((pe, idx) => {
           let { sourcePoint, targetPoint } = pe;
           if (n > 1) {
             const offset = (idx - (n - 1) / 2) * FLOAT_PARALLEL_OFFSET;
@@ -265,7 +354,8 @@ function buildGraph(
             labelStyle: pe.labelStyle,
             labelBgStyle: pe.labelBgStyle,
             style: pe.style,
-            data: { netName: pe.label, sourcePoint, targetPoint } as FloatingEdgeData,
+            className: pe.isBus ? 'bus-edge' : undefined,
+            data: { netName: pe.netName, sourcePoint, targetPoint } as FloatingEdgeData,
           });
         });
       }

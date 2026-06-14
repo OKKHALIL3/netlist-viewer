@@ -1,8 +1,9 @@
 // Use the self-contained browser bundle (no web-worker dependency)
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs';
-import type { Cell } from '../parser/types';
+import type { Cell, Instance } from '../parser/types';
 import type { DiagramStyle } from '../store/viewerStore';
+import { groupPinConnections } from './busGrouping';
 
 export interface NodePosition {
   x: number;
@@ -24,9 +25,10 @@ const BODY_PAD = 10;
 // count — the expanded card overlays on top via CSS without affecting layout.
 const COLLAPSED_INST_H = HEADER_H + 14;
 
-export function instanceHeight(numPins: number, diagramStyle: DiagramStyle = 'detailed'): number {
+export function instanceHeight(conn: Instance['conn'], diagramStyle: DiagramStyle = 'detailed'): number {
   if (diagramStyle === 'simple') return COLLAPSED_INST_H;
-  return HEADER_H + numPins * PIN_ROW_H + BODY_PAD;
+  const numRows = groupPinConnections(Object.entries(conn)).length;
+  return HEADER_H + numRows * PIN_ROW_H + BODY_PAD;
 }
 
 export function rectCenter(rect: NodePosition): { x: number; y: number } {
@@ -64,7 +66,7 @@ export async function layoutCell(cell: Cell, diagramStyle: DiagramStyle = 'detai
     ...cell.instances.map(inst => ({
       id: inst.id,
       width: NODE_WIDTH,
-      height: instanceHeight(Object.keys(inst.conn).length, diagramStyle),
+      height: instanceHeight(inst.conn, diagramStyle),
     })),
     ...cell.primitives.map(prim => ({
       id: prim.id,

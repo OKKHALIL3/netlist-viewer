@@ -1,6 +1,7 @@
 import { Fragment } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
+import { groupPinConnections } from '../../layout/busGrouping';
 import type { Instance, Port } from '../../parser/types';
 
 export interface InstanceNodeData extends Record<string, unknown> {
@@ -35,7 +36,10 @@ export function InstanceNode({ data }: NodeProps) {
   const d = data as InstanceNodeData;
   const { instance, masterPorts, isSelected, isConnected, isExpanded } = d;
   const { descend, setSelection, design } = useViewerStore();
-  const pins = Object.entries(instance.conn);
+  // Collapses runs of consecutive scalarized bus bits (e.g. D<0>..D<23>,
+  // wired to a correspondingly-indexed run of nets) into single rows shown
+  // as "D<23:0>". Each row's first pin anchors its handles/edges.
+  const rows = groupPinConnections(Object.entries(instance.conn));
 
   const handleDoubleClick = () => {
     if (design?.cells.has(instance.master)) {
@@ -61,13 +65,15 @@ export function InstanceNode({ data }: NodeProps) {
       <Handle type="source" position={Position.Left} id="float-src" style={FLOAT_HANDLE_STYLE} />
       <Handle type="target" position={Position.Left} id="float-tgt" style={FLOAT_HANDLE_STYLE} />
 
-      {/* Per-pin handles — every pin gets both a source and a target handle
-          at the same position, since a wire can connect to either end of a
-          pin regardless of which side buildGraph picks as the "source" of
-          the net's edges. The unused handle is invisible but still anchors
-          edges. Only rendered when the pin table itself is visible. */}
-      {isExpanded && pins.map(([pin], i) => {
-        const dir = pinDir(pin, masterPorts);
+      {/* Per-row handles — every row (a single pin, or a collapsed bus of
+          consecutive pins) gets both a source and a target handle at the
+          same position, anchored to its first pin (repPin), since a wire
+          can connect to either end regardless of which side buildGraph
+          picks as the "source" of the net's edges. The unused handle is
+          invisible but still anchors edges. Only rendered when the pin
+          table itself is visible. */}
+      {isExpanded && rows.map((row, i) => {
+        const dir = pinDir(row.repPin, masterPorts);
         const top = HEADER_H + i * PIN_H + PIN_H / 2;
         const isOutput = dir === 'O';
         const position = isOutput ? Position.Right : Position.Left;
@@ -78,17 +84,17 @@ export function InstanceNode({ data }: NodeProps) {
         };
         const hiddenStyle = { top, width: 8, height: 8, opacity: 0, pointerEvents: 'none' as const };
         return (
-          <Fragment key={pin}>
+          <Fragment key={row.repPin}>
             <Handle
               type={isOutput ? 'source' : 'target'}
               position={position}
-              id={`${pin}-${isOutput ? 'src' : 'tgt'}`}
+              id={`${row.repPin}-${isOutput ? 'src' : 'tgt'}`}
               style={visibleStyle}
             />
             <Handle
               type={isOutput ? 'target' : 'source'}
               position={position}
-              id={`${pin}-${isOutput ? 'tgt' : 'src'}`}
+              id={`${row.repPin}-${isOutput ? 'tgt' : 'src'}`}
               style={hiddenStyle}
             />
           </Fragment>
@@ -101,10 +107,10 @@ export function InstanceNode({ data }: NodeProps) {
       </div>
       {isExpanded && (
         <div className="inst-body">
-          {pins.map(([pin, net]) => (
-            <div key={pin} className="pin-row">
-              <span className="pin-name" title={pin}>{pin}</span>
-              <span className="net-name" title={net}>{net}</span>
+          {rows.map(row => (
+            <div key={row.repPin} className={`pin-row${row.isBus ? ' bus' : ''}`}>
+              <span className="pin-name" title={row.isBus ? row.pins.join(', ') : row.pinLabel}>{row.pinLabel}</span>
+              <span className="net-name" title={row.isBus ? row.nets.join(', ') : row.netLabel}>{row.netLabel}</span>
             </div>
           ))}
         </div>
