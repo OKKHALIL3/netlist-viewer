@@ -395,3 +395,61 @@ body {
 }
 .warnings-bar summary { cursor: pointer; font-family: 'Space Mono', monospace; }
 .warnings-bar ul { margin-top: 6px; padding-left: 16px; font-family: 'Space Mono', monospace; font-size: 11px; }
+
+/* ── Design-wide search ───────────────────────────────────── */
+.search-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--panel); border: 1px solid var(--line);
+  color: var(--txt-dim); font-size: 11.5px; font-family: 'Sora', sans-serif;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.search-btn:hover { border-color: var(--accent); color: var(--txt); }
+.search-btn kbd {
+  font-size: 10px; background: #1a2029; border: 1px solid var(--line);
+  border-radius: 3px; padding: 1px 5px; font-family: 'Space Mono', monospace;
+}
+
+.search-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(8, 10, 14, 0.6);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 12vh;
+}
+.search-modal {
+  width: min(640px, 92vw); max-height: 60vh;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column;
+}
+.search-input {
+  width: 100%; box-sizing: border-box; border: none; border-bottom: 1px solid var(--line);
+  background: var(--panel-2); color: var(--txt); font-size: 14px;
+  font-family: 'Space Mono', monospace; padding: 14px 16px;
+}
+.search-input:focus { outline: none; }
+.search-results { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+.search-hint {
+  padding: 16px; font-size: 12px; color: var(--txt-faint); font-family: 'Space Mono', monospace;
+}
+.search-result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 16px; cursor: pointer; border-bottom: 1px solid var(--line-soft);
+}
+.search-result:last-child { border-bottom: none; }
+.search-result:hover, .search-result.active { background: var(--accent-soft); }
+.search-kind {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  padding: 2px 7px; border-radius: 4px; flex-shrink: 0; width: 60px; text-align: center;
+}
+.kind-instance { background: var(--accent-soft); color: #cfe3ff; }
+.kind-primitive { background: #2a2538; color: #cdb6ff; }
+.kind-net { background: #1f2e22; color: #9fe6ad; }
+.kind-cell { background: #2e2517; color: #f0c98a; }
+.search-id { font-family: 'Space Mono', monospace; font-size: 12.5px; color: var(--txt); flex-shrink: 0; }
+.search-detail { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--txt-dim); }
+.search-loc {
+  margin-left: auto; font-size: 10.5px; color: var(--txt-faint);
+  font-family: 'Space Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
