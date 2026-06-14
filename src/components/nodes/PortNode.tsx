@@ -11,11 +11,20 @@ export interface PortNodeData extends Record<string, unknown> {
 export function PortNode({ data }: NodeProps) {
   const d = data as PortNodeData;
   const { port, isFocused, isHighlighted } = d;
-  const { mode, setSelection, setFocusNet } = useViewerStore();
+  const { mode, setSelection, setFocusNet, design, currentCell } = useViewerStore();
 
-  // Cell-boundary ports always use a dedicated color, distinct from net/pin
-  // colors, so they read as "this is a cell I/O" at a glance.
-  const color = isFocused || isHighlighted ? 'var(--sel)' : 'var(--port)';
+  const active = isFocused || isHighlighted;
+  // Cell-boundary ports use a dedicated color so they read as "cell I/O"; when
+  // focused they light up in a brighter version of their net's category color.
+  const kind = design?.cells.get(currentCell)?.nets.find(n => n.name === port.name)?.kind ?? 'signal';
+  const hiColor = kind === 'power' ? 'var(--net-pwr-hi)' : kind === 'ground' ? 'var(--net-gnd-hi)' : 'var(--net-sig-hi)';
+  const color = active ? hiColor : 'var(--port)';
+
+  // Outputs sit on the right boundary (design to their left), inputs on the left
+  // (design to their right). Put the wire handle on the design-facing side and
+  // point the flag that way, so the wire comes straight out of the pin tip.
+  const isOutput = port.dir === 'O';
+  const handlePos = isOutput ? Position.Left : Position.Right;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -25,14 +34,20 @@ export function PortNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`port-node${isFocused || isHighlighted ? ' connected' : ''}`}
+      className={`port-node${isOutput ? ' out' : ' in'}${active ? ' connected' : ''}`}
       onClick={handleClick}
       title={`Cell port: ${port.name}${port.dir ? ` (${port.dir})` : ''}`}
     >
-      <Handle type="target" position={Position.Left} id="port-tgt" style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Left} id="port-src" style={{ opacity: 0, pointerEvents: 'none' }} />
-      <div className="port-glyph" style={{ borderColor: color, color }}>{port.dir ?? '?'}</div>
-      <div className="port-label">{port.name}</div>
+      <span className="port-label">{port.name}</span>
+      {/* Handles live inside the flag so the wire attaches to its tip (the
+          design-facing point), not the node's outer bounding edge. */}
+      <span
+        className="port-flag"
+        style={{ background: color, boxShadow: active ? `0 0 8px ${color}` : undefined }}
+      >
+        <Handle type="target" position={handlePos} id="port-tgt" style={{ opacity: 0 }} />
+        <Handle type="source" position={handlePos} id="port-src" style={{ opacity: 0, pointerEvents: 'none' }} />
+      </span>
     </div>
   );
 }
