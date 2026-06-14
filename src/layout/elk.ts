@@ -2,7 +2,8 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs';
 import type { Cell, Design } from '../parser/types';
-import { computeInstanceLayout } from './pinGroups';
+import type { NodeLayout } from '../store/viewerStore';
+import { computeInstanceLayout, computeRadialLayout } from './pinGroups';
 
 export interface NodePosition {
   x: number;
@@ -22,7 +23,11 @@ function getElk() {
   return elkInstance;
 }
 
-export async function layoutCell(cell: Cell, design: Design | null): Promise<Map<string, NodePosition>> {
+export async function layoutCell(
+  cell: Cell,
+  design: Design | null,
+  nodeLayout: NodeLayout,
+): Promise<Map<string, NodePosition>> {
   const elk = getElk();
 
   const netKindOf = (() => {
@@ -30,16 +35,18 @@ export async function layoutCell(cell: Cell, design: Design | null): Promise<Map
     return (net: string) => kinds.get(net) ?? 'signal';
   })();
 
+  const instanceSize = (inst: Cell['instances'][number]) => {
+    const ports = design?.cells.get(inst.master)?.ports ?? [];
+    return nodeLayout === 'beta'
+      ? computeRadialLayout(inst.conn, ports, netKindOf)
+      : { width: NODE_WIDTH, height: computeInstanceLayout(inst.conn, ports, netKindOf).height };
+  };
+
   const children: ElkNode[] = [
-    ...cell.instances.map(inst => ({
-      id: inst.id,
-      width: NODE_WIDTH,
-      height: computeInstanceLayout(
-        inst.conn,
-        design?.cells.get(inst.master)?.ports ?? [],
-        netKindOf,
-      ).height,
-    })),
+    ...cell.instances.map(inst => {
+      const { width, height } = instanceSize(inst);
+      return { id: inst.id, width, height };
+    }),
     ...cell.primitives.map(prim => ({
       id: prim.id,
       width: PRIM_SIZE,
