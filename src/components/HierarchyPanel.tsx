@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useViewerStore } from '../store/viewerStore';
+import { useViewerStore, type BreadcrumbEntry } from '../store/viewerStore';
 import type { Design } from '../parser/types';
 
 interface TreeNode {
@@ -9,9 +9,14 @@ interface TreeNode {
   isExternal: boolean;
   children: TreeNode[];
   busSize?: number;
+  // Full breadcrumb path from the top cell down to (and including) this
+  // node — this tree spans the whole design, not just the current cell, so
+  // navigating to a node must replace the breadcrumb wholesale (goToPath)
+  // rather than push relative to wherever the canvas currently is.
+  path: BreadcrumbEntry[];
 }
 
-function buildTree(cellName: string, design: Design, visited = new Set<string>()): TreeNode[] {
+function buildTree(cellName: string, design: Design, parentPath: BreadcrumbEntry[], visited = new Set<string>()): TreeNode[] {
   if (visited.has(cellName)) return [];
   visited.add(cellName);
   const cell = design.cells.get(cellName);
@@ -30,14 +35,17 @@ function buildTree(cellName: string, design: Design, visited = new Set<string>()
     const rep = insts[0];
     const isBus = insts.length > 1;
     const isExternal = !design.cells.has(rep.master);
-    const children = isExternal ? [] : buildTree(rep.master, design, new Set(visited));
+    const instanceId = isBus ? `${key}<${Math.max(...insts.map(i => i.busIndex ?? 0))}:0>` : rep.id;
+    const path = [...parentPath, { label: instanceId, cellName: rep.master }];
+    const children = isExternal ? [] : buildTree(rep.master, design, path, new Set(visited));
     nodes.push({
       id: key,
-      instanceId: isBus ? `${key}<${Math.max(...insts.map(i => i.busIndex ?? 0))}:0>` : rep.id,
+      instanceId,
       cellName: rep.master,
       isExternal,
       children,
       busSize: isBus ? insts.length : undefined,
+      path,
     });
   }
   return nodes;
@@ -53,14 +61,14 @@ function TreeRow({
   depth: number;
 }) {
   const [open, setOpen] = useState(depth < 2);
-  const { descend } = useViewerStore();
+  const { goToPath } = useViewerStore();
   const hasChildren = node.children.length > 0;
   const isActive = node.cellName === currentCell;
   const canDescend = !node.isExternal;
 
   const handleClick = () => {
     if (hasChildren) setOpen(o => !o);
-    if (canDescend) descend(node.instanceId, node.cellName);
+    if (canDescend) goToPath(node.path, null);
   };
 
   return (
@@ -93,11 +101,11 @@ function TreeRow({
 }
 
 export function HierarchyPanel() {
-  const { design, currentCell } = useViewerStore();
+  const { design, currentCell, goToPath } = useViewerStore();
 
   const tree = useMemo(() => {
     if (!design) return [];
-    return buildTree(design.topCell, design);
+    return buildTree(design.topCell, design, [{ label: design.topCell, cellName: design.topCell }]);
   }, [design]);
 
   if (!design) return null;
@@ -112,6 +120,7 @@ export function HierarchyPanel() {
         <div
           className={`tree-row${design.topCell === currentCell ? ' active' : ''}`}
           style={{ paddingLeft: 8 }}
+          onClick={() => goToPath([{ label: design.topCell, cellName: design.topCell }], null)}
         >
           <span className="tree-chev">▾</span>
           <span className="tree-ic cell">▦</span>
