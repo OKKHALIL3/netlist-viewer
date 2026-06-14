@@ -94,6 +94,11 @@ function buildGraph(
   const edges: Edge[] = [];
   const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
 
+  // The net whose connected pin(s) should be highlighted in instance pin
+  // tables — lets a user trace a wire to its exact pin even when its drawn
+  // path loops around the block and passes near other pins.
+  const activeNet = selection?.type === 'net' ? selection.name : focusNet;
+
   // Collapsed pin-table rows (see InstanceNode) merge runs of bus-bit pins
   // into one row with a single handle anchored at the row's first pin
   // (repPin). Map every bus-bit pin to its row's repPin so net endpoints
@@ -121,7 +126,7 @@ function buildGraph(
       id: inst.id,
       type: 'instanceNode',
       position: { x: pos.x, y: pos.y },
-      data: { instance: inst, masterPorts, isSelected, isConnected, isExpanded } as InstanceNodeData,
+      data: { instance: inst, masterPorts, isSelected, isConnected, isExpanded, activeNet } as InstanceNodeData,
       style: { width: pos.width },
       zIndex: diagramStyle === 'simple' && isExpanded ? 1000 : undefined,
     });

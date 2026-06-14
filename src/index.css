@@ -262,6 +262,18 @@ body {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
+/* The row whose net is selected/focused — lets a wire be traced to its
+   exact pin even when its drawn path loops around the block. */
+.pin-row.active-net {
+  background: rgba(255, 210, 63, 0.16);
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px var(--sel);
+}
+.pin-row.active-net .pin-name,
+.pin-row.active-net .net-name {
+  color: var(--sel);
+}
+
 /* A collapsed bus row (e.g. "D<23:0>") reads as a stack of pin rows behind
    each other — two offset "cards" peek out from behind the visible row. */
 .pin-row.bus {

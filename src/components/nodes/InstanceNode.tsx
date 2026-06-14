@@ -12,6 +12,10 @@ export interface InstanceNodeData extends Record<string, unknown> {
   // Detailed mode always shows the full pin table; simple mode shows a
   // header-only card unless the instance is selected.
   isExpanded: boolean;
+  // Net currently selected/focused, if any — its row(s) are highlighted so a
+  // wire can be traced to its exact pin even when its drawn path loops
+  // around the block and passes near other pins.
+  activeNet: string | null;
 }
 
 const HEADER_H = 42;
@@ -34,7 +38,7 @@ function pinDir(name: string, ports: Port[]): 'I' | 'O' | 'B' {
 
 export function InstanceNode({ data }: NodeProps) {
   const d = data as InstanceNodeData;
-  const { instance, masterPorts, isSelected, isConnected, isExpanded } = d;
+  const { instance, masterPorts, isSelected, isConnected, isExpanded, activeNet } = d;
   const { descend, setSelection, design } = useViewerStore();
   // Collapses runs of consecutive scalarized bus bits (e.g. D<0>..D<23>,
   // wired to a correspondingly-indexed run of nets) into single rows shown
@@ -77,10 +81,14 @@ export function InstanceNode({ data }: NodeProps) {
         const top = HEADER_H + i * PIN_H + PIN_H / 2;
         const isOutput = dir === 'O';
         const position = isOutput ? Position.Right : Position.Left;
+        const isActive = !!activeNet && row.nets.includes(activeNet);
         const visibleStyle = {
           top,
-          background: isOutput ? 'var(--pin-o)' : 'var(--pin-i)',
-          width: 8, height: 8, border: '2px solid var(--bg)',
+          background: isActive ? 'var(--sel)' : isOutput ? 'var(--pin-o)' : 'var(--pin-i)',
+          width: isActive ? 11 : 8, height: isActive ? 11 : 8,
+          border: isActive ? '2px solid var(--sel)' : '2px solid var(--bg)',
+          boxShadow: isActive ? '0 0 6px 1px var(--sel)' : undefined,
+          zIndex: isActive ? 10 : undefined,
         };
         const hiddenStyle = { top, width: 8, height: 8, opacity: 0, pointerEvents: 'none' as const };
         return (
@@ -107,12 +115,15 @@ export function InstanceNode({ data }: NodeProps) {
       </div>
       {isExpanded && (
         <div className="inst-body">
-          {rows.map(row => (
-            <div key={row.repPin} className={`pin-row${row.isBus ? ' bus' : ''}`}>
-              <span className="pin-name" title={row.isBus ? row.pins.join(', ') : row.pinLabel}>{row.pinLabel}</span>
-              <span className="net-name" title={row.isBus ? row.nets.join(', ') : row.netLabel}>{row.netLabel}</span>
-            </div>
-          ))}
+          {rows.map(row => {
+            const isActive = !!activeNet && row.nets.includes(activeNet);
+            return (
+              <div key={row.repPin} className={`pin-row${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}>
+                <span className="pin-name" title={row.isBus ? row.pins.join(', ') : row.pinLabel}>{row.pinLabel}</span>
+                <span className="net-name" title={row.isBus ? row.nets.join(', ') : row.netLabel}>{row.netLabel}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
