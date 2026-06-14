@@ -171,6 +171,10 @@ body {
   display: flex; flex-direction: column; gap: 6px; z-index: 20;
 }
 .legend-row { display: flex; align-items: center; gap: 7px; color: var(--txt-dim); }
+/* Net kinds not currently drawn (supply hidden) — dimmed so the legend
+   matches what's on the canvas. */
+.legend-row.muted { opacity: 0.4; }
+.legend-row.muted .legend-line { opacity: 0.5; }
 .legend-line { display: inline-block; width: 18px; height: 3px; border-radius: 2px; }
 .legend-line.sig { background: var(--net-sig); }
 .legend-line.pwr { background: var(--net-pwr); }

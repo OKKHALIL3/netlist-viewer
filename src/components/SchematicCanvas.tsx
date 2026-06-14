@@ -275,6 +275,11 @@ function Canvas() {
   const [laying, setLaying] = useState(false);
   const { fitView, fitBounds } = useReactFlow();
 
+  // Power/ground wires are suppressed while "Hide supply nets" is on (except in
+  // Net mode, which always draws them) — see the matching guard in buildGraph.
+  // The legend greys out those entries so it matches what's actually drawn.
+  const supplyHidden = hideSupply && mode !== 'net';
+
   const cell = design?.cells.get(currentCell);
 
   useEffect(() => {
@@ -382,8 +387,12 @@ function Canvas() {
       </ReactFlow>
       <div className="canvas-legend">
         <div className="legend-row"><span className="legend-line sig" />signal net</div>
-        <div className="legend-row"><span className="legend-line pwr" />power net</div>
-        <div className="legend-row"><span className="legend-line gnd" />ground net</div>
+        <div className={`legend-row${supplyHidden ? ' muted' : ''}`}>
+          <span className="legend-line pwr" />power net{supplyHidden && ' (hidden)'}
+        </div>
+        <div className={`legend-row${supplyHidden ? ' muted' : ''}`}>
+          <span className="legend-line gnd" />ground net{supplyHidden && ' (hidden)'}
+        </div>
         <div className="legend-row"><span className="legend-line sel" />selected / focus</div>
       </div>
       <button
