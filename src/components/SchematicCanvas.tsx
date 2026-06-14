@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useViewerStore, type SelectionType, type DiagramStyle } from '../store/viewerStore';
-import { layoutCell, rectCenter, rectExitPoint } from '../layout/elk';
+import { layoutCell } from '../layout/elk';
 import { groupPinConnections, clusterBusRibbons } from '../layout/busGrouping';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
@@ -150,8 +150,6 @@ function buildGraph(
       id: string;
       srcId: string;
       tgtId: string;
-      sourcePoint: { x: number; y: number };
-      targetPoint: { x: number; y: number };
       label: string;
       netName: string;
       isBus: boolean;
@@ -229,17 +227,10 @@ function buildGraph(
         const { nodeId: tgtId, handle: tgtPin } = realEps[i];
 
         if (diagramStyle === 'simple') {
-          const srcPos = positions.get(srcId);
-          const tgtPos = positions.get(tgtId);
-          if (!srcPos || !tgtPos) continue;
-          const srcCenter = rectCenter(srcPos);
-          const tgtCenter = rectCenter(tgtPos);
           pendingFloat.push({
             id: `e_${net.name}_${i}`,
             srcId,
             tgtId,
-            sourcePoint: rectExitPoint(srcPos, tgtCenter.x, tgtCenter.y),
-            targetPoint: rectExitPoint(tgtPos, srcCenter.x, srcCenter.y),
             label: net.name,
             netName: net.name,
             isBus: false,
@@ -332,17 +323,7 @@ function buildGraph(
 
         const n = merged.length;
         merged.forEach((pe, idx) => {
-          let { sourcePoint, targetPoint } = pe;
-          if (n > 1) {
-            const offset = (idx - (n - 1) / 2) * FLOAT_PARALLEL_OFFSET;
-            const dx = targetPoint.x - sourcePoint.x;
-            const dy = targetPoint.y - sourcePoint.y;
-            const len = Math.hypot(dx, dy) || 1;
-            const px = (-dy / len) * offset;
-            const py = (dx / len) * offset;
-            sourcePoint = { x: sourcePoint.x + px, y: sourcePoint.y + py };
-            targetPoint = { x: targetPoint.x + px, y: targetPoint.y + py };
-          }
+          const offset = n > 1 ? (idx - (n - 1) / 2) * FLOAT_PARALLEL_OFFSET : 0;
           edges.push({
             id: pe.id,
             source: pe.srcId,
@@ -355,7 +336,7 @@ function buildGraph(
             labelBgStyle: pe.labelBgStyle,
             style: pe.style,
             className: pe.isBus ? 'bus-edge' : undefined,
-            data: { netName: pe.netName, sourcePoint, targetPoint } as FloatingEdgeData,
+            data: { netName: pe.netName, offset } as FloatingEdgeData,
           });
         });
       }
