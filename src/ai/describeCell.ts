@@ -69,8 +69,10 @@ function buildPrompt(cell: Cell): string {
 
   return [
     'You are an IC design assistant helping an engineer review a schematic viewer.',
-    'Given the following subcircuit definition, write a concise functional description (2-4 sentences) of what this block does electrically/logically.',
-    'Focus on function (e.g. "2-input NAND gate", "differential input buffer with hysteresis", "cross-coupled regeneration latch"), not implementation minutiae. Do not repeat the port list back verbatim.',
+    'Given the following subcircuit definition, describe what this block does electrically/logically, formatted for a quick skim:',
+    '- Line 1: a short function label (e.g. "2-input NAND gate", "differential input buffer with hysteresis", "cross-coupled regeneration latch").',
+    '- Then 2-3 short bullet points (each starting with "- "), covering only the most important behavior — e.g. key inputs/outputs and what they do, notable structure, or operating mode. Each bullet under ~12 words.',
+    'Be terse. No preamble, no restating the port list, no closing summary.',
     '',
     ...lines,
   ].join('\n');

@@ -3,6 +3,28 @@ import { useViewerStore } from '../store/viewerStore';
 import { describeCell, getApiKey, getCachedDescription, setApiKey } from '../ai/describeCell';
 import type { Cell } from '../parser/types';
 
+const BULLET_RE = /^[-*•]\s+/;
+
+// Splits the AI description into a leading summary line(s) and a bullet
+// list, so the response reads as a quick-skim summary rather than a
+// wall of prose.
+function DescriptionView({ text }: { text: string }) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const summary = lines.filter(l => !BULLET_RE.test(l));
+  const bullets = lines.filter(l => BULLET_RE.test(l)).map(l => l.replace(BULLET_RE, ''));
+
+  return (
+    <>
+      {summary.map((l, i) => <p key={i} className="ai-desc-text">{l}</p>)}
+      {bullets.length > 0 && (
+        <ul className="ai-desc-bullets">
+          {bullets.map((l, i) => <li key={i}>{l}</li>)}
+        </ul>
+      )}
+    </>
+  );
+}
+
 // Keyed by cell.name from the caller so a remount resets state when the
 // selected instance's master cell changes.
 function CellDescription({ cell }: { cell: Cell }) {
@@ -40,7 +62,7 @@ function CellDescription({ cell }: { cell: Cell }) {
   return (
     <>
       <div className="insp-subhead">Functional description</div>
-      {description && <p className="ai-desc-text">{description}</p>}
+      {description && <DescriptionView text={description} />}
       {error && <p className="ai-desc-error">{error}</p>}
       {!hasKey ? (
         <div className="ai-desc-keyform">

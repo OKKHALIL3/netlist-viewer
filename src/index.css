@@ -344,8 +344,13 @@ body {
 
 .ai-desc-text {
   font-size: 12px; line-height: 1.6; color: var(--txt-dim);
-  margin: 0 0 10px; white-space: pre-wrap;
+  margin: 0 0 6px; white-space: pre-wrap;
 }
+.ai-desc-bullets {
+  font-size: 12px; line-height: 1.6; color: var(--txt-dim);
+  margin: 0 0 10px; padding-left: 18px;
+}
+.ai-desc-bullets li { margin-bottom: 2px; }
 .ai-desc-error {
   font-size: 11.5px; color: var(--net-pwr); margin: 0 0 10px;
 }
