@@ -14,7 +14,6 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import type { SmoothStepPathOptions } from '@xyflow/system';
 
 import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
@@ -83,9 +82,9 @@ function buildGraph(
   focusNet: string | null,
   design: Design | null,
   positions: Map<string, NodePosition>,
-): { nodes: Node[]; edges: (Edge & { pathOptions?: SmoothStepPathOptions })[] } {
+): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
-  const edges: (Edge & { pathOptions?: SmoothStepPathOptions })[] = [];
+  const edges: Edge[] = [];
   const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
 
   // The net whose connected pin(s) should be highlighted in instance pin
@@ -246,10 +245,6 @@ function buildGraph(
             target: rep.target,
             targetHandle: rep.targetHandle,
             type: 'smoothstep',
-            // Bend further from the node before approaching the target pin,
-            // so the wire takes a wider path around unrelated pin rows
-            // instead of grazing them (default offset is 20).
-            pathOptions: { offset: 36 },
             label: ribbon.label,
             labelStyle: rep.labelStyle,
             labelBgStyle: rep.labelBgStyle,
