@@ -14,6 +14,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import type { SmoothStepPathOptions } from '@xyflow/system';
 
 import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
@@ -82,9 +83,9 @@ function buildGraph(
   focusNet: string | null,
   design: Design | null,
   positions: Map<string, NodePosition>,
-): { nodes: Node[]; edges: Edge[] } {
+): { nodes: Node[]; edges: (Edge & { pathOptions?: SmoothStepPathOptions })[] } {
   const nodes: Node[] = [];
-  const edges: Edge[] = [];
+  const edges: (Edge & { pathOptions?: SmoothStepPathOptions })[] = [];
   const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
 
   // The net whose connected pin(s) should be highlighted in instance pin
@@ -157,7 +158,12 @@ function buildGraph(
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
+      const isActive = isFocused || isHighlighted;
       const isDimmed = focusNet !== null && !isFocused && mode === 'net';
+      // When something is selected/focused, fade unrelated wires further so
+      // the active net's path reads as an isolated wire rather than one of
+      // several similarly-weighted lines grazing the same pin rows.
+      const hasFocus = selection !== null || focusNet !== null;
 
       const eps = net.endpoints.map(([id, pin]) =>
         id === '__port__'
@@ -183,9 +189,9 @@ function buildGraph(
       const realEps = eps.filter(ep => positions.has(ep.nodeId));
       if (realEps.length < 2) continue;
 
-      const color = (isFocused || isHighlighted) ? 'var(--sel)' : netColor(net);
-      const opacity = isDimmed ? 0.05 : (isFocused || isHighlighted) ? 0.95 : 0.65;
-      const strokeWidth = (isFocused || isHighlighted) ? 2.4 : 1.6;
+      const color = isActive ? 'var(--sel)' : netColor(net);
+      const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
+      const strokeWidth = isActive ? 2.4 : 1.6;
 
       const outIdx = realEps.findIndex(ep => pinIsOutput(ep.handle));
       const srcIdx = outIdx !== -1 ? outIdx : 0;
@@ -196,7 +202,7 @@ function buildGraph(
         fontSize: 9,
         fontFamily: 'Space Mono, monospace',
       };
-      const labelBgStyle = { fill: '#10141a', fillOpacity: (isFocused || isHighlighted) ? 0.9 : 0 };
+      const labelBgStyle = { fill: '#10141a', fillOpacity: isActive ? 0.9 : 0 };
       const edgeStyle = { stroke: color, strokeWidth, opacity };
 
       for (let i = 0; i < realEps.length; i++) {
@@ -240,6 +246,10 @@ function buildGraph(
             target: rep.target,
             targetHandle: rep.targetHandle,
             type: 'smoothstep',
+            // Bend further from the node before approaching the target pin,
+            // so the wire takes a wider path around unrelated pin rows
+            // instead of grazing them (default offset is 20).
+            pathOptions: { offset: 36 },
             label: ribbon.label,
             labelStyle: rep.labelStyle,
             labelBgStyle: rep.labelBgStyle,
