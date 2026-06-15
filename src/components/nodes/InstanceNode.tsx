@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
-import { computeInstanceLayout, computeRadialLayout, type PlacedRow } from '../../layout/pinGroups';
+import { computeInstanceLayout, computeRadialLayout, type PlacedRow, type PinGroup } from '../../layout/pinGroups';
 import type { Instance, Port } from '../../parser/types';
 
 export interface InstanceNodeData extends Record<string, unknown> {
@@ -15,63 +15,63 @@ export interface InstanceNodeData extends Record<string, unknown> {
   activeNet: string | null;
 }
 
-const SIDE_COLOR: Record<PlacedRow['side'], string> = {
-  left: 'var(--pin-i)',
-  right: 'var(--pin-o)',
-  top: 'var(--net-pwr)',
-  bottom: 'var(--net-gnd)',
-};
-const SIDE_POSITION: Record<PlacedRow['side'], Position> = {
-  left: Position.Left,
-  right: Position.Right,
-  top: Position.Top,
-  bottom: Position.Bottom,
+const GROUP_COLOR: Record<PinGroup, string> = {
+  input: 'var(--pin-i)',
+  output: 'var(--pin-o)',
+  supply: 'var(--net-pwr)',
+  ground: 'var(--net-gnd)',
 };
 
-// A pin drawn as a tick mark crossing the symbol edge, colored by group. The
-// React Flow handle IS the tick — a thin line centered on the edge point (a
-// source for outputs, a target otherwise), with a hidden complementary handle
-// at the same spot so a wire can attach from either end. The pin/net detail is
-// in the Inspector; a hover title gives a quick peek. An active pin lights up
-// in the focused net's own (brighter) category color.
-function symbolPin(p: PlacedRow, activeNet: string | null, activeColor: string) {
-  const isOutput = p.side === 'right';
+// A pin's source/target handle pair (a colored dot, classic style) at its
+// placed edge point. Outputs are the net's source; everything else is a target.
+// The dot is colored by the pin's GROUP (not its side, since both sides hold a
+// mix). Center is set exactly at (x, y); an active pin lights up in the focused
+// net's own (brighter) category color.
+function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string) {
+  const isOutput = p.group === 'output';
   const isActive = !!activeNet && p.row.nets.includes(activeNet);
-  const horiz = p.side === 'left' || p.side === 'right';
-  const len = isActive ? 13 : 10;
-  const thick = isActive ? 3 : 2;
-  const tick = {
-    top: p.y, left: p.x, transform: 'translate(-50%, -50%)',
-    width: horiz ? len : thick,
-    height: horiz ? thick : len,
-    minWidth: 0, minHeight: 0,
-    borderRadius: 1, border: 'none',
-    background: isActive ? activeColor : SIDE_COLOR[p.side],
-    boxShadow: isActive ? `0 0 5px 1px ${activeColor}` : undefined,
+  const position = p.side === 'left' ? Position.Left : Position.Right;
+  const posStyle = { top: p.y, left: p.x, transform: 'translate(-50%, -50%)' };
+  const visibleStyle = {
+    ...posStyle,
+    background: isActive ? activeColor : GROUP_COLOR[p.group],
+    width: isActive ? 11 : 8, height: isActive ? 11 : 8,
+    border: isActive ? `2px solid ${activeColor}` : '2px solid var(--bg)',
+    boxShadow: isActive ? `0 0 6px 1px ${activeColor}` : undefined,
     zIndex: isActive ? 10 : 3,
   };
-  const hidden = {
-    top: p.y, left: p.x, transform: 'translate(-50%, -50%)',
-    width: 7, height: 7, border: 'none', background: 'transparent',
-    opacity: 0, pointerEvents: 'none' as const,
-  };
-  const title = `${p.row.pinLabel} → ${p.row.netLabel}`;
+  const hiddenStyle = { ...posStyle, width: 8, height: 8, opacity: 0, pointerEvents: 'none' as const };
   return (
     <Fragment key={p.row.repPin}>
       <Handle
         type={isOutput ? 'source' : 'target'}
-        position={SIDE_POSITION[p.side]}
+        position={position}
         id={`${p.row.repPin}-${isOutput ? 'src' : 'tgt'}`}
-        style={tick}
-        title={title}
+        style={visibleStyle}
       />
       <Handle
         type={isOutput ? 'target' : 'source'}
-        position={SIDE_POSITION[p.side]}
+        position={position}
         id={`${p.row.repPin}-${isOutput ? 'tgt' : 'src'}`}
-        style={hidden}
+        style={hiddenStyle}
       />
     </Fragment>
+  );
+}
+
+// A single pin row on a side column — pin NAME only (net mapping lives in the
+// Inspector). Highlighted in the active net's category color when focused.
+function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: string | null; activeColor: string }) {
+  const { row } = p;
+  const isActive = !!activeNet && row.nets.includes(activeNet);
+  return (
+    <div
+      className={`pin-row edge${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
+      style={isActive ? { color: activeColor } : undefined}
+      title={row.isBus ? row.pins.join(', ') : `${row.pinLabel} → ${row.netLabel}`}
+    >
+      <span className="pin-name">{row.pinLabel}</span>
+    </div>
   );
 }
 
@@ -107,23 +107,34 @@ export function InstanceNode({ data }: NodeProps) {
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
 
-  // BETA: the block as a schematic symbol — a box with tick-mark pins on its
-  // four edges (inputs left, outputs right, supply top, ground bottom) and no
-  // inline text. The pin→net mapping lives in the Inspector.
+  // BETA: a wide instance block with pins on both side edges. Pins are ordered
+  // by group and split evenly between the left and right columns, so big
+  // mostly-input blocks are about half as tall. Rows show the pin NAME only;
+  // the net mapping is in the Inspector.
   if (nodeLayout === 'beta') {
     const layout = computeRadialLayout(instance.conn, masterPorts, netKindOf);
     return (
       <div
-        className={`inst-node beta-symbol${stateClass}`}
+        className={`inst-node beta-edges${stateClass}`}
         style={{ width: layout.width, height: layout.height }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
         title="Double-click to descend"
       >
-        {layout.rows.map(p => symbolPin(p, activeNet, activeColor))}
-        <div className="sym-label">
-          <span className="sym-id">{instance.id}</span>
-          <span className="sym-master" title={instance.master}>{instance.master}</span>
+        {layout.rows.map(p => edgeHandle(p, activeNet, activeColor))}
+
+        <div className="inst-head">
+          <span className="inst-id">{instance.id}</span>
+          <span className="inst-master" title={instance.master}>{instance.master}</span>
+        </div>
+
+        <div className="inst-mid">
+          <div className="inst-col in">
+            {layout.left.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
+          </div>
+          <div className="inst-col out">
+            {layout.right.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
+          </div>
         </div>
       </div>
     );
