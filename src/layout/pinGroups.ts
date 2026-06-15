@@ -116,37 +116,43 @@ export function computeInstanceLayout(
   return { sections, height: y + BODY_PAD };
 }
 
-// ── BETA layout: pins placed around the four edges of the block ──────────────
-// the block is drawn as a schematic symbol — a thicker box with pin stubs (tick
-// marks) on its four edges: inputs left, outputs right, supply top, ground
-// bottom. There is no inline pin/net text — the pin→net mapping lives in the
-// Inspector. Pins on each edge are spread evenly along that edge.
+// ── BETA layout: a wide instance block with pins on the left and right ───────
+// Keeps the classic look (header + pin rows + group-colored dots) but lays the
+// pins around BOTH side edges. Pins are ordered by group (inputs, then outputs,
+// then supply, then ground) and split evenly between the left and right columns
+// — so a block that's mostly inputs (the common case) ends up half as tall and
+// wide like a real instance symbol, instead of one long left-side tower. Rows
+// show the PIN NAME only (the net mapping lives in the Inspector).
 
-const SYM_WIDTH = 152; // base box width (widened if a rail needs more room)
-const TICK_PITCH = 12; // min spacing between adjacent pins on an edge
-const EDGE_PAD = 16; // keep pins away from the corners
-const MIN_SYM_H = 64; // so the centered name label always fits
+const CHAR_W = 6.7; // ~width of one Space Mono char at the pin-row font size
+const LABEL_CAP = 18; // longer pin names ellipsize rather than widen the box
+const COL_PAD = 20; // handle + inner padding per column
+const MID_GAP = 40; // clear gap between the two name columns (block-like center)
+const MIN_W = 190;
+const MAX_W = 440;
 
-export type Side = 'left' | 'right' | 'top' | 'bottom';
+export type Side = 'left' | 'right';
 
 export interface PlacedRow {
   row: PinRow;
   side: Side;
+  group: PinGroup;
   /** Handle center, relative to the node's top-left corner. */
   x: number;
   y: number;
 }
 
 export interface RadialLayout {
-  /** Every placed pin, all sides — for emitting handles + repPin mapping. */
+  /** Every placed pin, both sides — for emitting handles + repPin mapping. */
   rows: PlacedRow[];
   left: PlacedRow[];
   right: PlacedRow[];
-  top: PlacedRow[];
-  bottom: PlacedRow[];
   width: number;
   height: number;
 }
+
+const colWidth = (rows: PinRow[]) =>
+  rows.length === 0 ? 0 : Math.min(Math.max(...rows.map(r => r.pinLabel.length)), LABEL_CAP) * CHAR_W + COL_PAD;
 
 export function computeRadialLayout(
   conn: Record<string, string>,
@@ -154,20 +160,28 @@ export function computeRadialLayout(
   netKindOf: (net: string) => NetKind,
 ): RadialLayout {
   const grouped = bucketPinRows(conn, ports, netKindOf);
-  const nL = grouped.input.length;
-  const nR = grouped.output.length;
-  const nT = grouped.supply.length;
-  const nB = grouped.ground.length;
 
-  const height = Math.max(Math.max(nL, nR) * TICK_PITCH + 2 * EDGE_PAD, MIN_SYM_H);
-  const width = Math.max(SYM_WIDTH, Math.max(nT, nB) * TICK_PITCH + 2 * EDGE_PAD);
+  // Order by group, then split the sequence in half: the first half fills the
+  // left column, the rest the right. With inputs first and most pins being
+  // inputs, both columns start with inputs and outputs/supply/ground trail at
+  // the end of the right column.
+  const ordered: Array<{ row: PinRow; group: PinGroup }> = [];
+  for (const g of GROUP_ORDER) for (const row of grouped[g]) ordered.push({ row, group: g });
 
-  // Even spread of n pins along an edge of length `span`.
-  const along = (n: number, i: number, span: number) => EDGE_PAD + ((i + 0.5) / n) * (span - 2 * EDGE_PAD);
-  const left = grouped.input.map((row, i): PlacedRow => ({ row, side: 'left', x: 0, y: along(nL, i, height) }));
-  const right = grouped.output.map((row, i): PlacedRow => ({ row, side: 'right', x: width, y: along(nR, i, height) }));
-  const top = grouped.supply.map((row, i): PlacedRow => ({ row, side: 'top', x: along(nT, i, width), y: 0 }));
-  const bottom = grouped.ground.map((row, i): PlacedRow => ({ row, side: 'bottom', x: along(nB, i, width), y: height }));
+  const leftN = Math.ceil(ordered.length / 2);
+  const leftItems = ordered.slice(0, leftN);
+  const rightItems = ordered.slice(leftN);
 
-  return { rows: [...left, ...right, ...top, ...bottom], left, right, top, bottom, width, height };
+  const width = Math.min(
+    Math.max(colWidth(leftItems.map(i => i.row)) + MID_GAP + colWidth(rightItems.map(i => i.row)), MIN_W),
+    MAX_W,
+  );
+  const bandRows = Math.max(leftItems.length, rightItems.length);
+  const height = HEADER_H + bandRows * PIN_ROW_H + BODY_PAD;
+
+  const rowY = (i: number) => HEADER_H + i * PIN_ROW_H + PIN_ROW_H / 2;
+  const left = leftItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'left', x: 0, y: rowY(i) }));
+  const right = rightItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'right', x: width, y: rowY(i) }));
+
+  return { rows: [...left, ...right], left, right, width, height };
 }
