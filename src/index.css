@@ -329,29 +329,20 @@ body {
 .pin-row.bus::before { transform: translate(2px, 2px); }
 .pin-row.bus::after { transform: translate(4px, 4px); }
 
-/* ── Beta block symbol: a box with tick-mark pins on its four edges ──────────
-   Inputs left, outputs right, supply top, ground bottom. No inline pin/net
-   text — the mapping lives in the Inspector. Overflow is visible so the pin
-   ticks can cross the border. Size comes from computeRadialLayout (inline). */
-.inst-node.beta-symbol {
-  min-width: 0;
-  overflow: visible;
-  display: flex; align-items: center; justify-content: center;
-  border-width: 2px;
+/* ── Beta layout: a wide instance block, pins on both side edges ─────────────
+   Pins ordered by group and split evenly between the left and right columns.
+   Rows show the pin name only; width is set inline from computeRadialLayout so
+   the two columns never collide. */
+.inst-node.beta-edges { min-width: 0; }
+.inst-node.beta-edges .inst-mid { display: flex; justify-content: space-between; align-items: flex-start; }
+.inst-node.beta-edges .inst-col {
+  display: flex; flex-direction: column;
+  max-width: 49%; min-width: 0;
 }
-.sym-label {
-  display: flex; flex-direction: column; align-items: center; text-align: center;
-  padding: 0 10px; max-width: 100%; pointer-events: none;
-}
-.sym-id {
-  font-family: 'Space Mono', monospace; font-weight: 700; font-size: 12px;
-  color: var(--txt); max-width: 110px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.sym-master {
-  font-family: 'Space Mono', monospace; font-size: 9px; color: #7fb4ff; margin-top: 2px;
-  max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+.inst-node.beta-edges .inst-col.in { align-items: flex-start; padding-left: 11px; }
+.inst-node.beta-edges .inst-col.out { align-items: flex-end; padding-right: 11px; }
+.inst-node.beta-edges .inst-col.out .pin-row.edge { text-align: right; }
+.inst-node.beta-edges .pin-row.edge .pin-name { max-width: 100%; }
 
 /* ── Primitive node ────────────────────────────────────────── */
 .prim-node {
