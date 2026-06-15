@@ -569,6 +569,12 @@ body {
 }
 .search-result:last-child { border-bottom: none; }
 .search-result:hover, .search-result.active { background: var(--accent-soft); }
+/* Muted "+N more occurrences" tail under an item reused beyond the shown cap. */
+.search-more {
+  padding: 5px 16px 7px 86px; font-size: 10.5px; font-style: italic;
+  color: var(--txt-faint); font-family: 'Space Mono', monospace;
+  border-bottom: 1px solid var(--line-soft);
+}
 .search-kind {
   font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
   padding: 2px 7px; border-radius: 4px; flex-shrink: 0; width: 60px; text-align: center;

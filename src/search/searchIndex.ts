@@ -42,28 +42,82 @@ export function buildSearchIndex(design: Design): SearchResult[] {
   return results;
 }
 
-// Breadcrumb entries are an instantiation path, so jumping to a search result
-// requires finding *some* path of instances from the top cell down to the
-// cell that contains it. BFS over the cell-instantiation graph gives the
-// shortest such path (a cell may be instantiated more than once; any path works).
-export function findPath(design: Design, targetCell: string): BreadcrumbEntry[] | null {
-  const root: BreadcrumbEntry = { label: design.topCell, cellName: design.topCell };
-  if (targetCell === design.topCell) return [root];
+// A cell can be instantiated many times, so an item inside it really exists
+// once per instantiation path. Counts how many elaborated copies of each cell
+// exist (= number of distinct top→cell instantiation paths) in one topo pass,
+// clamped so deeply-reused cells don't overflow. Used for the "+N more" note.
+const COUNT_CLAMP = 99999;
 
-  const visited = new Set<string>([design.topCell]);
-  const queue: BreadcrumbEntry[][] = [[root]];
+export function buildOccurrenceCounts(design: Design): Map<string, number> {
+  const count = new Map<string, number>();
+  count.set(design.topCell, 1);
 
-  while (queue.length > 0) {
-    const path = queue.shift()!;
-    const cell = design.cells.get(path[path.length - 1].cellName);
+  // Topological order (a cell before every cell it instantiates), via DFS
+  // post-order on the instantiation DAG. Netlists are acyclic.
+  const order: string[] = [];
+  const seen = new Set<string>();
+  const visit = (name: string) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    const cell = design.cells.get(name);
+    if (cell) for (const inst of cell.instances) if (design.cells.has(inst.master)) visit(inst.master);
+    order.push(name);
+  };
+  visit(design.topCell);
+  order.reverse();
+
+  for (const name of order) {
+    const c = count.get(name) ?? 0;
+    if (c === 0) continue;
+    const cell = design.cells.get(name);
     if (!cell) continue;
     for (const inst of cell.instances) {
-      if (!design.cells.has(inst.master) || visited.has(inst.master)) continue;
-      const nextPath = [...path, { label: inst.id, cellName: inst.master }];
-      if (inst.master === targetCell) return nextPath;
-      visited.add(inst.master);
-      queue.push(nextPath);
+      if (!design.cells.has(inst.master)) continue;
+      count.set(inst.master, Math.min((count.get(inst.master) ?? 0) + c, COUNT_CLAMP));
     }
   }
-  return null;
+  return count;
+}
+
+// Enumerates up to `cap` instantiation paths (breadcrumbs) from the top cell to
+// a view of `targetCell`, plus the true total occurrence count. Branches that
+// can't reach the target are pruned, so this stays cheap even in big designs.
+export function pathsToCell(
+  design: Design,
+  targetCell: string,
+  cap: number,
+  counts: Map<string, number>,
+): { paths: BreadcrumbEntry[][]; total: number } {
+  const reach = new Map<string, boolean>();
+  const canReach = (x: string): boolean => {
+    if (x === targetCell) return true;
+    const memo = reach.get(x);
+    if (memo !== undefined) return memo;
+    reach.set(x, false); // cycle guard (DAG, but be safe)
+    const cell = design.cells.get(x);
+    let r = false;
+    if (cell) {
+      for (const inst of cell.instances) {
+        if (design.cells.has(inst.master) && canReach(inst.master)) { r = true; break; }
+      }
+    }
+    reach.set(x, r);
+    return r;
+  };
+
+  const paths: BreadcrumbEntry[][] = [];
+  const dfs = (path: BreadcrumbEntry[], cellName: string) => {
+    if (paths.length >= cap) return;
+    if (cellName === targetCell) { paths.push(path); return; }
+    const cell = design.cells.get(cellName);
+    if (!cell) return;
+    for (const inst of cell.instances) {
+      if (paths.length >= cap) break;
+      if (!design.cells.has(inst.master) || !canReach(inst.master)) continue;
+      dfs([...path, { label: inst.id, cellName: inst.master }], inst.master);
+    }
+  };
+  dfs([{ label: design.topCell, cellName: design.topCell }], design.topCell);
+
+  return { paths, total: counts.get(targetCell) ?? paths.length };
 }
