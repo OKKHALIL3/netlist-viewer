@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useViewerStore, type SelectionType } from '../store/viewerStore';
-import { buildSearchIndex, findPath, type SearchResult } from '../search/searchIndex';
+import { useViewerStore, type SelectionType, type BreadcrumbEntry } from '../store/viewerStore';
+import { buildSearchIndex, buildOccurrenceCounts, pathsToCell, type SearchResult } from '../search/searchIndex';
 import type { Design } from '../parser/types';
 
 const KIND_LABELS: Record<SearchResult['kind'], string> = {
@@ -11,7 +11,28 @@ const KIND_LABELS: Record<SearchResult['kind'], string> = {
   pin: 'Pin',
 };
 
-const MAX_RESULTS = 40;
+const MAX_RESULTS = 40; // total clickable occurrence rows
+const MAX_OCC = 8; // occurrences shown per matched item before "+N more"
+
+// A clickable occurrence (a match reached via one instantiation path), or a
+// muted "+N more" note tail for items reused more than MAX_OCC times.
+type OccRow = { type: 'occ'; result: SearchResult; path: BreadcrumbEntry[]; loc: string; clickIdx: number };
+type MoreRow = { type: 'more'; key: string; count: number };
+type Row = OccRow | MoreRow;
+
+// Instantiation path as a short "XI9 / XI26" trail (instance labels below the
+// top), so the same item reached via different parents is distinguishable. Keeps
+// the first and last instance when long (the top-level instance is usually what
+// differs between occurrences); the full path is in the row's title.
+function locLabel(path: BreadcrumbEntry[]): string {
+  if (path.length <= 1) return path[0]?.label ?? '';
+  const labels = path.slice(1).map(p => p.label);
+  return (labels.length > 3 ? [labels[0], '…', labels[labels.length - 1]] : labels).join(' / ');
+}
+
+function fullLoc(path: BreadcrumbEntry[]): string {
+  return path.map(p => p.label).join(' / ');
+}
 
 // Mounted only while open (see SearchPalette below), so its local state
 // starts fresh every time the palette is opened — no reset effect needed.
@@ -23,17 +44,40 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
   const activeRef = useRef<HTMLDivElement>(null);
 
   const index = useMemo(() => buildSearchIndex(design), [design]);
+  const occCounts = useMemo(() => buildOccurrenceCounts(design), [design]);
 
-  const results = useMemo(() => {
+  // Each matched item is expanded into one row per instantiation path (so an
+  // item inside a reused cell is found once per occurrence), capped at MAX_OCC
+  // with a "+N more" tail. `clickable` is the keyboard-navigable subset.
+  const { rows, clickable } = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return index
-      // Pins only match on their own name — their detail carries the
-      // connected net name, and matching that too would flood results with
-      // every pin tied to a common net (e.g. "vdd!") whenever that net is searched.
-      .filter(r => r.id.toLowerCase().includes(q) || (r.kind !== 'pin' && r.detail.toLowerCase().includes(q)))
-      .slice(0, MAX_RESULTS);
-  }, [index, query]);
+    const rows: Row[] = [];
+    const clickable: OccRow[] = [];
+    if (!q) return { rows, clickable };
+
+    // Pins only match on their own name — their detail carries the connected
+    // net name, and matching that too would flood results with every pin tied
+    // to a common net (e.g. "vdd!") whenever that net is searched.
+    const matches = index.filter(
+      r => r.id.toLowerCase().includes(q) || (r.kind !== 'pin' && r.detail.toLowerCase().includes(q)),
+    );
+
+    for (const r of matches) {
+      if (clickable.length >= MAX_RESULTS) break;
+      const targetCell = r.kind === 'cell' ? r.id : r.cellName;
+      const { paths, total } = pathsToCell(design, targetCell, MAX_OCC, occCounts);
+      for (const path of paths) {
+        if (clickable.length >= MAX_RESULTS) break;
+        const occ: OccRow = { type: 'occ', result: r, path, loc: locLabel(path), clickIdx: clickable.length };
+        rows.push(occ);
+        clickable.push(occ);
+      }
+      if (total > paths.length && clickable.length < MAX_RESULTS) {
+        rows.push({ type: 'more', key: `more:${r.kind}:${r.cellName}:${r.id}`, count: total - paths.length });
+      }
+    }
+    return { rows, clickable };
+  }, [index, occCounts, design, query]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -49,10 +93,8 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     setActiveIdx(0);
   };
 
-  const select = (result: SearchResult) => {
-    const targetCell = result.kind === 'cell' ? result.id : result.cellName;
-    const path = findPath(design, targetCell);
-    if (!path) return;
+  const select = (occ: OccRow) => {
+    const { result, path } = occ;
     // A pin result jumps to the specific instance/primitive that owns it
     // (so two matches of the same pin name, e.g. on X9 and X10, land on
     // distinct targets) and focuses its net so the matched pin row is
@@ -72,14 +114,14 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIdx(i => Math.min(i + 1, results.length - 1));
+      setActiveIdx(i => Math.min(i + 1, clickable.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setActiveIdx(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const r = results[activeIdx];
-      if (r) select(r);
+      const occ = clickable[activeIdx];
+      if (occ) select(occ);
     } else if (e.key === 'Escape') {
       onClose();
     }
@@ -100,23 +142,31 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
           {query.trim() === '' && (
             <div className="search-hint">Type to search · ↑↓ to navigate · Enter to jump · Esc to close</div>
           )}
-          {query.trim() !== '' && results.length === 0 && (
+          {query.trim() !== '' && clickable.length === 0 && (
             <div className="search-hint">No matches</div>
           )}
-          {results.map((r, i) => (
-            <div
-              key={`${r.kind}:${r.cellName}:${r.id}:${i}`}
-              ref={i === activeIdx ? activeRef : undefined}
-              className={`search-result${i === activeIdx ? ' active' : ''}`}
-              onMouseEnter={() => setActiveIdx(i)}
-              onClick={() => select(r)}
-            >
-              <span className={`search-kind kind-${r.kind}`}>{KIND_LABELS[r.kind]}</span>
-              <span className="search-id">{r.id}</span>
-              <span className="search-detail">{r.detail}</span>
-              <span className="search-loc">in {r.cellName}</span>
-            </div>
-          ))}
+          {rows.map(row => {
+            if (row.type === 'more') {
+              return (
+                <div key={row.key} className="search-more">+{row.count} more occurrence{row.count === 1 ? '' : 's'}</div>
+              );
+            }
+            const { result: r, clickIdx, loc } = row;
+            return (
+              <div
+                key={`${r.kind}:${r.id}:${clickIdx}`}
+                ref={clickIdx === activeIdx ? activeRef : undefined}
+                className={`search-result${clickIdx === activeIdx ? ' active' : ''}`}
+                onMouseEnter={() => setActiveIdx(clickIdx)}
+                onClick={() => select(row)}
+              >
+                <span className={`search-kind kind-${r.kind}`}>{KIND_LABELS[r.kind]}</span>
+                <span className="search-id">{r.id}</span>
+                <span className="search-detail">{r.detail}</span>
+                <span className="search-loc" title={fullLoc(row.path)}>in {loc}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
