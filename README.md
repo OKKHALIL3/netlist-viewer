@@ -35,6 +35,26 @@ npm run preview    # serve the build locally
 
 ---
 
+## Programmatic API — `subcircuit_visualize`
+
+For integrating the viewer into another product: a route that takes a
+subcircuit's JSON (any depth) and returns the laid-out schematic scene the
+viewer draws.
+
+```bash
+npm run serve:viz  # → http://localhost:8787
+curl -X POST localhost:8787/subcircuit_visualize -H 'Content-Type: application/json' --data @design.json
+```
+
+The input is the same JSON the parser emits (so it captures everything we
+extract from a CDL); the output is React-Flow-ready `nodes` + `edges` with
+positions. Both schemas are documented in
+[`docs/subcircuit-visualize.md`](docs/subcircuit-visualize.md). The headless
+core (`visualizeSubcircuit()` in `src/viz/buildScene.ts`) can also be imported
+directly instead of run as a server.
+
+---
+
 ## CDL dialect support
 
 All four major CDL dialects are handled:

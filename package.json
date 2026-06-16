@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "test": "node test-adapter.mjs",
     "preview": "vite preview",
+    "serve:viz": "tsx server/subcircuit_visualize.ts",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
@@ -30,6 +31,7 @@
     "gh-pages": "^6.3.0",
     "globals": "^17.6.0",
     "pyodide": "^0.29.4",
+    "tsx": "^4.20.6",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12"
