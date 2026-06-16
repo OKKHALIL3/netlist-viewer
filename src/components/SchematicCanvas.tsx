@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -79,32 +79,20 @@ function computeHighlight(cell: Cell, selection: SelectionType | null): { nets: 
   return { nets, nodes };
 }
 
-function buildGraph(
-  cell: Cell,
-  selection: SelectionType | null,
-  mode: string,
-  hideSupply: boolean,
-  focusNet: string | null,
-  design: Design | null,
-  positions: Map<string, NodePosition>,
-): { nodes: Node[]; edges: Edge[] } {
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-  const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
+// Per-cell structural maps that don't depend on the current selection:
+//   pinRepMap     — every (instance pin) → the repPin of its collapsed row, so
+//                   net endpoints resolve to a handle that actually exists.
+//   instancePorts — each instance's master ports, for picking a net's source.
+// Built from the same layout the node renders so the handle ids always match.
+// Memoized by the caller so selecting/clicking (which doesn't change the cell)
+// doesn't re-run a per-instance layout for every block on the canvas.
+interface PinMaps {
+  pinRepMap: Map<string, Map<string, string>>;
+  instancePorts: Map<string, Port[]>;
+}
 
-  // The net whose connected pin(s) should be highlighted in instance pin
-  // tables — lets a user trace a wire to its exact pin even when its drawn
-  // path loops around the block and passes near other pins.
-  const activeNet = selection?.type === 'net' ? selection.name : focusNet;
-
+function buildPinMaps(cell: Cell, design: Design | null): PinMaps {
   const netKindOf = (net: string) => cell.nets.find(n => n.name === net)?.kind ?? 'signal';
-
-  // The sectioned pin layout (see pinGroups/InstanceNode) merges runs of
-  // bus-bit pins into one row with a single handle anchored at the row's
-  // first pin (repPin). Map every bus-bit pin to its row's repPin so net
-  // endpoints resolve to a handle that actually exists on the node — using
-  // the same layout the node renders so the ids always match. Also remember
-  // each instance's master ports for picking a net's source endpoint.
   const pinRepMap = new Map<string, Map<string, string>>();
   const instancePorts = new Map<string, Port[]>();
   for (const inst of cell.instances) {
@@ -118,6 +106,29 @@ function buildGraph(
     }
     pinRepMap.set(inst.id, repMap);
   }
+  return { pinRepMap, instancePorts };
+}
+
+function buildGraph(
+  cell: Cell,
+  selection: SelectionType | null,
+  mode: string,
+  hideSupply: boolean,
+  focusNet: string | null,
+  design: Design | null,
+  positions: Map<string, NodePosition>,
+  pinMaps: PinMaps,
+): { nodes: Node[]; edges: Edge[] } {
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+  const { nets: highlightedNets, nodes: highlightedNodes } = computeHighlight(cell, selection);
+
+  // The net whose connected pin(s) should be highlighted in instance pin
+  // tables — lets a user trace a wire to its exact pin even when its drawn
+  // path loops around the block and passes near other pins.
+  const activeNet = selection?.type === 'net' ? selection.name : focusNet;
+
+  const { pinRepMap, instancePorts } = pinMaps;
 
   for (const inst of cell.instances) {
     const pos = positions.get(inst.id);
@@ -297,6 +308,11 @@ function Canvas() {
 
   const cell = design?.cells.get(currentCell);
 
+  // Selection-independent per-cell pin/handle maps. Rebuilt only when the cell
+  // (or design) changes — not on every selection click, which on big cells
+  // would otherwise re-run a per-instance layout for all ~500 blocks each time.
+  const pinMaps = useMemo(() => (cell ? buildPinMaps(cell, design) : null), [cell, design]);
+
   useEffect(() => {
     if (!cell) return;
     setLaying(true);
@@ -304,11 +320,11 @@ function Canvas() {
   }, [currentCell, design, nodeLayout]);
 
   useEffect(() => {
-    if (!cell || positions.size === 0) return;
-    const { nodes: n, edges: e } = buildGraph(cell, selection, mode, hideSupply, focusNet, design, positions);
+    if (!cell || !pinMaps || positions.size === 0) return;
+    const { nodes: n, edges: e } = buildGraph(cell, selection, mode, hideSupply, focusNet, design, positions, pinMaps);
     setNodes(n);
     setEdges(e);
-  }, [cell, positions, selection, mode, hideSupply, focusNet, design]);
+  }, [cell, pinMaps, positions, selection, mode, hideSupply, focusNet, design]);
 
   // Pan/zoom the viewport to the current selection whenever the cell changed
   // (descend/ascend/search jumped here) or a search jump landed on a result

@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { Primitive } from '../../parser/types';
@@ -25,10 +25,12 @@ function kindLabel(prim: Primitive): string {
   return prim.kind === 'R' ? 'RES' : prim.kind === 'C' ? 'CAP' : prim.kind;
 }
 
-export function PrimitiveNode({ data }: NodeProps) {
+function PrimitiveNodeImpl({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
   const { primitive, isSelected, isConnected } = d;
-  const { setSelection } = useViewerStore();
+  // Select just the action, not the whole store — see InstanceNode for why this
+  // matters on big cells.
+  const setSelection = useViewerStore(s => s.setSelection);
 
   const color = KIND_COLOR[primitive.kind] ?? 'var(--txt-dim)';
   const sym = deviceSymbol(primitive);
@@ -106,3 +108,12 @@ export function PrimitiveNode({ data }: NodeProps) {
     </div>
   );
 }
+
+// Only re-render when this device's own inputs change (see InstanceNode).
+function sameData(a: NodeProps, b: NodeProps): boolean {
+  const x = a.data as PrimitiveNodeData;
+  const y = b.data as PrimitiveNodeData;
+  return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected;
+}
+
+export const PrimitiveNode = memo(PrimitiveNodeImpl, sameData);

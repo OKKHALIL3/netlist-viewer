@@ -2,12 +2,13 @@ import { useViewerStore } from './store/viewerStore';
 import { TopBar } from './components/TopBar';
 import { HierarchyPanel } from './components/HierarchyPanel';
 import { SchematicCanvas } from './components/SchematicCanvas';
+import { CanvasErrorBoundary } from './components/CanvasErrorBoundary';
 import { InspectorPanel } from './components/InspectorPanel';
 import { DropZone } from './components/DropZone';
 import { SearchPalette } from './components/SearchPalette';
 
 export default function App() {
-  const { design, warnings } = useViewerStore();
+  const { design, warnings, currentCell } = useViewerStore();
 
   return (
     <div className="app">
@@ -18,7 +19,9 @@ export default function App() {
         <div className="shell">
           <HierarchyPanel />
           <div className="canvas-col">
-            <SchematicCanvas />
+            <CanvasErrorBoundary resetKey={currentCell}>
+              <SchematicCanvas />
+            </CanvasErrorBoundary>
           </div>
           <InspectorPanel />
         </div>

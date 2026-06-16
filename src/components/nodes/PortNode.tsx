@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { Port } from '../../parser/types';
@@ -8,10 +9,16 @@ export interface PortNodeData extends Record<string, unknown> {
   isHighlighted: boolean;
 }
 
-export function PortNode({ data }: NodeProps) {
+function PortNodeImpl({ data }: NodeProps) {
   const d = data as PortNodeData;
   const { port, isFocused, isHighlighted } = d;
-  const { mode, setSelection, setFocusNet, design, currentCell } = useViewerStore();
+  // Per-slice selectors (see InstanceNode) so a selection click doesn't
+  // re-render every port node.
+  const mode = useViewerStore(s => s.mode);
+  const setSelection = useViewerStore(s => s.setSelection);
+  const setFocusNet = useViewerStore(s => s.setFocusNet);
+  const design = useViewerStore(s => s.design);
+  const currentCell = useViewerStore(s => s.currentCell);
 
   const active = isFocused || isHighlighted;
   // Cell-boundary ports use a dedicated color so they read as "cell I/O"; when
@@ -51,3 +58,12 @@ export function PortNode({ data }: NodeProps) {
     </div>
   );
 }
+
+// Only re-render when this port's own inputs change (see InstanceNode).
+function sameData(a: NodeProps, b: NodeProps): boolean {
+  const x = a.data as PortNodeData;
+  const y = b.data as PortNodeData;
+  return x.port === y.port && x.isFocused === y.isFocused && x.isHighlighted === y.isHighlighted;
+}
+
+export const PortNode = memo(PortNodeImpl, sameData);

@@ -1,4 +1,4 @@
-import { Fragment } from 'react';
+import { Fragment, memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import { computeInstanceLayout, computeRadialLayout, type PlacedRow, type PinGroup } from '../../layout/pinGroups';
@@ -75,10 +75,20 @@ function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: st
   );
 }
 
-export function InstanceNode({ data }: NodeProps) {
+function InstanceNodeImpl({ data }: NodeProps) {
   const d = data as InstanceNodeData;
   const { instance, masterPorts, isSelected, isConnected, activeNet } = d;
-  const { descend, setSelection, design, currentCell, nodeLayout } = useViewerStore();
+  // Subscribe to each slice individually rather than the whole store. Selecting
+  // an instance only changes `selection`, which none of these read — so a click
+  // no longer re-renders (and re-lays-out) every block on the canvas, just the
+  // one or two whose highlight state actually changed. On big cells (sample has
+  // ~500-block views) the whole-store subscription made every click re-render
+  // all blocks at once, which is what locked the tab up.
+  const descend = useViewerStore(s => s.descend);
+  const setSelection = useViewerStore(s => s.setSelection);
+  const design = useViewerStore(s => s.design);
+  const currentCell = useViewerStore(s => s.currentCell);
+  const nodeLayout = useViewerStore(s => s.nodeLayout);
 
   // Pins are grouped into IN / OUT / PWR / GND; supply/ground membership comes
   // from the net's kind, so we need a name → kind lookup.
@@ -213,3 +223,24 @@ export function InstanceNode({ data }: NodeProps) {
     </div>
   );
 }
+
+// React Flow rebuilds the whole `nodes` array (new data objects) on every
+// selection change, which would otherwise re-render every block. Skip the
+// re-render unless this block's own inputs changed — `instance`/`masterPorts`
+// keep a stable reference across rebuilds, so only the blocks whose
+// highlight/active-net state flipped actually re-render. nodeLayout/currentCell
+// come through the store hooks above and still trigger a re-render when they
+// change.
+function sameData(a: NodeProps, b: NodeProps): boolean {
+  const x = a.data as InstanceNodeData;
+  const y = b.data as InstanceNodeData;
+  return (
+    x.instance === y.instance &&
+    x.masterPorts === y.masterPorts &&
+    x.isSelected === y.isSelected &&
+    x.isConnected === y.isConnected &&
+    x.activeNet === y.activeNet
+  );
+}
+
+export const InstanceNode = memo(InstanceNodeImpl, sameData);
