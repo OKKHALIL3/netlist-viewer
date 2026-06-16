@@ -368,6 +368,20 @@ body {
   color: var(--prim-color, var(--m));
 }
 
+/* Real device symbol (transistor / resistor / capacitor). The SVG draws in
+   `currentColor`, so colour + selection glow are driven by the wrapper. */
+.prim-symbol {
+  position: relative;
+  color: var(--prim-color, var(--m));
+  transition: color 0.12s, filter 0.12s;
+}
+.prim-symbol .dev-svg { display: block; overflow: visible; }
+.prim-node.sym.sel .prim-symbol,
+.prim-node.sym.connected .prim-symbol {
+  color: var(--sel);
+  filter: drop-shadow(0 0 6px rgba(255, 210, 63, 0.45));
+}
+
 .prim-label {
   font-size: 9.5px; font-family: 'Space Mono', monospace;
   color: var(--txt-dim); margin-top: 4px; text-align: center;

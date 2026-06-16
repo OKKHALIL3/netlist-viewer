@@ -47,10 +47,13 @@ export async function layoutCell(
       const { width, height } = instanceSize(inst);
       return { id: inst.id, width, height };
     }),
+    // Devices now render as real schematic symbols: the transistor box is
+    // wider (gate left, bulk right), passives are narrow and tall. Reserve
+    // ~28px under each for the id/model caption.
     ...cell.primitives.map(prim => ({
       id: prim.id,
-      width: PRIM_SIZE,
-      height: PRIM_SIZE + 24,
+      width: prim.kind === 'M' ? 64 : 44,
+      height: 100,
     })),
     // Pin cell-boundary ports to a fixed edge of the layout — inputs (and
     // bidirectional/unknown-direction ports) to the left, outputs to the
