@@ -7,11 +7,18 @@ export interface PortNodeData extends Record<string, unknown> {
   port: Port;
   isFocused: boolean;
   isHighlighted: boolean;
+  // When this port is the head of a collapsed bus run, `label` is the
+  // "base<hi:lo>" display name and `members` lists every bundled port. A plain
+  // single port leaves these undefined and renders by its own name.
+  label?: string;
+  isBus?: boolean;
+  members?: string[];
 }
 
 function PortNodeImpl({ data }: NodeProps) {
   const d = data as PortNodeData;
-  const { port, isFocused, isHighlighted } = d;
+  const { port, isFocused, isHighlighted, label, isBus, members } = d;
+  const displayName = label ?? port.name;
   // Per-slice selectors (see InstanceNode) so a selection click doesn't
   // re-render every port node.
   const mode = useViewerStore(s => s.mode);
@@ -41,15 +48,17 @@ function PortNodeImpl({ data }: NodeProps) {
 
   return (
     <div
-      className={`port-node${isOutput ? ' out' : ' in'}${active ? ' connected' : ''}`}
+      className={`port-node${isOutput ? ' out' : ' in'}${active ? ' connected' : ''}${isBus ? ' bus' : ''}`}
       onClick={handleClick}
-      title={`Cell port: ${port.name}${port.dir ? ` (${port.dir})` : ''}`}
+      title={isBus
+        ? `Cell port bus: ${displayName} — ${members?.length ?? 0} pins (${members?.join(', ')})`
+        : `Cell port: ${port.name}${port.dir ? ` (${port.dir})` : ''}`}
     >
-      <span className="port-label">{port.name}</span>
+      <span className="port-label">{displayName}</span>
       {/* Handles live inside the flag so the wire attaches to its tip (the
           design-facing point), not the node's outer bounding edge. */}
       <span
-        className="port-flag"
+        className={`port-flag${isBus ? ' bus' : ''}`}
         style={{ background: color, boxShadow: active ? `0 0 8px ${color}` : undefined }}
       >
         <Handle type="target" position={handlePos} id="port-tgt" style={{ opacity: 0 }} />
@@ -63,7 +72,8 @@ function PortNodeImpl({ data }: NodeProps) {
 function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PortNodeData;
   const y = b.data as PortNodeData;
-  return x.port === y.port && x.isFocused === y.isFocused && x.isHighlighted === y.isHighlighted;
+  return x.port === y.port && x.isFocused === y.isFocused && x.isHighlighted === y.isHighlighted &&
+    x.label === y.label && x.isBus === y.isBus;
 }
 
 export const PortNode = memo(PortNodeImpl, sameData);

@@ -4,6 +4,7 @@ import type { ElkNode, ElkExtendedEdge } from 'elkjs';
 import type { Cell, Design } from '../parser/types';
 import type { NodeLayout } from '../store/viewerStore';
 import { computeInstanceLayout, computeRadialLayout } from './pinGroups';
+import { groupPorts } from './busGrouping';
 
 export interface NodePosition {
   x: number;
@@ -42,6 +43,14 @@ export async function layoutCell(
       : { width: NODE_WIDTH, height: computeInstanceLayout(inst.conn, ports, netKindOf).height };
   };
 
+  // Collapse contiguous bus-bit ports (addr<0>..addr<30>) into one layout node
+  // each, so a wide port bus takes a single row instead of a tall stack. Every
+  // bit maps to its group's representative port id — the handle anchor the
+  // edges below and the scene builder both use.
+  const portGroups = groupPorts(cell.ports);
+  const portRep = new Map<string, string>();
+  for (const g of portGroups) for (const name of g.names) portRep.set(name, g.repName);
+
   const children: ElkNode[] = [
     ...cell.instances.map(inst => {
       const { width, height } = instanceSize(inst);
@@ -59,12 +68,12 @@ export async function layoutCell(
     // bidirectional/unknown-direction ports) to the left, outputs to the
     // right — so I/O lands in the same place across every cell instead of
     // wherever connectivity happens to push it.
-    ...cell.ports.map(port => ({
-      id: `__port__:${port.name}`,
+    ...portGroups.map(g => ({
+      id: `__port__:${g.repName}`,
       width: PORT_WIDTH,
       height: PORT_HEIGHT,
       layoutOptions: {
-        'elk.layered.layering.layerConstraint': port.dir === 'O' ? 'LAST_SEPARATE' : 'FIRST_SEPARATE',
+        'elk.layered.layering.layerConstraint': g.dir === 'O' ? 'LAST_SEPARATE' : 'FIRST_SEPARATE',
       },
     })),
   ];
@@ -79,7 +88,7 @@ export async function layoutCell(
   // connection is the cell's I/O boundary is still laid out next to a wire,
   // instead of floating with no edges at all.
   for (const net of cell.nets) {
-    const eps = net.endpoints.map(([id, pin]) => (id === '__port__' ? `__port__:${pin}` : id));
+    const eps = net.endpoints.map(([id, pin]) => (id === '__port__' ? `__port__:${portRep.get(pin) ?? pin}` : id));
     if (eps.length < 2) continue;
     for (let i = 0; i < eps.length - 1; i++) {
       const src = eps[i];
