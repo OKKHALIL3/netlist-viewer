@@ -30,7 +30,10 @@ const GROUP_COLOR: Record<PinGroup, string> = {
 function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string) {
   const isOutput = p.group === 'output';
   const isActive = !!activeNet && p.row.nets.includes(activeNet);
-  const position = p.side === 'left' ? Position.Left : Position.Right;
+  const position = p.side === 'left' ? Position.Left
+    : p.side === 'right' ? Position.Right
+    : p.side === 'top' ? Position.Top
+    : Position.Bottom;
   const posStyle = { top: p.y, left: p.x, transform: 'translate(-50%, -50%)' };
   const visibleStyle = {
     ...posStyle,
@@ -71,6 +74,22 @@ function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: st
       title={row.isBus ? row.pins.join(', ') : `${row.pinLabel} → ${row.netLabel}`}
     >
       <span className="pin-name">{row.pinLabel}</span>
+    </div>
+  );
+}
+
+// A supply/ground pin on the top/bottom band — laid out horizontally, so the
+// label is absolutely placed at its handle's x (computed in computeRadialLayout).
+function EdgePinTick({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: string | null; activeColor: string }) {
+  const { row } = p;
+  const isActive = !!activeNet && row.nets.includes(activeNet);
+  return (
+    <div
+      className={`pin-tick${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
+      style={{ left: p.x, color: isActive ? activeColor : undefined }}
+      title={row.isBus ? row.pins.join(', ') : `${row.pinLabel} → ${row.netLabel}`}
+    >
+      {row.pinLabel}
     </div>
   );
 }
@@ -117,10 +136,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
 
-  // BETA: a wide instance block with pins on both side edges. Pins are ordered
-  // by group and split evenly between the left and right columns, so big
-  // mostly-input blocks are about half as tall. Rows show the pin NAME only;
-  // the net mapping is in the Inspector.
+  // BETA: a schematic-symbol block — inputs on the left edge, outputs on the
+  // right, supply along the top, ground along the bottom. Rows show the pin
+  // NAME only; the net mapping is in the Inspector.
   if (nodeLayout === 'beta') {
     const layout = computeRadialLayout(instance.conn, masterPorts, netKindOf);
     return (
@@ -138,7 +156,13 @@ function InstanceNodeImpl({ data }: NodeProps) {
           <span className="inst-master" title={instance.master}>{instance.master}</span>
         </div>
 
-        <div className="inst-mid">
+        {layout.top.length > 0 && (
+          <div className="inst-band top" style={{ height: layout.topHeight }}>
+            {layout.top.map(p => <EdgePinTick key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
+          </div>
+        )}
+
+        <div className="inst-mid" style={{ height: layout.midHeight }}>
           <div className="inst-col in">
             {layout.left.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
           </div>
@@ -146,6 +170,12 @@ function InstanceNodeImpl({ data }: NodeProps) {
             {layout.right.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
           </div>
         </div>
+
+        {layout.bottom.length > 0 && (
+          <div className="inst-band bottom" style={{ height: layout.bottomHeight }}>
+            {layout.bottom.map(p => <EdgePinTick key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
+          </div>
+        )}
       </div>
     );
   }
