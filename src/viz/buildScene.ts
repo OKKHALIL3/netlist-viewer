@@ -10,7 +10,7 @@
 // docs/subcircuit-visualize.md for the palette a non-browser consumer resolves.
 
 import { layoutCell, type NodePosition } from '../layout/elk';
-import { clusterBusRibbons } from '../layout/busGrouping';
+import { clusterBusRibbons, groupPorts, type PortGroup } from '../layout/busGrouping';
 import { computeInstanceLayout, pinDirection } from '../layout/pinGroups';
 import type { Node, Edge } from '@xyflow/react';
 import type { InstanceNodeData } from '../components/nodes/InstanceNode';
@@ -81,6 +81,11 @@ export function computeHighlight(cell: Cell, selection: SelectionType | null): {
 export interface PinMaps {
   pinRepMap: Map<string, Map<string, string>>;
   instancePorts: Map<string, Port[]>;
+  // Cell-boundary port bus collapsing: every port name → its bus group's
+  // representative name, and that rep → the group (label, members, dir). A
+  // 31-bit port bus thus draws as one flag, mirroring the pin/wire bundling.
+  portRep: Map<string, string>;
+  portGroupByRep: Map<string, PortGroup>;
 }
 
 export function buildPinMaps(cell: Cell, design: Design | null): PinMaps {
@@ -98,7 +103,15 @@ export function buildPinMaps(cell: Cell, design: Design | null): PinMaps {
     }
     pinRepMap.set(inst.id, repMap);
   }
-  return { pinRepMap, instancePorts };
+
+  const portRep = new Map<string, string>();
+  const portGroupByRep = new Map<string, PortGroup>();
+  for (const g of groupPorts(cell.ports)) {
+    portGroupByRep.set(g.repName, g);
+    for (const name of g.names) portRep.set(name, g.repName);
+  }
+
+  return { pinRepMap, instancePorts, portRep, portGroupByRep };
 }
 
 export function buildGraph(
@@ -120,7 +133,7 @@ export function buildGraph(
   // path loops around the block and passes near other pins.
   const activeNet = selection?.type === 'net' ? selection.name : focusNet;
 
-  const { pinRepMap, instancePorts } = pinMaps;
+  const { pinRepMap, instancePorts, portRep, portGroupByRep } = pinMaps;
 
   for (const inst of cell.instances) {
     const pos = positions.get(inst.id);
@@ -185,22 +198,26 @@ export function buildGraph(
 
       const eps = net.endpoints.map(([id, pin]) =>
         id === '__port__'
-          ? { nodeId: portNodeId(pin), handle: 'port', portName: pin }
+          ? { nodeId: portNodeId(portRep.get(pin) ?? pin), handle: 'port', portName: pin }
           : { nodeId: id, handle: pinRepMap.get(id)?.get(pin) ?? pin, portName: null }
       );
 
-      // Render a node for each cell-boundary port this net touches.
+      // Render one node per cell-boundary port bus this net touches. Bus bits
+      // collapse to their group's representative node (and a single "<hi:lo>"
+      // flag), so the boundary column doesn't tower with one flag per bit.
       for (const ep of eps) {
         if (!ep.portName || addedPorts.has(ep.nodeId)) continue;
         const pos = positions.get(ep.nodeId);
-        const port = cell.ports.find(p => p.name === ep.portName);
-        if (!pos || !port) continue;
+        const rep = portRep.get(ep.portName) ?? ep.portName;
+        const group = portGroupByRep.get(rep);
+        const port = cell.ports.find(p => p.name === rep);
+        if (!pos || !group || !port) continue;
         addedPorts.add(ep.nodeId);
         nodes.push({
           id: ep.nodeId,
           type: 'portNode',
           position: { x: pos.x, y: pos.y },
-          data: { port, isFocused, isHighlighted } as PortNodeData,
+          data: { port, label: group.label, isBus: group.isBus, members: group.names, isFocused, isHighlighted } as PortNodeData,
         });
       }
 

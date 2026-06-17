@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useViewerStore } from '../store/viewerStore';
 import { describeCell, getApiKey, getCachedDescription, setApiKey } from '../ai/describeCell';
+import { buildCellView } from '../layout/cellView';
 import type { Cell } from '../parser/types';
 
 const BULLET_RE = /^[-*•]\s+/;
@@ -95,60 +96,82 @@ function EmptyState() {
 
 function InstanceDetail() {
   const { selection, design, currentCell, descend, setSelection } = useViewerStore();
+  const cell = design?.cells.get(currentCell);
+  // The canvas collapses instance arrays into one block; the selection id can be
+  // an array label ("Xbit<1023:0>") that isn't a real instance, so resolve it
+  // through the same view the canvas renders.
+  const view = useMemo(() => (cell ? buildCellView(cell) : null), [cell]);
+
   if (selection?.type !== 'instance') return null;
 
-  const cell = design?.cells.get(currentCell);
-  const inst = cell?.instances.find(i => i.id === selection.id);
-  if (!inst) return null;
+  const di = view?.instancesById.get(selection.id);
+  if (!di) return null;
 
-  const masterCell = design?.cells.get(inst.master);
+  const isArray = di.isArray;
+  const masterCell = design?.cells.get(di.master);
   const childCount = masterCell
     ? masterCell.instances.length + masterCell.primitives.length
     : '—';
+  const lastMember = di.members[di.members.length - 1];
 
   return (
     <div>
       <div className="insp-header">
-        <span className="insp-tag inst">Instance</span>
-        <span className="insp-title">{inst.id}</span>
+        <span className="insp-tag inst">{isArray ? 'Array' : 'Instance'}</span>
+        <span className="insp-title">{di.id}</span>
       </div>
 
       <div className="kv-row">
         <span className="kv-key">Master cell</span>
         <span
           className={`kv-val${masterCell ? ' link' : ''}`}
-          onClick={masterCell ? () => descend(inst.id, inst.master) : undefined}
+          onClick={masterCell ? () => descend(di.id, di.master) : undefined}
         >
-          {inst.master}
+          {di.master}
         </span>
       </div>
       <div className="kv-row">
         <span className="kv-key">Parent</span>
         <span className="kv-val">{currentCell}</span>
       </div>
+      {isArray && (
+        <>
+          <div className="kv-row">
+            <span className="kv-key">Members</span>
+            <span className="kv-val">{di.arraySize}</span>
+          </div>
+          <div className="kv-row">
+            <span className="kv-key">Range</span>
+            <span className="kv-val">{di.members[0].id} … {lastMember.id}</span>
+          </div>
+        </>
+      )}
       <div className="kv-row">
         <span className="kv-key">Child count</span>
         <span className="kv-val">{childCount}</span>
       </div>
       <div className="kv-row">
         <span className="kv-key">Pins</span>
-        <span className="kv-val">{Object.keys(inst.conn).length}</span>
+        <span className="kv-val">{Object.keys(di.conn).length}</span>
       </div>
 
       {masterCell && <CellDescription key={masterCell.name} cell={masterCell} />}
 
-      <div className="insp-subhead">Pin → Net mapping</div>
-      {Object.entries(inst.conn).map(([pin, net]) => (
-        <div key={pin} className="conn-row">
-          <span className="conn-pin">{pin}</span>
-          <span
-            className="conn-net"
-            onClick={() => setSelection({ type: 'net', name: net })}
-          >
-            {net}
-          </span>
-        </div>
-      ))}
+      <div className="insp-subhead">Pin → Net mapping{isArray ? ' (shared / per-member bus)' : ''}</div>
+      {Object.entries(di.conn).map(([pin, net]) => {
+        const isRealNet = !!cell?.nets.some(n => n.name === net);
+        return (
+          <div key={pin} className="conn-row">
+            <span className="conn-pin">{pin}</span>
+            <span
+              className={isRealNet ? 'conn-net' : 'conn-net plain'}
+              onClick={isRealNet ? () => setSelection({ type: 'net', name: net }) : undefined}
+            >
+              {net}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -197,18 +220,24 @@ function NetDetail() {
 
 function PrimitiveDetail() {
   const { selection, design, currentCell } = useViewerStore();
+  const cell = design?.cells.get(currentCell);
+  // A collapsed device array's selection id is a label ("M0<4095:0>") that
+  // isn't a real primitive — resolve it (and member ids) through the view.
+  const view = useMemo(() => (cell ? buildCellView(cell) : null), [cell]);
+
   if (selection?.type !== 'primitive') return null;
 
-  const cell = design?.cells.get(currentCell);
-  const prim = cell?.primitives.find(p => p.id === selection.id);
+  const prim = view?.primitivesById.get(selection.id);
   if (!prim) return null;
 
+  const isArray = prim.isArray;
   const label = prim.kind === 'R' ? 'Resistor' : prim.kind === 'C' ? 'Capacitor' : 'MOSFET';
+  const lastMember = prim.members[prim.members.length - 1];
 
   return (
     <div>
       <div className="insp-header">
-        <span className="insp-tag prim">{label}</span>
+        <span className="insp-tag prim">{isArray ? `${label} array` : label}</span>
         <span className="insp-title">{prim.id}</span>
       </div>
 
@@ -220,8 +249,20 @@ function PrimitiveDetail() {
         <span className="kv-key">Kind</span>
         <span className="kv-val">{prim.kind}</span>
       </div>
+      {isArray && (
+        <>
+          <div className="kv-row">
+            <span className="kv-key">Devices</span>
+            <span className="kv-val">{prim.arraySize}</span>
+          </div>
+          <div className="kv-row">
+            <span className="kv-key">Range</span>
+            <span className="kv-val">{prim.members[0].id} … {lastMember.id}</span>
+          </div>
+        </>
+      )}
 
-      <div className="insp-subhead">Terminals</div>
+      <div className="insp-subhead">Terminals{isArray ? ' (shared / per-member bus)' : ''}</div>
       {prim.terms.map(([term, net]) => (
         <div key={term} className="conn-row">
           <span className="conn-pin">{term}</span>

@@ -121,10 +121,14 @@ def extract_pininfo_and_topcell(text: str):
                     dirs[name] = d
                 else:
                     dirs[p] = None
+            # A cell's PININFO is usually split across MANY "*.PININFO" lines
+            # (one per ~3 pins). Merge them — assigning (=) kept only the last
+            # line, so a 100-pin cell ended up with directions for ~5 pins and
+            # everything else fell back to the input/name heuristic.
             if current_cell:
-                pininfo_by_cell[current_cell] = dirs
+                pininfo_by_cell.setdefault(current_cell, {}).update(dirs)
             else:
-                pending_pininfo = dirs
+                pending_pininfo = {**(pending_pininfo or {}), **dirs}
             continue
 
         if line.startswith("*") or line.startswith("$"):
@@ -138,7 +142,7 @@ def extract_pininfo_and_topcell(text: str):
         if kw == ".SUBCKT":
             current_cell = tokens[1]
             if pending_pininfo is not None:
-                pininfo_by_cell[current_cell] = pending_pininfo
+                pininfo_by_cell.setdefault(current_cell, {}).update(pending_pininfo)
                 pending_pininfo = None
         elif kw == ".ENDS":
             current_cell = None

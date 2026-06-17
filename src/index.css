@@ -260,6 +260,32 @@ body {
 .inst-node.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
 .inst-node.connected { border-color: var(--sel); box-shadow: 0 0 0 1px rgba(255,210,63,0.4); }
 
+/* An instance ARRAY (a scalarized bus like Xbit<1023:0> folded into one block)
+   reads as a stack of cards behind each other — two offset "ghost cards" drawn
+   purely with box-shadow so the node DOM and its absolutely-positioned pin
+   handles are unchanged (no wire drift). The stack is kept in every state via
+   --array-stack so hover/selection glows compose with it rather than wiping it. */
+.inst-node.array {
+  --array-stack:
+    4px 4px 0 0 #1a212c, 4px 4px 0 1px #33425a,
+    8px 8px 0 0 #161c25, 8px 8px 0 1px #33425a;
+  box-shadow: var(--array-stack);
+}
+.inst-node.array:hover { box-shadow: var(--array-stack), 0 0 0 1px var(--accent), 0 8px 20px rgba(0,0,0,0.5); }
+.inst-node.array.sel { box-shadow: var(--array-stack), 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
+.inst-node.array.connected { box-shadow: var(--array-stack), 0 0 0 1px rgba(255,210,63,0.4); }
+
+/* "×N" count chip in the array block header (top-right corner). */
+.array-badge {
+  position: absolute;
+  top: 5px; right: 6px;
+  z-index: 4;
+  font-family: 'Space Mono', monospace; font-size: 9.5px; font-weight: 700;
+  color: var(--bg); background: var(--accent);
+  padding: 1px 5px; border-radius: 7px; line-height: 13px;
+  pointer-events: none;
+}
+
 /* Header and rows use FIXED heights that must match the HEADER_H (42) and
    PIN_ROW_H (20) constants in InstanceNode.tsx (handle positions) and
    layout/elk.ts (reserved node height). Pin handles are absolutely
@@ -343,20 +369,20 @@ body {
 .pin-row.bus::before { transform: translate(2px, 2px); }
 .pin-row.bus::after { transform: translate(4px, 4px); }
 
-/* ── Beta layout: a wide instance block, pins on both side edges ─────────────
-   Pins ordered by group and split evenly between the left and right columns.
-   Rows show the pin name only; width is set inline from computeRadialLayout so
-   the two columns never collide. */
+/* ── Beta layout: a compact schematic-symbol block, pins on all four edges ────
+   Inputs on the left edge, outputs on the right (each wrapping into sub-columns
+   when long), supply along the top, ground along the bottom. Every label is
+   absolutely placed from computeRadialLayout so it lines up with its handle. */
 .inst-node.beta-edges { min-width: 0; }
-.inst-node.beta-edges .inst-mid { display: flex; justify-content: space-between; align-items: flex-start; }
-.inst-node.beta-edges .inst-col {
-  display: flex; flex-direction: column;
-  max-width: 49%; min-width: 0;
+.inst-node.beta-edges .beta-pin {
+  position: absolute;
+  font-size: 10px; font-family: 'Space Mono', monospace; color: var(--txt);
+  line-height: 1; white-space: nowrap; pointer-events: none;
+  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
 }
-.inst-node.beta-edges .inst-col.in { align-items: flex-start; padding-left: 11px; }
-.inst-node.beta-edges .inst-col.out { align-items: flex-end; padding-right: 11px; }
-.inst-node.beta-edges .inst-col.out .pin-row.edge { text-align: right; }
-.inst-node.beta-edges .pin-row.edge .pin-name { max-width: 100%; }
+.inst-node.beta-edges .beta-pin.bus,
+.inst-node.beta-edges .beta-pin.active-net { font-weight: 700; }
+.inst-node.beta-edges .beta-pin.active-net { color: inherit; }
 
 /* ── Primitive node ────────────────────────────────────────── */
 .prim-node {
@@ -390,6 +416,12 @@ body {
   transition: color 0.12s, filter 0.12s;
 }
 .prim-symbol .dev-svg { display: block; overflow: visible; }
+/* Supply stub overlay (ground/VDD glyphs): drawn in footprint coordinates,
+   keeps its own net-kind colour, and never intercepts clicks. */
+.prim-symbol .dev-stubs {
+  position: absolute; left: 0; top: 0;
+  overflow: visible; pointer-events: none;
+}
 .prim-node.sym.sel .prim-symbol,
 .prim-node.sym.connected .prim-symbol {
   color: var(--sel);
@@ -404,6 +436,18 @@ body {
 }
 .prim-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prim-model { color: var(--txt-faint); }
+
+/* A DEVICE ARRAY (scalarized M/R/C bus like M0<4095:0> folded into one symbol):
+   offset "ghost" rectangles behind the symbol echo the stacked instance blocks,
+   and the shared ×N badge floats at the corner. */
+.prim-node.array .prim-symbol,
+.prim-node.array .prim-glyph {
+  box-shadow:
+    3px 3px 0 -1px #11161d, 3px 3px 0 0 #33425a,
+    6px 6px 0 -1px #11161d, 6px 6px 0 0 #33425a;
+  border-radius: 4px;
+}
+.prim-node.array .array-badge { top: -7px; right: -10px; }
 
 /* ── Port node (cell-boundary connection) ─────────────────────────
    A directional "flag" that points toward the design, with the wire exiting
@@ -426,12 +470,45 @@ body {
   /* points left (toward the design, for outputs) */
   clip-path: polygon(45% 0, 100% 0, 100% 100%, 45% 100%, 0 50%);
 }
+/* A bundled port bus (e.g. addr<30:0>) — taller flag with a stacked-shadow
+   trail so it reads as several pins collapsed into one, matching bus wires. */
+.port-flag.bus {
+  height: 22px;
+  box-shadow: 2px 2px 0 rgba(45, 212, 191, 0.35), 4px 4px 0 rgba(45, 212, 191, 0.18);
+}
+.port-node.bus .port-label { color: var(--txt-dim); font-weight: 700; }
+/* Supply/ground ports sit on the top/bottom rails and point into the design
+   (down for power at the top, up for ground at the bottom). */
+.port-node.pwr { flex-direction: column; }
+.port-node.gnd { flex-direction: column-reverse; }
+.port-node.pwr .port-flag {
+  /* points down (toward the design below) */
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
+}
+.port-node.gnd .port-flag {
+  /* points up (toward the design above) */
+  clip-path: polygon(50% 0, 100% 55%, 100% 100%, 0 100%, 0 55%);
+}
 .port-label {
   font-size: 9.5px; font-family: 'Space Mono', monospace;
   color: var(--txt-faint); text-align: center;
   max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .port-node.connected .port-label { color: var(--txt-dim); }
+
+/* A boundary port BUS (in<1023:0> folded from in<0>..in<1023>): the flag gets
+   stacked-card shadows to echo the array blocks, the bus "<hi:lo>" label is
+   given more room, and a "×N" bit-count chip trails it. */
+.port-node.array .port-flag {
+  box-shadow: 2px 2px 0 0 var(--port), 4px 4px 0 0 var(--port);
+  opacity: 0.95;
+}
+.port-node.array .port-label { max-width: 96px; color: var(--txt-dim); }
+.port-count {
+  font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700;
+  color: var(--bg); background: var(--port);
+  padding: 0 4px; border-radius: 6px; line-height: 12px; flex-shrink: 0;
+}
 
 /* ── Right inspector panel ─────────────────────────────────── */
 .panel-right {
@@ -485,6 +562,9 @@ body {
 .conn-pin { color: var(--txt); }
 .conn-net { color: var(--accent); cursor: pointer; }
 .conn-net:hover { text-decoration: underline; }
+/* A collapsed per-member bus label (e.g. "D<1023:0>") isn't a single net, so
+   it's shown as plain non-clickable text rather than a net link. */
+.conn-net.plain { color: var(--txt-faint); cursor: default; }
 
 .ai-desc-text {
   font-size: 12px; line-height: 1.6; color: var(--txt-dim);

@@ -186,7 +186,11 @@ from ports + instance `conn` + primitive `terms`.
   "style": { "width": 180 }     // instance blocks carry their measured width
 }
 ```
-Boundary ports become nodes with id `__port__:<portName>`.
+Boundary ports become nodes with id `__port__:<portName>`. Contiguous bus-bit
+ports (`addr<0>…addr<30>`) are bundled into **one** `portNode` anchored at the
+first bit; its `data` carries `label` (`"addr<30:0>"`), `isBus: true`, and
+`members` (every bundled port name) — the same space-saving collapse applied to
+pin rows and wires.
 
 ### Edge
 

@@ -2,12 +2,17 @@ import { Fragment, memo } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { Primitive } from '../../parser/types';
-import { deviceSymbol, mosPolarity } from './deviceSymbols';
+import { deviceSymbol, mosPolarity, supplyStub } from './deviceSymbols';
 
 export interface PrimitiveNodeData extends Record<string, unknown> {
   primitive: Primitive;
   isSelected: boolean;
   isConnected: boolean;
+  arraySize?: number;
+  // Terminals tied to a supply/ground net whose wire is currently hidden
+  // ("hide supply"). Each is capped with a ground/VDD stub glyph instead of
+  // left as a bare, floating-looking pin. Keyed by terminal name.
+  supplyStubs?: Record<string, 'power' | 'ground'>;
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -27,13 +32,14 @@ function kindLabel(prim: Primitive): string {
 
 function PrimitiveNodeImpl({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
-  const { primitive, isSelected, isConnected } = d;
+  const { primitive, isSelected, isConnected, arraySize, supplyStubs } = d;
   // Select just the action, not the whole store — see InstanceNode for why this
   // matters on big cells.
   const setSelection = useViewerStore(s => s.setSelection);
 
   const color = KIND_COLOR[primitive.kind] ?? 'var(--txt-dim)';
   const sym = deviceSymbol(primitive);
+  const isArray = (arraySize ?? 1) > 1;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -41,16 +47,21 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
   };
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
+  const arrayClass = isArray ? ' array' : '';
+  const arrayBadge = isArray ? (
+    <div className="array-badge" title={`Array - ${arraySize} devices`}>x{arraySize}</div>
+  ) : null;
 
   // Fallback: no symbol for this kind — keep the old labelled glyph box so
   // unusual devices still render and stay wired.
   if (!sym) {
     return (
       <div
-        className={`prim-node${stateClass}`}
+        className={`prim-node${stateClass}${arrayClass}`}
         onClick={handleClick}
         style={{ '--prim-color': color } as React.CSSProperties}
       >
+        {arrayBadge}
         {primitive.terms.map(([term], i) => (
           <Fragment key={term}>
             <Handle type="target" position={Position.Left} id={`${term}-tgt`}
@@ -68,20 +79,46 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
     );
   }
 
+  // Ground/VDD stub glyphs for any terminal whose supply wire is hidden, so a
+  // cap/transistor reads as terminated instead of having a floating pin.
+  const stubs = supplyStubs
+    ? primitive.terms.flatMap(([term]) => {
+        const kind = supplyStubs[term];
+        const slot = sym.slots[term];
+        return kind && slot ? [supplyStub(term, slot, kind)] : [];
+      })
+    : [];
+
   return (
     <div
-      className={`prim-node sym${stateClass}`}
+      className={`prim-node sym${stateClass}${arrayClass}`}
       onClick={handleClick}
       style={{ '--prim-color': color } as React.CSSProperties}
     >
+      {arrayBadge}
       <div className="prim-symbol" style={{ width: sym.width, height: sym.height }}>
-        {sym.svg}
+        {/* The bare glyph draws in its own coordinate box; offset it so the
+            reserved stub margins surround it (slots/handles are already in
+            footprint coordinates). */}
+        <div className="dev-core" style={{ position: 'absolute', left: sym.drawX, top: sym.drawY }}>
+          {sym.svg}
+        </div>
+
+        {/* Supply stubs: ground/VDD glyphs standing in for the wires hidden by
+            "hide supply", so terminals don't look unconnected. */}
+        {stubs.length > 0 && (
+          <svg className="dev-stubs" width={sym.width} height={sym.height}>{stubs}</svg>
+        )}
+
         {/* One source + one target handle per terminal, anchored exactly on the
             symbol's terminal tip. Either may be picked as a net's source, so
-            both exist at the same spot; the visible dot is the target. */}
+            both exist at the same spot; the visible dot is the target. A
+            stubbed terminal hides its dot — the ground/VDD glyph already shows
+            the termination, so a bare pin would just read as redundant. */}
         {primitive.terms.map(([term]) => {
           const slot = sym.slots[term];
           if (!slot) return null;
+          const stubbed = !!supplyStubs?.[term];
           const posStyle = { left: slot.x, top: slot.y, transform: 'translate(-50%, -50%)' };
           return (
             <Fragment key={term}>
@@ -89,7 +126,9 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
                 type="target"
                 position={slot.position}
                 id={`${term}-tgt`}
-                style={{ ...posStyle, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
+                style={stubbed
+                  ? { ...posStyle, width: 7, height: 7, opacity: 0, pointerEvents: 'none' }
+                  : { ...posStyle, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }}
               />
               <Handle
                 type="source"
@@ -113,7 +152,8 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
 function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PrimitiveNodeData;
   const y = b.data as PrimitiveNodeData;
-  return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected;
+  return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected &&
+    x.arraySize === y.arraySize && x.supplyStubs === y.supplyStubs;
 }
 
 export const PrimitiveNode = memo(PrimitiveNodeImpl, sameData);

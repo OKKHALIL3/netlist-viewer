@@ -116,22 +116,24 @@ export function computeInstanceLayout(
   return { sections, height: y + BODY_PAD };
 }
 
-// ── BETA layout: a wide instance block with pins on the left and right ───────
-// Keeps the classic look (header + pin rows + group-colored dots) but lays the
-// pins around BOTH side edges. Pins are ordered by group (inputs, then outputs,
-// then supply, then ground) and split evenly between the left and right columns
-// — so a block that's mostly inputs (the common case) ends up half as tall and
-// wide like a real instance symbol, instead of one long left-side tower. Rows
-// show the PIN NAME only (the net mapping lives in the Inspector).
+// ── BETA layout: a compact schematic-symbol block, pins on all four edges ────
+// SUPPLY pins along the TOP, GROUND along the BOTTOM, INPUTS (and bidirectional
+// pins) down the LEFT, OUTPUTS down the RIGHT — the textbook cell symbol, now
+// that PININFO directions parse in full (see cdl_adapter.py). A side with many
+// pins WRAPS into several sub-columns rather than growing into one tall tower,
+// so an input-heavy IO cell stays roughly square. Rows show the PIN NAME only
+// (the net mapping lives in the Inspector).
 
 const CHAR_W = 6.7; // ~width of one Space Mono char at the pin-row font size
-const LABEL_CAP = 18; // longer pin names ellipsize rather than widen the box
+const LABEL_CAP = 18; // longer pin names ellipsize rather than widen the column
 const COL_PAD = 20; // handle + inner padding per column
-const MID_GAP = 40; // clear gap between the two name columns (block-like center)
+const MID_GAP = 36; // clear gap between the left (input) and right (output) banks
+const H_SLOT_PAD = 14; // padding around each top/bottom (supply/ground) pin label
+const BAND_H = 24; // height of the top (supply) and bottom (ground) bands
+const MAX_COL_ROWS = 30; // wrap a side into another sub-column past this many rows
 const MIN_W = 190;
-const MAX_W = 440;
 
-export type Side = 'left' | 'right';
+export type Side = 'left' | 'right' | 'top' | 'bottom';
 
 export interface PlacedRow {
   row: PinRow;
@@ -143,16 +145,30 @@ export interface PlacedRow {
 }
 
 export interface RadialLayout {
-  /** Every placed pin, both sides — for emitting handles + repPin mapping. */
+  /** Every placed pin (all edges) — handles, labels, and repPin mapping. */
   rows: PlacedRow[];
-  left: PlacedRow[];
-  right: PlacedRow[];
   width: number;
   height: number;
 }
 
 const colWidth = (rows: PinRow[]) =>
   rows.length === 0 ? 0 : Math.min(Math.max(...rows.map(r => r.pinLabel.length)), LABEL_CAP) * CHAR_W + COL_PAD;
+const slotWidth = (row: PinRow) => Math.min(row.pinLabel.length, LABEL_CAP) * CHAR_W + H_SLOT_PAD;
+const bandWidth = (rows: PinRow[]) =>
+  rows.length === 0 ? 0 : rows.reduce((sum, r) => sum + slotWidth(r), 0) + COL_PAD;
+
+// Split one side's rows into balanced sub-columns (≤ MAX_COL_ROWS each), so a
+// 90-input bank becomes a few short columns instead of one tall tower.
+interface SideCols { chunks: PinRow[][]; colWidths: number[]; totalWidth: number; tall: number; }
+function sideColumns(rows: PinRow[]): SideCols {
+  if (rows.length === 0) return { chunks: [], colWidths: [], totalWidth: 0, tall: 0 };
+  const cols = Math.max(1, Math.ceil(rows.length / MAX_COL_ROWS));
+  const perCol = Math.ceil(rows.length / cols);
+  const chunks: PinRow[][] = [];
+  for (let k = 0; k < cols; k++) chunks.push(rows.slice(k * perCol, (k + 1) * perCol));
+  const colWidths = chunks.map(colWidth);
+  return { chunks, colWidths, totalWidth: colWidths.reduce((a, b) => a + b, 0), tall: chunks[0].length };
+}
 
 export function computeRadialLayout(
   conn: Record<string, string>,
@@ -160,28 +176,49 @@ export function computeRadialLayout(
   netKindOf: (net: string) => NetKind,
 ): RadialLayout {
   const grouped = bucketPinRows(conn, ports, netKindOf);
+  const { input: inputs, output: outputs, supply, ground } = grouped;
 
-  // Order by group, then split the sequence in half: the first half fills the
-  // left column, the rest the right. With inputs first and most pins being
-  // inputs, both columns start with inputs and outputs/supply/ground trail at
-  // the end of the right column.
-  const ordered: Array<{ row: PinRow; group: PinGroup }> = [];
-  for (const g of GROUP_ORDER) for (const row of grouped[g]) ordered.push({ row, group: g });
+  const inCols = sideColumns(inputs);
+  const outCols = sideColumns(outputs);
 
-  const leftN = Math.ceil(ordered.length / 2);
-  const leftItems = ordered.slice(0, leftN);
-  const rightItems = ordered.slice(leftN);
+  const innerW = inputs.length || outputs.length ? inCols.totalWidth + MID_GAP + outCols.totalWidth : 0;
+  const width = Math.max(innerW, bandWidth(supply), bandWidth(ground), MIN_W);
 
-  const width = Math.min(
-    Math.max(colWidth(leftItems.map(i => i.row)) + MID_GAP + colWidth(rightItems.map(i => i.row)), MIN_W),
-    MAX_W,
-  );
-  const bandRows = Math.max(leftItems.length, rightItems.length);
-  const height = HEADER_H + bandRows * PIN_ROW_H + BODY_PAD;
+  const topHeight = supply.length ? BAND_H : 0;
+  const bottomHeight = ground.length ? BAND_H : 0;
+  const midTop = HEADER_H + topHeight;
+  const midHeight = Math.max(inCols.tall, outCols.tall) * PIN_ROW_H;
+  const height = midTop + midHeight + bottomHeight + BODY_PAD;
 
-  const rowY = (i: number) => HEADER_H + i * PIN_ROW_H + PIN_ROW_H / 2;
-  const left = leftItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'left', x: 0, y: rowY(i) }));
-  const right = rightItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'right', x: width, y: rowY(i) }));
+  const rowY = (i: number) => midTop + i * PIN_ROW_H + PIN_ROW_H / 2;
+  const placed: PlacedRow[] = [];
 
-  return { rows: [...left, ...right], left, right, width, height };
+  // Inputs: sub-columns left → right, handle on each column's LEFT edge.
+  let lx = 0;
+  inCols.chunks.forEach((chunk, k) => {
+    chunk.forEach((row, i) => placed.push({ row, group: 'input', side: 'left', x: lx, y: rowY(i) }));
+    lx += inCols.colWidths[k];
+  });
+
+  // Outputs: sub-columns right → left, handle on each column's RIGHT edge.
+  let rx = width;
+  outCols.chunks.forEach((chunk, k) => {
+    chunk.forEach((row, i) => placed.push({ row, group: 'output', side: 'right', x: rx, y: rowY(i) }));
+    rx -= outCols.colWidths[k];
+  });
+
+  // Supply/ground pins spread horizontally across the top/bottom bands, centered.
+  const layBand = (rows: PinRow[], group: PinGroup, side: Side, y: number) => {
+    const widths = rows.map(slotWidth);
+    const total = widths.reduce((a, b) => a + b, 0);
+    let x = (width - total) / 2;
+    for (let i = 0; i < rows.length; i++) {
+      placed.push({ row: rows[i], group, side, x: x + widths[i] / 2, y });
+      x += widths[i];
+    }
+  };
+  layBand(supply, 'supply', 'top', HEADER_H + topHeight / 2);
+  layBand(ground, 'ground', 'bottom', height - BODY_PAD - bottomHeight / 2);
+
+  return { rows: placed, width, height };
 }
