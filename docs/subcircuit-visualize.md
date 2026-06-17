@@ -33,7 +33,7 @@ render options:
 ```jsonc
 {
   "design": { /* Design JSON, see §2 */ },
-  "cell":   "buffer_stage",   // which cell to render; default = design.topCell
+  "cell":   "buffer_stage",     // which cell to render; default = design.topCell
   "mode":   "both",            // "inst" | "both" (default) | "net"
   "hideSupply": true,          // hide power/ground WIRES (pins stay); default true
   "nodeLayout": "classic",     // "classic" (default) | "beta"
@@ -84,7 +84,7 @@ product can call it directly.
 ```jsonc
 {
   "topCell": "demo_logic_top",   // entry cell the viewer opens on
-  "warnings": ["..."],                  // non-fatal parse notes (optional)
+  "warnings": ["..."],           // non-fatal parse notes (optional)
   "cells": {
     "<cellName>": {
       "name": "<cellName>",
@@ -110,7 +110,7 @@ product can call it directly.
 ```jsonc
 {
   "id": "X26",                 // instance name, unique within the cell
-  "master": "buffer_stage",   // the cell it instantiates → recurse via cells[master]
+  "master": "buffer_stage",    // the cell it instantiates → recurse via cells[master]
   "conn": { "A": "net12", "Y": "out" },   // pin → net (resolved from master ports)
   "portMap": ["net12", "out", "vdd", "vss"], // raw ordered nets from the X line
   "busBase": "X",              // present if the id is a bus bit, e.g. "X<3>"
@@ -129,13 +129,13 @@ product can call it directly.
 {
   "id": "M1",
   "kind": "M",                 // "M" MOSFET | "R" resistor | "C" capacitor
-  "model": "nmos_generic",          // device/model name
+  "model": "nmos_generic",     // device/model name
   "terms": [["d","out"], ["g","in"], ["s","vss"], ["b","vss"]], // [terminal, net]
   "params": { "w": "1u", "l": "18n" }   // device parameters
 }
 ```
 MOSFET terminals are `d,g,s,b`; R/C are `p,n`. Resistor/capacitor *subcircuit*
-instances whose model matches a known R/C cell name (e.g. `rhi…`, `mim…`) are
+instances whose model matches a known R/C cell name (e.g. `res_*`, `cap_*`) are
 classified here as primitives rather than instances.
 
 ### Net — connectivity within the cell

@@ -81,9 +81,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
   // Subscribe to each slice individually rather than the whole store. Selecting
   // an instance only changes `selection`, which none of these read — so a click
   // no longer re-renders (and re-lays-out) every block on the canvas, just the
-  // one or two whose highlight state actually changed. On big cells (sample has
-  // ~500-block views) the whole-store subscription made every click re-render
-  // all blocks at once, which is what locked the tab up.
+  // one or two whose highlight state actually changed. On large hierarchy views
+  // with hundreds of blocks, the whole-store subscription made every click
+  // re-render all blocks at once, which is what locked the tab up.
   const descend = useViewerStore(s => s.descend);
   const setSelection = useViewerStore(s => s.setSelection);
   const design = useViewerStore(s => s.design);
