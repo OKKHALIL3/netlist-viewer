@@ -351,15 +351,32 @@ function Canvas() {
 
   useEffect(() => {
     if (!view) return;
-    setLaying(true);
-    layoutCell(view, design, nodeLayout).then(pos => { setPositions(pos); setLaying(false); });
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setLaying(true);
+    });
+    layoutCell(view, design, nodeLayout).then(pos => {
+      if (cancelled) return;
+      setPositions(pos);
+      setLaying(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [view, design, nodeLayout]);
 
   useEffect(() => {
     if (!view || positions.size === 0) return;
     const { nodes: n, edges: e } = buildGraph(view, selection, mode, hideSupply, focusNet, design, positions);
-    setNodes(n);
-    setEdges(e);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setNodes(n);
+      setEdges(e);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [view, positions, selection, mode, hideSupply, focusNet, design]);
 
   // Pan/zoom the viewport to the current selection whenever the cell changed
