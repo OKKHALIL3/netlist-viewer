@@ -40,46 +40,51 @@ export function mosPolarity(model: string): 'n' | 'p' | null {
 
 const STROKE = 1.6;
 
-// ── MOSFET (4-terminal) ───────────────────────────────────────────────────
-// Vertical channel bar with the gate plate to its left; drain at the top,
-// source at the bottom, bulk to the right. The substrate arrow encodes
-// polarity: it points INTO the channel for NMOS, OUT for PMOS (the textbook
-// 4-terminal convention).
+// ── MOSFET (4-terminal, IC enhancement style) ─────────────────────────────
+// The textbook analog-IC MOSFET: a gate electrode bar on the left, separated
+// by a capacitive gap from a broken three-segment channel (the enhancement-
+// mode marking). The drain finger exits the top, the source finger the bottom,
+// and the bulk finger runs out to the right carrying the substrate arrow —
+// which points INTO the channel for NMOS and OUT for PMOS (the 4-terminal
+// convention). Drain/source/bulk are kept apart so they never short across the
+// channel. The arrow is omitted when polarity is unknown, so the glyph still
+// reads as a plain MOSFET.
 function mosfetSymbol(polarity: 'n' | 'p' | null): DeviceSymbol {
   const W = 64;
-  const H = 72;
-  const chX = 40;        // channel bar x
-  const midY = 36;
-  // Arrow sits on the bulk lead, between channel (x=40) and bulk term (x=62).
-  // Points INTO the channel for NMOS, OUT for PMOS; omitted when unknown.
+  const H = 76;
+  const midY = 38;
+  const dsX = 44;        // drain/source lead column, right of the channel
+  // Substrate arrow on the bulk finger, between channel (x=30) and bulk term.
   const arrow = polarity === 'n'
-    ? '48,36 54,32 54,40'   // tip points left → into channel (NMOS)
+    ? '37,38 45,34 45,42'   // tip points left → into channel (NMOS)
     : polarity === 'p'
-    ? '56,36 50,32 50,40'   // tip points right → out (PMOS)
+    ? '45,38 37,34 37,42'   // tip points right → out (PMOS)
     : null;
 
   return {
     width: W,
     height: H,
     slots: {
-      d: { x: chX, y: 4, position: Position.Top },
-      s: { x: chX, y: H - 4, position: Position.Bottom },
+      d: { x: dsX, y: 2, position: Position.Top },
+      s: { x: dsX, y: H - 2, position: Position.Bottom },
       g: { x: 2, y: midY, position: Position.Left },
       b: { x: W - 2, y: midY, position: Position.Right },
     },
     svg: (
       <svg width={W} height={H} className="dev-svg" fill="none" stroke="currentColor"
         strokeWidth={STROKE} strokeLinecap="round" strokeLinejoin="round">
-        {/* gate */}
-        <line x1={2} y1={midY} x2={28} y2={midY} />
-        <line x1={28} y1={18} x2={28} y2={54} />
-        {/* channel */}
-        <line x1={chX} y1={16} x2={chX} y2={56} strokeWidth={2.6} />
-        {/* drain / source leads */}
-        <line x1={chX} y1={4} x2={chX} y2={16} />
-        <line x1={chX} y1={56} x2={chX} y2={H - 4} />
-        {/* bulk lead + polarity arrow */}
-        <line x1={chX} y1={midY} x2={W - 2} y2={midY} />
+        {/* gate: lead + electrode bar */}
+        <line x1={2} y1={midY} x2={22} y2={midY} />
+        <line x1={22} y1={20} x2={22} y2={56} strokeWidth={2.2} />
+        {/* channel: three broken segments (enhancement mode) */}
+        <line x1={30} y1={20} x2={30} y2={30} strokeWidth={2.2} />
+        <line x1={30} y1={33} x2={30} y2={43} strokeWidth={2.2} />
+        <line x1={30} y1={46} x2={30} y2={56} strokeWidth={2.2} />
+        {/* drain finger up, source finger down */}
+        <polyline points={`30,25 ${dsX},25 ${dsX},2`} />
+        <polyline points={`30,51 ${dsX},51 ${dsX},${H - 2}`} />
+        {/* bulk finger + polarity arrow */}
+        <line x1={30} y1={midY} x2={W - 2} y2={midY} />
         {arrow && <polygon points={arrow} fill="currentColor" stroke="none" />}
       </svg>
     ),
@@ -129,8 +134,9 @@ function capacitorSymbol(thirdTerm?: string): DeviceSymbol {
   const W = 44;
   const H = 72;
   const cx = W / 2;
-  const p1 = 32;
-  const p2 = 40;
+  // Two equal parallel plates with a clear dielectric gap, centred on the box.
+  const p1 = 31;
+  const p2 = 41;
   const plateHalf = 14;
 
   const slots: Record<string, TermSlot> = {
