@@ -376,6 +376,12 @@ body {
   transition: color 0.12s, filter 0.12s;
 }
 .prim-symbol .dev-svg { display: block; overflow: visible; }
+/* Supply stub overlay (ground/VDD glyphs): drawn in footprint coordinates,
+   keeps its own net-kind colour, and never intercepts clicks. */
+.prim-symbol .dev-stubs {
+  position: absolute; left: 0; top: 0;
+  overflow: visible; pointer-events: none;
+}
 .prim-node.sym.sel .prim-symbol,
 .prim-node.sym.connected .prim-symbol {
   color: var(--sel);
