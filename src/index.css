@@ -449,6 +449,18 @@ body {
   box-shadow: 2px 2px 0 rgba(45, 212, 191, 0.35), 4px 4px 0 rgba(45, 212, 191, 0.18);
 }
 .port-node.bus .port-label { color: var(--txt-dim); font-weight: 700; }
+/* Supply/ground ports sit on the top/bottom rails and point into the design
+   (down for power at the top, up for ground at the bottom). */
+.port-node.pwr { flex-direction: column; }
+.port-node.gnd { flex-direction: column-reverse; }
+.port-node.pwr .port-flag {
+  /* points down (toward the design below) */
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
+}
+.port-node.gnd .port-flag {
+  /* points up (toward the design above) */
+  clip-path: polygon(50% 0, 100% 55%, 100% 100%, 0 100%, 0 55%);
+}
 .port-label {
   font-size: 9.5px; font-family: 'Space Mono', monospace;
   color: var(--txt-faint); text-align: center;
