@@ -129,7 +129,7 @@ const LABEL_CAP = 18; // longer pin names ellipsize rather than widen the column
 const COL_PAD = 20; // handle + inner padding per column
 const MID_GAP = 36; // clear gap between the left (input) and right (output) banks
 const H_SLOT_PAD = 14; // padding around each top/bottom (supply/ground) pin label
-const BAND_H = 24; // height of the top (supply) and bottom (ground) bands
+const BAND_H = 30; // height of the top (supply) and bottom (ground) bands (room for dot + label)
 const MAX_COL_ROWS = 30; // wrap a side into another sub-column past this many rows
 const MIN_W = 190;
 
@@ -217,8 +217,10 @@ export function computeRadialLayout(
       x += widths[i];
     }
   };
-  layBand(supply, 'supply', 'top', HEADER_H + topHeight / 2);
-  layBand(ground, 'ground', 'bottom', height - BODY_PAD - bottomHeight / 2);
+  // Dot sits near the band's outer edge (top for supply, bottom for ground);
+  // BetaPinLabel offsets the label inward so the dot never lands on the word.
+  layBand(supply, 'supply', 'top', HEADER_H + 9);
+  layBand(ground, 'ground', 'bottom', height - BODY_PAD - 9);
 
   return { rows: placed, width, height };
 }

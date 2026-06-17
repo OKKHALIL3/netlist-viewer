@@ -76,11 +76,14 @@ function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string)
 function BetaPinLabel({ p, width, activeNet, activeColor }: { p: PlacedRow; width: number; activeNet: string | null; activeColor: string }) {
   const { row, side } = p;
   const isActive = rowMatchesActive(row.nets, activeNet);
-  const PAD = 9; // gap between the dot and its label
+  const PAD = 9; // horizontal gap between a side dot and its label
+  const VGAP = 13; // vertical gap so a top/bottom dot clears its label (not on the word)
   const style: React.CSSProperties =
     side === 'left' ? { left: p.x + PAD, top: p.y, transform: 'translateY(-50%)', textAlign: 'left' }
     : side === 'right' ? { right: width - p.x + PAD, top: p.y, transform: 'translateY(-50%)', textAlign: 'right' }
-    : { left: p.x, top: p.y, transform: 'translate(-50%, -50%)' };
+    // Supply (top): dot at p.y, label below it. Ground (bottom): label above the dot.
+    : side === 'top' ? { left: p.x, top: p.y + VGAP, transform: 'translate(-50%, -50%)' }
+    : { left: p.x, top: p.y - VGAP, transform: 'translate(-50%, -50%)' };
   if (isActive) style.color = activeColor;
   return (
     <div
