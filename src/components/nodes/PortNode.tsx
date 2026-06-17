@@ -13,12 +13,16 @@ export interface PortNodeData extends Record<string, unknown> {
   label?: string;
   isBus?: boolean;
   members?: string[];
+  repNet?: string;
+  isArrayPort?: boolean;
+  count?: number;
 }
 
 function PortNodeImpl({ data }: NodeProps) {
   const d = data as PortNodeData;
   const { port, isFocused, isHighlighted, label, isBus, members } = d;
   const displayName = label ?? port.name;
+  const selectNet = d.repNet ?? port.name;
   // Per-slice selectors (see InstanceNode) so a selection click doesn't
   // re-render every port node.
   const mode = useViewerStore(s => s.mode);
@@ -30,7 +34,7 @@ function PortNodeImpl({ data }: NodeProps) {
   const active = isFocused || isHighlighted;
   // Cell-boundary ports use a dedicated color so they read as "cell I/O"; when
   // focused they light up in a brighter version of their net's category color.
-  const kind = design?.cells.get(currentCell)?.nets.find(n => n.name === port.name)?.kind ?? 'signal';
+  const kind = design?.cells.get(currentCell)?.nets.find(n => n.name === selectNet)?.kind ?? 'signal';
   const isPower = kind === 'power';
   const isGround = kind === 'ground';
   const hiColor = isPower ? 'var(--net-pwr-hi)' : isGround ? 'var(--net-gnd-hi)' : 'var(--net-sig-hi)';
@@ -52,19 +56,20 @@ function PortNodeImpl({ data }: NodeProps) {
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (mode === 'net') setFocusNet(port.name);
-    setSelection({ type: 'net', name: port.name });
+    if (mode === 'net') setFocusNet(selectNet);
+    setSelection({ type: 'net', name: selectNet });
   };
 
   return (
     <div
-      className={`port-node${orientClass}${active ? ' connected' : ''}${isBus ? ' bus' : ''}`}
+      className={`port-node${orientClass}${active ? ' connected' : ''}${isBus ? ' bus' : ''}${d.isArrayPort ? ' array' : ''}`}
       onClick={handleClick}
-      title={isBus
-        ? `Cell port bus: ${displayName} — ${members?.length ?? 0} pins (${members?.join(', ')})`
+      title={(isBus || d.isArrayPort)
+        ? `Cell port bus: ${displayName} - ${members?.length ?? d.count ?? 0} pins${port.dir ? ` (${port.dir})` : ''}`
         : `Cell port: ${port.name}${port.dir ? ` (${port.dir})` : ''}`}
     >
       <span className="port-label">{displayName}</span>
+      {d.isArrayPort && <span className="port-count">x{d.count}</span>}
       {/* Handles live inside the flag so the wire attaches to its tip (the
           design-facing point), not the node's outer bounding edge. */}
       <span
@@ -83,7 +88,8 @@ function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PortNodeData;
   const y = b.data as PortNodeData;
   return x.port === y.port && x.isFocused === y.isFocused && x.isHighlighted === y.isHighlighted &&
-    x.label === y.label && x.isBus === y.isBus;
+    x.label === y.label && x.isBus === y.isBus && x.repNet === y.repNet &&
+    x.isArrayPort === y.isArrayPort && x.count === y.count;
 }
 
 export const PortNode = memo(PortNodeImpl, sameData);

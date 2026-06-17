@@ -8,6 +8,7 @@ export interface PrimitiveNodeData extends Record<string, unknown> {
   primitive: Primitive;
   isSelected: boolean;
   isConnected: boolean;
+  arraySize?: number;
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -27,13 +28,14 @@ function kindLabel(prim: Primitive): string {
 
 function PrimitiveNodeImpl({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
-  const { primitive, isSelected, isConnected } = d;
+  const { primitive, isSelected, isConnected, arraySize } = d;
   // Select just the action, not the whole store — see InstanceNode for why this
   // matters on big cells.
   const setSelection = useViewerStore(s => s.setSelection);
 
   const color = KIND_COLOR[primitive.kind] ?? 'var(--txt-dim)';
   const sym = deviceSymbol(primitive);
+  const isArray = (arraySize ?? 1) > 1;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -41,16 +43,21 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
   };
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
+  const arrayClass = isArray ? ' array' : '';
+  const arrayBadge = isArray ? (
+    <div className="array-badge" title={`Array - ${arraySize} devices`}>x{arraySize}</div>
+  ) : null;
 
   // Fallback: no symbol for this kind — keep the old labelled glyph box so
   // unusual devices still render and stay wired.
   if (!sym) {
     return (
       <div
-        className={`prim-node${stateClass}`}
+        className={`prim-node${stateClass}${arrayClass}`}
         onClick={handleClick}
         style={{ '--prim-color': color } as React.CSSProperties}
       >
+        {arrayBadge}
         {primitive.terms.map(([term], i) => (
           <Fragment key={term}>
             <Handle type="target" position={Position.Left} id={`${term}-tgt`}
@@ -70,10 +77,11 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
 
   return (
     <div
-      className={`prim-node sym${stateClass}`}
+      className={`prim-node sym${stateClass}${arrayClass}`}
       onClick={handleClick}
       style={{ '--prim-color': color } as React.CSSProperties}
     >
+      {arrayBadge}
       <div className="prim-symbol" style={{ width: sym.width, height: sym.height }}>
         {sym.svg}
         {/* One source + one target handle per terminal, anchored exactly on the
@@ -113,7 +121,8 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
 function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PrimitiveNodeData;
   const y = b.data as PrimitiveNodeData;
-  return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected;
+  return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected &&
+    x.arraySize === y.arraySize;
 }
 
 export const PrimitiveNode = memo(PrimitiveNodeImpl, sameData);
