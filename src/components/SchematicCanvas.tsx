@@ -149,6 +149,24 @@ function buildGraph(
     ? (cell.primitivesById.get(selection.id)?.id ?? selection.id)
     : null;
 
+  // With supply wires hidden, a device terminal tied to a power/ground net
+  // would render as a bare, floating-looking pin (the wire is suppressed but
+  // the pin stays). Map each such terminal to its net kind so the device node
+  // can cap it with a ground/VDD stub glyph instead. Same condition as the
+  // wire-hiding guard below: only when hide-supply is on and not in net mode.
+  const supplyStubsByPrim = new Map<string, Record<string, 'power' | 'ground'>>();
+  if (hideSupply && mode !== 'net') {
+    const netKind = new Map(cell.nets.map(n => [n.name, n.kind]));
+    for (const prim of cell.primitives) {
+      let stubs: Record<string, 'power' | 'ground'> | undefined;
+      for (const [term, netName] of prim.terms) {
+        const kind = netKind.get(netName);
+        if (kind === 'power' || kind === 'ground') (stubs ??= {})[term] = kind;
+      }
+      if (stubs) supplyStubsByPrim.set(prim.id, stubs);
+    }
+  }
+
   for (const prim of cell.primitives) {
     const pos = positions.get(prim.id);
     if (!pos) continue;
@@ -158,7 +176,13 @@ function buildGraph(
       id: prim.id,
       type: 'primitiveNode',
       position: { x: pos.x, y: pos.y },
-      data: { primitive: prim, isSelected, isConnected, arraySize: prim.arraySize } as PrimitiveNodeData,
+      data: {
+        primitive: prim,
+        isSelected,
+        isConnected,
+        arraySize: prim.arraySize,
+        supplyStubs: supplyStubsByPrim.get(prim.id),
+      } as PrimitiveNodeData,
     });
   }
 

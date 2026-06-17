@@ -17,12 +17,40 @@ export interface TermSlot {
   position: Position;
 }
 
-export interface DeviceSymbol {
+// What a symbol function draws — the bare glyph in its own coordinate box.
+interface CoreSymbol {
   width: number;
   height: number;
   slots: Record<string, TermSlot>;
   svg: React.ReactNode;
 }
+
+export interface DeviceSymbol {
+  // Full footprint, including the stub margins reserved on each terminal side.
+  width: number;
+  height: number;
+  // Where the bare glyph (`svg`) is drawn inside that footprint. The caller
+  // offsets the glyph by this so the reserved margins surround it.
+  drawX: number;
+  drawY: number;
+  // Terminal tips in footprint coordinates (already shifted by drawX/drawY).
+  slots: Record<string, TermSlot>;
+  svg: React.ReactNode;
+}
+
+// Core glyph dimensions, shared with deviceFootprint() so ELK's reserved size
+// always matches what actually renders.
+const MOS_W = 64;
+const MOS_H = 76;
+const PASSIVE_W = 44;
+const PASSIVE_H = 72;
+
+// Space reserved on each terminal-bearing side for a supply "stub" — the small
+// ground/VDD glyph drawn in place of a wire when supply nets are hidden (see
+// PrimitiveNode). Without it a downward stub would collide with the id/model
+// caption beneath the symbol. Reserved unconditionally so toggling "hide
+// supply" only adds/removes the glyph and never reflows the layout.
+const STUB_MARGIN = 16;
 
 // ── NMOS vs PMOS from the model name ──────────────────────────────────────
 // CDL stores only the model string (e.g. "nch_18", "pfet_g5v0", "pmos_rf").
@@ -49,9 +77,9 @@ const STROKE = 1.6;
 // convention). Drain/source/bulk are kept apart so they never short across the
 // channel. The arrow is omitted when polarity is unknown, so the glyph still
 // reads as a plain MOSFET.
-function mosfetSymbol(polarity: 'n' | 'p' | null): DeviceSymbol {
-  const W = 64;
-  const H = 76;
+function mosfetSymbol(polarity: 'n' | 'p' | null): CoreSymbol {
+  const W = MOS_W;
+  const H = MOS_H;
   const midY = 38;
   const dsX = 44;        // drain/source lead column, right of the channel
   // Substrate arrow on the bulk finger, between channel (x=30) and bulk term.
@@ -92,9 +120,9 @@ function mosfetSymbol(polarity: 'n' | 'p' | null): DeviceSymbol {
 }
 
 // ── Resistor (vertical zig-zag, p top / n bottom) ─────────────────────────
-function resistorSymbol(thirdTerm?: string): DeviceSymbol {
-  const W = 44;
-  const H = 72;
+function resistorSymbol(thirdTerm?: string): CoreSymbol {
+  const W = PASSIVE_W;
+  const H = PASSIVE_H;
   const cx = W / 2;
   const top = 14;
   const bot = 58;
@@ -130,9 +158,9 @@ function resistorSymbol(thirdTerm?: string): DeviceSymbol {
 }
 
 // ── Capacitor (two plates, p top / n bottom) ──────────────────────────────
-function capacitorSymbol(thirdTerm?: string): DeviceSymbol {
-  const W = 44;
-  const H = 72;
+function capacitorSymbol(thirdTerm?: string): CoreSymbol {
+  const W = PASSIVE_W;
+  const H = PASSIVE_H;
   const cx = W / 2;
   // Two equal parallel plates with a clear dielectric gap, centred on the box.
   const p1 = 31;
@@ -162,9 +190,33 @@ function capacitorSymbol(thirdTerm?: string): DeviceSymbol {
   };
 }
 
-// Pick the right symbol for a device. Returns null for kinds we don't have a
-// symbol for (so the caller can fall back to the generic glyph box).
-export function deviceSymbol(prim: Primitive): DeviceSymbol | null {
+// ── Footprint: reserve stub margins around the bare glyph ──────────────────
+// Grows the box by STUB_MARGIN on each side that has a terminal (so a 2-pin
+// cap keeps its narrow width but gains top/bottom room), shifts the glyph and
+// every slot inward by that margin, and records where the glyph is drawn.
+function withStubMargins(core: CoreSymbol): DeviceSymbol {
+  const sides = new Set(Object.values(core.slots).map(s => s.position));
+  const l = sides.has(Position.Left) ? STUB_MARGIN : 0;
+  const r = sides.has(Position.Right) ? STUB_MARGIN : 0;
+  const t = sides.has(Position.Top) ? STUB_MARGIN : 0;
+  const b = sides.has(Position.Bottom) ? STUB_MARGIN : 0;
+
+  const slots: Record<string, TermSlot> = {};
+  for (const [k, s] of Object.entries(core.slots)) {
+    slots[k] = { ...s, x: s.x + l, y: s.y + t };
+  }
+  return {
+    width: core.width + l + r,
+    height: core.height + t + b,
+    drawX: l,
+    drawY: t,
+    slots,
+    svg: core.svg,
+  };
+}
+
+// Build the bare glyph + aliased slots for a device (no margins yet).
+function coreSymbol(prim: Primitive): CoreSymbol | null {
   const termNames = prim.terms.map(([t]) => t);
   if (prim.kind === 'M') return mosfetSymbol(mosPolarity(prim.model));
   // Passives may arrive as native R/C (p,n) or as X-pseudo devices (a,b,c).
@@ -182,4 +234,60 @@ export function deviceSymbol(prim: Primitive): DeviceSymbol | null {
     sym.slots = { [termNames[0]]: p, [termNames[1]]: n, ...rest } as Record<string, TermSlot>;
   }
   return sym;
+}
+
+// Pick the right symbol for a device. Returns null for kinds we don't have a
+// symbol for (so the caller can fall back to the generic glyph box).
+export function deviceSymbol(prim: Primitive): DeviceSymbol | null {
+  const core = coreSymbol(prim);
+  return core ? withStubMargins(core) : null;
+}
+
+// Footprint (incl. stub margins) ELK should reserve for a device, or null when
+// it falls back to the generic glyph box. Derived from the same symbol the
+// node renders so reserved size and rendered size always agree.
+export function deviceFootprint(prim: Primitive): { width: number; height: number } | null {
+  const sym = deviceSymbol(prim);
+  return sym ? { width: sym.width, height: sym.height } : null;
+}
+
+// ── Supply stub glyph ──────────────────────────────────────────────────────
+// A short lead from a terminal tip ending in a ground (three tapering bars) or
+// power (single rail bar) symbol, drawn when "hide supply" suppresses the wire
+// so the terminal reads as terminated instead of floating. Coordinates are in
+// the symbol footprint space (slot already includes the draw offset); the glyph
+// extends outward along the terminal's side. Coloured by net kind to match the
+// wire legend, independent of the device's own colour.
+export function supplyStub(term: string, slot: TermSlot, kind: 'power' | 'ground'): React.ReactNode {
+  const [ox, oy] =
+    slot.position === Position.Top ? [0, -1]
+    : slot.position === Position.Bottom ? [0, 1]
+    : slot.position === Position.Left ? [-1, 0]
+    : [1, 0];
+  const horizontal = ox !== 0; // lead runs horizontally → bars are vertical
+  const lead = 4;
+  const color = kind === 'ground' ? 'var(--net-gnd)' : 'var(--net-pwr)';
+
+  // A bar perpendicular to the lead, `dist` out from the tip, half-length `half`.
+  const bar = (dist: number, half: number, key: string) => {
+    const bx = slot.x + ox * dist;
+    const by = slot.y + oy * dist;
+    const [hx, hy] = horizontal ? [0, half] : [half, 0];
+    return <line key={key} x1={bx - hx} y1={by - hy} x2={bx + hx} y2={by + hy} />;
+  };
+
+  return (
+    <g key={`stub-${term}`} stroke={color} strokeWidth={1.6} strokeLinecap="round" fill="none">
+      <line x1={slot.x} y1={slot.y} x2={slot.x + ox * lead} y2={slot.y + oy * lead} />
+      {kind === 'ground' ? (
+        <>
+          {bar(lead, 8, 'g0')}
+          {bar(lead + 3.5, 5, 'g1')}
+          {bar(lead + 7, 2, 'g2')}
+        </>
+      ) : (
+        bar(lead + 1, 8.5, 'p0')
+      )}
+    </g>
+  );
 }

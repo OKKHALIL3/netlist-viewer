@@ -5,6 +5,7 @@ import type { Cell, Design } from '../parser/types';
 import type { NodeLayout } from '../store/viewerStore';
 import { computeInstanceLayout, computeRadialLayout } from './pinGroups';
 import { groupPorts } from './busGrouping';
+import { deviceFootprint } from '../components/nodes/deviceSymbols';
 
 export interface NodePosition {
   x: number;
@@ -15,6 +16,7 @@ export interface NodePosition {
 
 const NODE_WIDTH = 180;
 const PRIM_SIZE = 56;
+const PRIM_LABEL = 30; // room under a device for its id/model caption
 const PORT_WIDTH = 70;
 const PORT_HEIGHT = 54;
 
@@ -56,14 +58,15 @@ export async function layoutCell(
       const { width, height } = instanceSize(inst);
       return { id: inst.id, width, height };
     }),
-    // Devices now render as real schematic symbols: the transistor box is
-    // wider (gate left, bulk right), passives are narrow and tall. Reserve
-    // ~28px under each for the id/model caption.
-    ...cell.primitives.map(prim => ({
-      id: prim.id,
-      width: prim.kind === 'M' ? 64 : 44,
-      height: 100,
-    })),
+    // Devices render as real schematic symbols. Reserve the symbol's full
+    // footprint (including the supply-stub margins) plus room for the id/model
+    // caption; unknown kinds fall back to the generic glyph box.
+    ...cell.primitives.map(prim => {
+      const fp = deviceFootprint(prim);
+      return fp
+        ? { id: prim.id, width: fp.width, height: fp.height + PRIM_LABEL }
+        : { id: prim.id, width: PRIM_SIZE, height: PRIM_SIZE + PRIM_LABEL };
+    }),
     // Pin cell-boundary ports to a fixed edge of the layout — inputs (and
     // bidirectional/unknown-direction ports) to the left, outputs to the
     // right — so I/O lands in the same place across every cell instead of
