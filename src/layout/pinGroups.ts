@@ -117,11 +117,17 @@ export function computeInstanceLayout(
 }
 
 // ── BETA layout: a schematic-symbol block with pins on all four edges ────────
-// The classic cell-symbol convention: INPUTS run down the LEFT edge, OUTPUTS
-// down the RIGHT, SUPPLY pins sit along the TOP, GROUND pins along the BOTTOM.
-// Supply/ground leave the side columns (so the in/out lists stay short) and
-// spread horizontally across the top/bottom bands. Rows show the PIN NAME only
-// (the net mapping lives in the Inspector).
+// SUPPLY pins sit along the TOP, GROUND along the BOTTOM, and the SIGNAL pins
+// run down the two side edges — inputs trend to the LEFT, outputs to the RIGHT.
+//
+// The side split is by count, not strictly by direction: most foundry cells
+// declare a direction for only a handful of pins (the rest come through as
+// "input"), so a strict inputs-left / outputs-right split would tower 90+
+// undeclared pins on the left. Ordering inputs-then-outputs and halving the
+// sequence degrades gracefully — a cell with balanced declared I/O lands inputs
+// on the left and outputs on the right (the textbook symbol), while a
+// mostly-undeclared cell simply fills both columns evenly. Rows show the PIN
+// NAME only (the net mapping lives in the Inspector).
 
 const CHAR_W = 6.7; // ~width of one Space Mono char at the pin-row font size
 const LABEL_CAP = 18; // longer pin names ellipsize rather than widen the box
@@ -173,22 +179,34 @@ export function computeRadialLayout(
   netKindOf: (net: string) => NetKind,
 ): RadialLayout {
   const grouped = bucketPinRows(conn, ports, netKindOf);
-  const { input: inputs, output: outputs, supply, ground } = grouped;
+  const { input, output, supply, ground } = grouped;
 
-  const innerW = inputs.length || outputs.length
-    ? colWidth(inputs) + MID_GAP + colWidth(outputs)
+  // Side columns carry the signal pins: inputs first, then outputs, split in
+  // half across the two edges (see the note above on why this beats a strict
+  // direction split). Each row keeps its group so its handle dot stays the
+  // right colour.
+  const signal: Array<{ row: PinRow; group: PinGroup }> = [
+    ...input.map(row => ({ row, group: 'input' as PinGroup })),
+    ...output.map(row => ({ row, group: 'output' as PinGroup })),
+  ];
+  const leftN = Math.ceil(signal.length / 2);
+  const leftItems = signal.slice(0, leftN);
+  const rightItems = signal.slice(leftN);
+
+  const innerW = signal.length
+    ? colWidth(leftItems.map(i => i.row)) + MID_GAP + colWidth(rightItems.map(i => i.row))
     : 0;
   const width = Math.min(Math.max(innerW, bandWidth(supply), bandWidth(ground), MIN_W), MAX_W);
 
   const topHeight = supply.length ? BAND_H : 0;
   const bottomHeight = ground.length ? BAND_H : 0;
   const midTop = HEADER_H + topHeight;
-  const midHeight = Math.max(inputs.length, outputs.length) * PIN_ROW_H;
+  const midHeight = Math.max(leftItems.length, rightItems.length) * PIN_ROW_H;
   const height = midTop + midHeight + bottomHeight + BODY_PAD;
 
   const rowY = (i: number) => midTop + i * PIN_ROW_H + PIN_ROW_H / 2;
-  const left = inputs.map((row, i): PlacedRow => ({ row, group: 'input', side: 'left', x: 0, y: rowY(i) }));
-  const right = outputs.map((row, i): PlacedRow => ({ row, group: 'output', side: 'right', x: width, y: rowY(i) }));
+  const left = leftItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'left', x: 0, y: rowY(i) }));
+  const right = rightItems.map((it, i): PlacedRow => ({ row: it.row, group: it.group, side: 'right', x: width, y: rowY(i) }));
 
   // Supply/ground pins spread horizontally across their band, centered.
   const layBand = (rows: PinRow[], group: PinGroup, side: Side, y: number): PlacedRow[] => {

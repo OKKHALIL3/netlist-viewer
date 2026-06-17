@@ -4,9 +4,10 @@ import type { Design, Cell } from '../parser/types';
 export type ViewMode = 'inst' | 'both' | 'net';
 
 // How each instance block arranges its pins. 'classic' (default) is the stacked
-// IN/OUT/PWR/GND section list. 'beta' draws a schematic-symbol block: inputs on
-// the left edge, outputs on the right, supply along the top, ground along the
-// bottom — name-only rows, with supply/ground pulled out of the side columns.
+// IN/OUT/PWR/GND section list. 'beta' draws a schematic-symbol block: supply
+// along the top, ground along the bottom, and the signal pins down the two side
+// edges (inputs trending left, outputs right), balanced so the columns stay
+// even. Name-only rows; the net mapping lives in the Inspector.
 export type NodeLayout = 'beta' | 'classic';
 
 export type SelectionType =
