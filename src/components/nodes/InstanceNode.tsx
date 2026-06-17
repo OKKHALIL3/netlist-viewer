@@ -69,31 +69,23 @@ function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string)
   );
 }
 
-// A single pin row on a side column — pin NAME only (net mapping lives in the
-// Inspector). Highlighted in the active net's category color when focused.
-function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: string | null; activeColor: string }) {
-  const { row } = p;
+// A beta pin label, absolutely placed at its handle (computed in
+// computeRadialLayout). Left/right (input/output) labels sit just inside the
+// edge next to their dot; top/bottom (supply/ground) labels are centered over
+// their dot. Highlighted in the active net's category color when focused.
+function BetaPinLabel({ p, width, activeNet, activeColor }: { p: PlacedRow; width: number; activeNet: string | null; activeColor: string }) {
+  const { row, side } = p;
   const isActive = rowMatchesActive(row.nets, activeNet);
+  const PAD = 9; // gap between the dot and its label
+  const style: React.CSSProperties =
+    side === 'left' ? { left: p.x + PAD, top: p.y, transform: 'translateY(-50%)', textAlign: 'left' }
+    : side === 'right' ? { right: width - p.x + PAD, top: p.y, transform: 'translateY(-50%)', textAlign: 'right' }
+    : { left: p.x, top: p.y, transform: 'translate(-50%, -50%)' };
+  if (isActive) style.color = activeColor;
   return (
     <div
-      className={`pin-row edge${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
-      style={isActive ? { color: activeColor } : undefined}
-      title={row.isBus ? row.pins.join(', ') : `${row.pinLabel} → ${row.netLabel}`}
-    >
-      <span className="pin-name">{row.pinLabel}</span>
-    </div>
-  );
-}
-
-// A supply/ground pin on the top/bottom band — laid out horizontally, so the
-// label is absolutely placed at its handle's x (computed in computeRadialLayout).
-function EdgePinTick({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: string | null; activeColor: string }) {
-  const { row } = p;
-  const isActive = rowMatchesActive(row.nets, activeNet);
-  return (
-    <div
-      className={`pin-tick${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
-      style={{ left: p.x, color: isActive ? activeColor : undefined }}
+      className={`beta-pin ${side}${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
+      style={style}
       title={row.isBus ? row.pins.join(', ') : `${row.pinLabel} → ${row.netLabel}`}
     >
       {row.pinLabel}
@@ -149,8 +141,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
   ) : null;
 
   // BETA: a schematic-symbol block — inputs on the left edge, outputs on the
-  // right, supply along the top, ground along the bottom. Rows show the pin
-  // NAME only; the net mapping is in the Inspector.
+  // right, supply along the top, ground along the bottom. Each side wraps into
+  // sub-columns when it has many pins, so the block stays compact. All pins are
+  // absolutely placed from the shared layout, so labels line up with handles.
   if (nodeLayout === 'beta') {
     const layout = computeRadialLayout(instance.conn, masterPorts, netKindOf);
     return (
@@ -169,26 +162,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
           <span className="inst-master" title={instance.master}>{instance.master}</span>
         </div>
 
-        {layout.top.length > 0 && (
-          <div className="inst-band top" style={{ height: layout.topHeight }}>
-            {layout.top.map(p => <EdgePinTick key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
-          </div>
-        )}
-
-        <div className="inst-mid" style={{ height: layout.midHeight }}>
-          <div className="inst-col in">
-            {layout.left.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
-          </div>
-          <div className="inst-col out">
-            {layout.right.map(p => <EdgePinRow key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
-          </div>
-        </div>
-
-        {layout.bottom.length > 0 && (
-          <div className="inst-band bottom" style={{ height: layout.bottomHeight }}>
-            {layout.bottom.map(p => <EdgePinTick key={p.row.repPin} p={p} activeNet={activeNet} activeColor={activeColor} />)}
-          </div>
-        )}
+        {layout.rows.map(p => (
+          <BetaPinLabel key={p.row.repPin} p={p} width={layout.width} activeNet={activeNet} activeColor={activeColor} />
+        ))}
       </div>
     );
   }

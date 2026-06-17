@@ -3,11 +3,11 @@ import type { Design, Cell } from '../parser/types';
 
 export type ViewMode = 'inst' | 'both' | 'net';
 
-// How each instance block arranges its pins. 'classic' (default) is the stacked
-// IN/OUT/PWR/GND section list. 'beta' draws a schematic-symbol block: supply
-// along the top, ground along the bottom, and the signal pins down the two side
-// edges (inputs trending left, outputs right), balanced so the columns stay
-// even. Name-only rows; the net mapping lives in the Inspector.
+// How each instance block arranges its pins. 'classic' is the stacked
+// IN/OUT/PWR/GND section list. 'beta' (the default) draws a schematic-symbol
+// block: inputs on the left edge, outputs on the right (each wrapping into
+// sub-columns when long), supply along the top, ground along the bottom.
+// Name-only rows; the net mapping lives in the Inspector.
 export type NodeLayout = 'beta' | 'classic';
 
 export type SelectionType =
@@ -58,7 +58,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   currentCell: '',
   breadcrumb: [],
   mode: 'both',
-  nodeLayout: 'classic',
+  nodeLayout: 'beta',
   hideSupply: true,
   focusNet: null,
   selection: null,
