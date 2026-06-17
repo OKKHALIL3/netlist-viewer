@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   ReactFlow,
   Background,
@@ -19,10 +19,11 @@ import { useViewerStore, type SelectionType } from '../store/viewerStore';
 import { layoutCell } from '../layout/elk';
 import { clusterBusRibbons } from '../layout/busGrouping';
 import { computeInstanceLayout, pinDirection } from '../layout/pinGroups';
+import { buildCellView, type CellView } from '../layout/cellView';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
-import type { Cell, Design, Net, Port } from '../parser/types';
+import type { Design, Net, Port } from '../parser/types';
 import type { NodePosition } from '../layout/elk';
 
 const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode };
@@ -52,7 +53,7 @@ function portNodeId(pin: string): string {
 // Selecting a node or net highlights everything electrically connected to it:
 // the nets touching the selected node (or, for a selected net, that net
 // itself) and every node those nets touch.
-function computeHighlight(cell: Cell, selection: SelectionType | null): { nets: Set<string>; nodes: Set<string> } {
+function computeHighlight(cell: CellView, selection: SelectionType | null): { nets: Set<string>; nodes: Set<string> } {
   const nets = new Set<string>();
   const nodes = new Set<string>();
   if (!selection) return { nets, nodes };
@@ -73,14 +74,19 @@ function computeHighlight(cell: Cell, selection: SelectionType | null): { nets: 
     return { nets, nodes };
   }
 
+  // An instance/primitive selection may target a collapsed array member —
+  // resolve it to the array's display id so the merged node (and its nets) light up.
+  const selId = selection.type === 'primitive'
+    ? (cell.primitivesById.get(selection.id)?.id ?? selection.id)
+    : (cell.instancesById.get(selection.id)?.id ?? selection.id);
   for (const net of cell.nets) {
-    if (net.endpoints.some(([id]) => id === selection.id)) addNet(net);
+    if (net.endpoints.some(([id]) => id === selId)) addNet(net);
   }
   return { nets, nodes };
 }
 
 function buildGraph(
-  cell: Cell,
+  cell: CellView,
   selection: SelectionType | null,
   mode: string,
   hideSupply: boolean,
@@ -119,31 +125,40 @@ function buildGraph(
     pinRepMap.set(inst.id, repMap);
   }
 
+  // A selection landing on a collapsed array member resolves to its array block.
+  const selDisplayId = selection?.type === 'instance'
+    ? (cell.instancesById.get(selection.id)?.id ?? selection.id)
+    : null;
+
   for (const inst of cell.instances) {
     const pos = positions.get(inst.id);
     if (!pos) continue;
     const masterPorts = design?.cells.get(inst.master)?.ports ?? [];
-    const isSelected = selection?.type === 'instance' && selection.id === inst.id;
+    const isSelected = selDisplayId === inst.id;
     const isConnected = !isSelected && highlightedNodes.has(inst.id);
     nodes.push({
       id: inst.id,
       type: 'instanceNode',
       position: { x: pos.x, y: pos.y },
-      data: { instance: inst, masterPorts, isSelected, isConnected, activeNet } as InstanceNodeData,
+      data: { instance: inst, masterPorts, isSelected, isConnected, activeNet, arraySize: inst.arraySize } as InstanceNodeData,
       style: { width: pos.width },
     });
   }
 
+  const selPrimId = selection?.type === 'primitive'
+    ? (cell.primitivesById.get(selection.id)?.id ?? selection.id)
+    : null;
+
   for (const prim of cell.primitives) {
     const pos = positions.get(prim.id);
     if (!pos) continue;
-    const isSelected = selection?.type === 'primitive' && selection.id === prim.id;
+    const isSelected = selPrimId === prim.id;
     const isConnected = !isSelected && highlightedNodes.has(prim.id);
     nodes.push({
       id: prim.id,
       type: 'primitiveNode',
       position: { x: pos.x, y: pos.y },
-      data: { primitive: prim, isSelected, isConnected } as PrimitiveNodeData,
+      data: { primitive: prim, isSelected, isConnected, arraySize: prim.arraySize } as PrimitiveNodeData,
     });
   }
 
@@ -197,7 +212,7 @@ function buildGraph(
           id: ep.nodeId,
           type: 'portNode',
           position: { x: pos.x, y: pos.y },
-          data: { port, isFocused, isHighlighted } as PortNodeData,
+          data: { port, isFocused, isHighlighted, repNet: port.repNet, isArrayPort: port.isArray, count: port.count } as PortNodeData,
         });
       }
 
@@ -228,6 +243,10 @@ function buildGraph(
       for (let i = 0; i < realEps.length; i++) {
         if (i === srcIdx) continue;
         const { nodeId: tgtId, handle: tgtPin } = realEps[i];
+        // After array folding both endpoints of an intra-array chain net resolve
+        // to the same display node; skip the self-loop (ELK skips it too, so no
+        // space is reserved for it) — the connection is internal to the array.
+        if (tgtId === srcId) continue;
 
         pendingSmooth.push({
           id: `e_${net.name}_${i}`,
@@ -257,7 +276,10 @@ function buildGraph(
       }
       for (const group of groups.values()) {
         for (const ribbon of clusterBusRibbons(group, pe => pe.netName)) {
-          const rep = ribbon.members[0];
+          // Prefer an active/focused member as the ribbon representative so its
+          // (active) style + netName win — otherwise focusing a single bus
+          // member that isn't the lowest-index one wouldn't light the wire.
+          const rep = (activeNet && ribbon.members.find(m => m.netName === activeNet)) || ribbon.members[0];
           const isBus = ribbon.members.length > 1;
           edges.push({
             id: rep.id,
@@ -297,18 +319,24 @@ function Canvas() {
 
   const cell = design?.cells.get(currentCell);
 
-  useEffect(() => {
-    if (!cell) return;
-    setLaying(true);
-    layoutCell(cell, design, nodeLayout).then(pos => { setPositions(pos); setLaying(false); });
-  }, [currentCell, design, nodeLayout]);
+  // The schematic renders a "view" of the cell where scalarized instance arrays
+  // (and boundary port buses) are folded into single stacked nodes — otherwise a
+  // thousand-wide array would lay out and mount a thousand blocks and crash the
+  // canvas. Everything downstream (ELK, buildGraph, highlight) consumes the view.
+  const view = useMemo(() => (cell ? buildCellView(cell) : null), [cell]);
 
   useEffect(() => {
-    if (!cell || positions.size === 0) return;
-    const { nodes: n, edges: e } = buildGraph(cell, selection, mode, hideSupply, focusNet, design, positions);
+    if (!view) return;
+    setLaying(true);
+    layoutCell(view, design, nodeLayout).then(pos => { setPositions(pos); setLaying(false); });
+  }, [view, design, nodeLayout]);
+
+  useEffect(() => {
+    if (!view || positions.size === 0) return;
+    const { nodes: n, edges: e } = buildGraph(view, selection, mode, hideSupply, focusNet, design, positions);
     setNodes(n);
     setEdges(e);
-  }, [cell, positions, selection, mode, hideSupply, focusNet, design]);
+  }, [view, positions, selection, mode, hideSupply, focusNet, design]);
 
   // Pan/zoom the viewport to the current selection whenever the cell changed
   // (descend/ascend/search jumped here) or a search jump landed on a result
@@ -321,7 +349,7 @@ function Canvas() {
   const prevCellRef = useRef<string | null>(null);
   const prevFocusRef = useRef(focusRequest);
   useEffect(() => {
-    if (!cell || positions.size === 0) return;
+    if (!view || positions.size === 0) return;
     const cellChanged = prevCellRef.current !== currentCell;
     const navRequested = prevFocusRef.current !== focusRequest;
     if (!cellChanged && !navRequested) return;
@@ -329,10 +357,12 @@ function Canvas() {
     prevFocusRef.current = focusRequest;
 
     let targetIds: string[] = [];
-    if (selection?.type === 'instance' || selection?.type === 'primitive') {
-      targetIds = [selection.id];
+    if (selection?.type === 'instance') {
+      targetIds = [view.instancesById.get(selection.id)?.id ?? selection.id];
+    } else if (selection?.type === 'primitive') {
+      targetIds = [view.primitivesById.get(selection.id)?.id ?? selection.id];
     } else if (selection?.type === 'net') {
-      targetIds = [...computeHighlight(cell, selection).nodes];
+      targetIds = [...computeHighlight(view, selection).nodes];
     }
     if (targetIds.length === 0) targetIds = [...positions.keys()];
 
@@ -346,7 +376,7 @@ function Canvas() {
       { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) },
       { padding: 0.3, duration: 400 },
     );
-  }, [positions, currentCell, focusRequest, selection, cell, fitBounds]);
+  }, [positions, currentCell, focusRequest, selection, view, fitBounds]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes(nds => applyNodeChanges(changes, nds));

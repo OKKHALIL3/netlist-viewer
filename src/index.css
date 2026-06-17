@@ -246,6 +246,32 @@ body {
 .inst-node.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
 .inst-node.connected { border-color: var(--sel); box-shadow: 0 0 0 1px rgba(255,210,63,0.4); }
 
+/* An instance ARRAY (a scalarized bus like Xbit<1023:0> folded into one block)
+   reads as a stack of cards behind each other — two offset "ghost cards" drawn
+   purely with box-shadow so the node DOM and its absolutely-positioned pin
+   handles are unchanged (no wire drift). The stack is kept in every state via
+   --array-stack so hover/selection glows compose with it rather than wiping it. */
+.inst-node.array {
+  --array-stack:
+    4px 4px 0 0 #1a212c, 4px 4px 0 1px #33425a,
+    8px 8px 0 0 #161c25, 8px 8px 0 1px #33425a;
+  box-shadow: var(--array-stack);
+}
+.inst-node.array:hover { box-shadow: var(--array-stack), 0 0 0 1px var(--accent), 0 8px 20px rgba(0,0,0,0.5); }
+.inst-node.array.sel { box-shadow: var(--array-stack), 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
+.inst-node.array.connected { box-shadow: var(--array-stack), 0 0 0 1px rgba(255,210,63,0.4); }
+
+/* "×N" count chip in the array block header (top-right corner). */
+.array-badge {
+  position: absolute;
+  top: 5px; right: 6px;
+  z-index: 4;
+  font-family: 'Space Mono', monospace; font-size: 9.5px; font-weight: 700;
+  color: var(--bg); background: var(--accent);
+  padding: 1px 5px; border-radius: 7px; line-height: 13px;
+  pointer-events: none;
+}
+
 /* Header and rows use FIXED heights that must match the HEADER_H (42) and
    PIN_ROW_H (20) constants in InstanceNode.tsx (handle positions) and
    layout/elk.ts (reserved node height). Pin handles are absolutely
@@ -391,6 +417,18 @@ body {
 .prim-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prim-model { color: var(--txt-faint); }
 
+/* A DEVICE ARRAY (scalarized M/R/C bus like M0<4095:0> folded into one symbol):
+   offset "ghost" rectangles behind the symbol echo the stacked instance blocks,
+   and the shared ×N badge floats at the corner. */
+.prim-node.array .prim-symbol,
+.prim-node.array .prim-glyph {
+  box-shadow:
+    3px 3px 0 -1px #11161d, 3px 3px 0 0 #33425a,
+    6px 6px 0 -1px #11161d, 6px 6px 0 0 #33425a;
+  border-radius: 4px;
+}
+.prim-node.array .array-badge { top: -7px; right: -10px; }
+
 /* ── Port node (cell-boundary connection) ─────────────────────────
    A directional "flag" that points toward the design, with the wire exiting
    its tip. Inputs sit on the left boundary (flag points right), outputs on the
@@ -418,6 +456,20 @@ body {
   max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .port-node.connected .port-label { color: var(--txt-dim); }
+
+/* A boundary port BUS (in<1023:0> folded from in<0>..in<1023>): the flag gets
+   stacked-card shadows to echo the array blocks, the bus "<hi:lo>" label is
+   given more room, and a "×N" bit-count chip trails it. */
+.port-node.array .port-flag {
+  box-shadow: 2px 2px 0 0 var(--port), 4px 4px 0 0 var(--port);
+  opacity: 0.95;
+}
+.port-node.array .port-label { max-width: 96px; color: var(--txt-dim); }
+.port-count {
+  font-family: 'Space Mono', monospace; font-size: 8px; font-weight: 700;
+  color: var(--bg); background: var(--port);
+  padding: 0 4px; border-radius: 6px; line-height: 12px; flex-shrink: 0;
+}
 
 /* ── Right inspector panel ─────────────────────────────────── */
 .panel-right {
@@ -471,6 +523,9 @@ body {
 .conn-pin { color: var(--txt); }
 .conn-net { color: var(--accent); cursor: pointer; }
 .conn-net:hover { text-decoration: underline; }
+/* A collapsed per-member bus label (e.g. "D<1023:0>") isn't a single net, so
+   it's shown as plain non-clickable text rather than a net link. */
+.conn-net.plain { color: var(--txt-faint); cursor: default; }
 
 .ai-desc-text {
   font-size: 12px; line-height: 1.6; color: var(--txt-dim);

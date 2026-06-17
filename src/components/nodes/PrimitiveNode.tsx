@@ -8,6 +8,9 @@ export interface PrimitiveNodeData extends Record<string, unknown> {
   primitive: Primitive;
   isSelected: boolean;
   isConnected: boolean;
+  // >1 when this device stands in for a scalarized device array (e.g.
+  // M0<4095:0>): rendered as a stacked symbol with a ×N badge.
+  arraySize?: number;
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -27,11 +30,12 @@ function kindLabel(prim: Primitive): string {
 
 export function PrimitiveNode({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
-  const { primitive, isSelected, isConnected } = d;
+  const { primitive, isSelected, isConnected, arraySize } = d;
   const { setSelection } = useViewerStore();
 
   const color = KIND_COLOR[primitive.kind] ?? 'var(--txt-dim)';
   const sym = deviceSymbol(primitive);
+  const isArray = (arraySize ?? 1) > 1;
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -39,16 +43,21 @@ export function PrimitiveNode({ data }: NodeProps) {
   };
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
+  const arrayClass = isArray ? ' array' : '';
+  const arrayBadge = isArray ? (
+    <div className="array-badge" title={`Array — ${arraySize} devices`}>×{arraySize}</div>
+  ) : null;
 
   // Fallback: no symbol for this kind — keep the old labelled glyph box so
   // unusual devices still render and stay wired.
   if (!sym) {
     return (
       <div
-        className={`prim-node${stateClass}`}
+        className={`prim-node${stateClass}${arrayClass}`}
         onClick={handleClick}
         style={{ '--prim-color': color } as React.CSSProperties}
       >
+        {arrayBadge}
         {primitive.terms.map(([term], i) => (
           <Fragment key={term}>
             <Handle type="target" position={Position.Left} id={`${term}-tgt`}
@@ -68,10 +77,11 @@ export function PrimitiveNode({ data }: NodeProps) {
 
   return (
     <div
-      className={`prim-node sym${stateClass}`}
+      className={`prim-node sym${stateClass}${arrayClass}`}
       onClick={handleClick}
       style={{ '--prim-color': color } as React.CSSProperties}
     >
+      {arrayBadge}
       <div className="prim-symbol" style={{ width: sym.width, height: sym.height }}>
         {sym.svg}
         {/* One source + one target handle per terminal, anchored exactly on the

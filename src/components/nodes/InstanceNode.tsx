@@ -2,7 +2,16 @@ import { Fragment } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useViewerStore } from '../../store/viewerStore';
 import { computeInstanceLayout, computeRadialLayout, type PlacedRow, type PinGroup } from '../../layout/pinGroups';
+import { netInBusLabel } from '../../layout/busGrouping';
 import type { Instance, Port } from '../../parser/types';
+
+// A pin row is "active" when the focused/selected net is one of its nets — or,
+// on a collapsed array block, when the focused net is a single member of the
+// row's collapsed bus label (e.g. activeNet "D<5>" vs row label "D<1023:0>").
+function rowMatchesActive(nets: string[], activeNet: string | null): boolean {
+  if (!activeNet) return false;
+  return nets.some(n => n === activeNet || netInBusLabel(activeNet, n));
+}
 
 export interface InstanceNodeData extends Record<string, unknown> {
   instance: Instance;
@@ -13,6 +22,10 @@ export interface InstanceNodeData extends Record<string, unknown> {
   // wire can be traced to its exact pin even when its drawn path loops
   // around the block and passes near other pins.
   activeNet: string | null;
+  // >1 when this block stands in for a scalarized instance array (e.g.
+  // `Xbit<1023:0>` = 1024 members). Rendered as a stacked "cards behind each
+  // other" block with a ×N badge so it reads as a bundle, not one instance.
+  arraySize?: number;
 }
 
 const GROUP_COLOR: Record<PinGroup, string> = {
@@ -29,7 +42,7 @@ const GROUP_COLOR: Record<PinGroup, string> = {
 // net's own (brighter) category color.
 function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string) {
   const isOutput = p.group === 'output';
-  const isActive = !!activeNet && p.row.nets.includes(activeNet);
+  const isActive = rowMatchesActive(p.row.nets, activeNet);
   const position = p.side === 'left' ? Position.Left : Position.Right;
   const posStyle = { top: p.y, left: p.x, transform: 'translate(-50%, -50%)' };
   const visibleStyle = {
@@ -63,7 +76,7 @@ function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string)
 // Inspector). Highlighted in the active net's category color when focused.
 function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: string | null; activeColor: string }) {
   const { row } = p;
-  const isActive = !!activeNet && row.nets.includes(activeNet);
+  const isActive = rowMatchesActive(row.nets, activeNet);
   return (
     <div
       className={`pin-row edge${row.isBus ? ' bus' : ''}${isActive ? ' active-net' : ''}`}
@@ -77,8 +90,9 @@ function EdgePinRow({ p, activeNet, activeColor }: { p: PlacedRow; activeNet: st
 
 export function InstanceNode({ data }: NodeProps) {
   const d = data as InstanceNodeData;
-  const { instance, masterPorts, isSelected, isConnected, activeNet } = d;
+  const { instance, masterPorts, isSelected, isConnected, activeNet, arraySize } = d;
   const { descend, setSelection, design, currentCell, nodeLayout } = useViewerStore();
+  const isArray = (arraySize ?? 1) > 1;
 
   // Pins are grouped into IN / OUT / PWR / GND; supply/ground membership comes
   // from the net's kind, so we need a name → kind lookup.
@@ -106,6 +120,10 @@ export function InstanceNode({ data }: NodeProps) {
   };
 
   const stateClass = isSelected ? ' sel' : isConnected ? ' connected' : '';
+  const arrayClass = isArray ? ' array' : '';
+  const arrayBadge = isArray ? (
+    <span className="array-badge" title={`Array — ${arraySize} members`}>×{arraySize}</span>
+  ) : null;
 
   // BETA: a wide instance block with pins on both side edges. Pins are ordered
   // by group and split evenly between the left and right columns, so big
@@ -115,15 +133,16 @@ export function InstanceNode({ data }: NodeProps) {
     const layout = computeRadialLayout(instance.conn, masterPorts, netKindOf);
     return (
       <div
-        className={`inst-node beta-edges${stateClass}`}
+        className={`inst-node beta-edges${stateClass}${arrayClass}`}
         style={{ width: layout.width, height: layout.height }}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        title="Double-click to descend"
+        title={isArray ? `Array of ${arraySize} — double-click to descend` : 'Double-click to descend'}
       >
         {layout.rows.map(p => edgeHandle(p, activeNet, activeColor))}
 
         <div className="inst-head">
+          {arrayBadge}
           <span className="inst-id">{instance.id}</span>
           <span className="inst-master" title={instance.master}>{instance.master}</span>
         </div>
@@ -144,10 +163,10 @@ export function InstanceNode({ data }: NodeProps) {
   const { sections } = computeInstanceLayout(instance.conn, masterPorts, netKindOf);
   return (
     <div
-      className={`inst-node${stateClass}`}
+      className={`inst-node${stateClass}${arrayClass}`}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
-      title="Double-click to descend"
+      title={isArray ? `Array of ${arraySize} — double-click to descend` : 'Double-click to descend'}
     >
       {/* Per-row handles — every row (a single pin, or a collapsed bus of
           consecutive pins) gets both a source and a target handle anchored to
@@ -157,7 +176,7 @@ export function InstanceNode({ data }: NodeProps) {
         section.rows.map(({ row, top }) => {
           const isOutput = section.group === 'output';
           const position = isOutput ? Position.Right : Position.Left;
-          const isActive = !!activeNet && row.nets.includes(activeNet);
+          const isActive = rowMatchesActive(row.nets, activeNet);
           const visibleStyle = {
             top,
             background: isActive ? activeColor : isOutput ? 'var(--pin-o)' : 'var(--pin-i)',
@@ -187,6 +206,7 @@ export function InstanceNode({ data }: NodeProps) {
       )}
 
       <div className="inst-head">
+        {arrayBadge}
         <span className="inst-id">{instance.id}</span>
         <span className="inst-master" title={instance.master}>{instance.master}</span>
       </div>
@@ -195,7 +215,7 @@ export function InstanceNode({ data }: NodeProps) {
           <div className="pin-section" key={section.group}>
             <div className="pin-section-head" style={{ color: section.color }}>{section.label}</div>
             {section.rows.map(({ row }) => {
-              const isActive = !!activeNet && row.nets.includes(activeNet);
+              const isActive = rowMatchesActive(row.nets, activeNet);
               return (
                 <div
                   key={row.repPin}
