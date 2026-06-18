@@ -165,6 +165,12 @@ function InstanceNodeImpl({ data }: NodeProps) {
           <span className="inst-master" title={instance.master}>{instance.master}</span>
         </div>
 
+        {layout.sections.map(s => (
+          <div key={s.group} className="beta-section" style={{ top: s.y, color: s.color }}>
+            {s.label}
+          </div>
+        ))}
+
         {layout.rows.map(p => (
           <BetaPinLabel key={p.row.repPin} p={p} width={layout.width} activeNet={activeNet} activeColor={activeColor} />
         ))}

@@ -370,9 +370,10 @@ body {
 .pin-row.bus::after { transform: translate(4px, 4px); }
 
 /* ── Beta layout: a compact schematic-symbol block, pins on all four edges ────
-   Inputs on the left edge, outputs on the right (each wrapping into sub-columns
-   when long), supply along the top, ground along the bottom. Every label is
-   absolutely placed from computeRadialLayout so it lines up with its handle. */
+   The INPUT group then the OUTPUT group each fill both side columns (left/right
+   down the rows), with supply along the top and ground along the bottom. Every
+   label is absolutely placed from computeRadialLayout so it lines up with its
+   handle; the INPUTS/OUTPUTS dividers are centered between the bands. */
 .inst-node.beta-edges { min-width: 0; }
 .inst-node.beta-edges .beta-pin {
   position: absolute;
@@ -383,6 +384,12 @@ body {
 .inst-node.beta-edges .beta-pin.bus,
 .inst-node.beta-edges .beta-pin.active-net { font-weight: 700; }
 .inst-node.beta-edges .beta-pin.active-net { color: inherit; }
+/* Centered INPUTS / OUTPUTS divider between the supply and ground bands. */
+.inst-node.beta-edges .beta-section {
+  position: absolute; left: 50%; transform: translate(-50%, -50%);
+  font-family: 'Space Mono', monospace; font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.12em; opacity: 0.7; pointer-events: none; white-space: nowrap;
+}
 
 /* ── Primitive node ────────────────────────────────────────── */
 .prim-node {
