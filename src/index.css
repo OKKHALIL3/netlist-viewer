@@ -257,8 +257,23 @@ body {
   overflow: hidden;
 }
 .inst-node:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 8px 20px rgba(0,0,0,0.5); }
-.inst-node.sel { border-color: var(--sel); box-shadow: 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
-.inst-node.connected { border-color: var(--sel); box-shadow: 0 0 0 1px rgba(255,210,63,0.4); }
+/* The SELECTED node (e.g. where a search jump lands) must read as "the one" at
+   a glance — a bold 2px ring + strong glow, plus a one-shot expanding "ping" so
+   the eye snaps to it among everything its net lights up. CONNECTED nodes share
+   its net and stay deliberately subordinate: a thin, dim ring with no glow. */
+.inst-node.sel {
+  border-color: var(--sel);
+  box-shadow: 0 0 0 2px var(--sel), 0 0 22px 2px rgba(255,210,63,0.45);
+  outline: 2px solid transparent;
+  animation: node-ping 1.1s ease-out 3;
+}
+.inst-node.connected { border-color: rgba(255,210,63,0.4); box-shadow: 0 0 0 1px rgba(255,210,63,0.22); }
+
+/* Expanding ring that fades outward — fires when a node becomes selected. */
+@keyframes node-ping {
+  0% { outline-color: rgba(255,210,63,0.85); outline-offset: 1px; }
+  100% { outline-color: rgba(255,210,63,0); outline-offset: 13px; }
+}
 
 /* An instance ARRAY (a scalarized bus like Xbit<1023:0> folded into one block)
    reads as a stack of cards behind each other — two offset "ghost cards" drawn
@@ -272,8 +287,8 @@ body {
   box-shadow: var(--array-stack);
 }
 .inst-node.array:hover { box-shadow: var(--array-stack), 0 0 0 1px var(--accent), 0 8px 20px rgba(0,0,0,0.5); }
-.inst-node.array.sel { box-shadow: var(--array-stack), 0 0 0 1px var(--sel), 0 0 18px rgba(255,210,63,0.25); }
-.inst-node.array.connected { box-shadow: var(--array-stack), 0 0 0 1px rgba(255,210,63,0.4); }
+.inst-node.array.sel { box-shadow: var(--array-stack), 0 0 0 2px var(--sel), 0 0 22px 2px rgba(255,210,63,0.45); }
+.inst-node.array.connected { box-shadow: var(--array-stack), 0 0 0 1px rgba(255,210,63,0.22); }
 
 /* "×N" count chip in the array block header (top-right corner). */
 .array-badge {
@@ -399,11 +414,17 @@ body {
 }
 .prim-node.sel .prim-glyph {
   border-color: var(--sel) !important;
-  box-shadow: 0 0 12px rgba(255,210,63,0.3);
+  box-shadow: 0 0 0 2px var(--sel), 0 0 16px rgba(255,210,63,0.4);
 }
 .prim-node.connected .prim-glyph {
-  border-color: var(--sel) !important;
-  box-shadow: 0 0 8px rgba(255,210,63,0.2);
+  border-color: rgba(255,210,63,0.45) !important;
+  box-shadow: 0 0 6px rgba(255,210,63,0.15);
+}
+/* Same expanding "ping" as instance nodes when a device is the search target. */
+.prim-node.sel .prim-glyph,
+.prim-node.sym.sel .prim-symbol {
+  outline: 2px solid transparent;
+  animation: node-ping 1.1s ease-out 3;
 }
 
 .prim-glyph {
@@ -429,10 +450,13 @@ body {
   position: absolute; left: 0; top: 0;
   overflow: visible; pointer-events: none;
 }
-.prim-node.sym.sel .prim-symbol,
+.prim-node.sym.sel .prim-symbol {
+  color: var(--sel);
+  filter: drop-shadow(0 0 8px rgba(255, 210, 63, 0.6));
+}
 .prim-node.sym.connected .prim-symbol {
   color: var(--sel);
-  filter: drop-shadow(0 0 6px rgba(255, 210, 63, 0.45));
+  filter: drop-shadow(0 0 5px rgba(255, 210, 63, 0.3));
 }
 
 .prim-label {

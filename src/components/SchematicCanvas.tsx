@@ -186,6 +186,22 @@ function buildGraph(
     });
   }
 
+  // Cell-boundary port flags point toward the design so the wire exits the fin
+  // tip. Which way "toward the design" is depends on the edge ELK actually
+  // placed the port on — not its declared PININFO direction, which is often
+  // missing or disagrees with the laid-out side. Deriving the side from the
+  // port's x against the core's horizontal midpoint keeps every fin on an edge
+  // pointing the same way (inward), instead of a stray input-flagged port on
+  // the right edge pointing its fin and wire stub back out of the cell.
+  let coreMinX = Infinity, coreMaxX = -Infinity;
+  for (const core of [...cell.instances, ...cell.primitives]) {
+    const p = positions.get(core.id);
+    if (!p) continue;
+    coreMinX = Math.min(coreMinX, p.x);
+    coreMaxX = Math.max(coreMaxX, p.x + p.width);
+  }
+  const coreCenterX = coreMinX <= coreMaxX ? (coreMinX + coreMaxX) / 2 : 0;
+
   if (mode !== 'inst') {
     const addedPorts = new Set<string>();
 
@@ -232,11 +248,12 @@ function buildGraph(
         const port = cell.ports.find(p => p.name === ep.portName);
         if (!pos || !port) continue;
         addedPorts.add(ep.nodeId);
+        const side = (pos.x + pos.width / 2) >= coreCenterX ? 'right' : 'left';
         nodes.push({
           id: ep.nodeId,
           type: 'portNode',
           position: { x: pos.x, y: pos.y },
-          data: { port, isFocused, isHighlighted, repNet: port.repNet, isArrayPort: port.isArray, count: port.count } as PortNodeData,
+          data: { port, isFocused, isHighlighted, side, repNet: port.repNet, isArrayPort: port.isArray, count: port.count } as PortNodeData,
         });
       }
 

@@ -16,6 +16,10 @@ export interface PortNodeData extends Record<string, unknown> {
   repNet?: string;
   isArrayPort?: boolean;
   count?: number;
+  // Which boundary edge the layout placed this port on. Drives the fin
+  // direction for signal ports (see below) so it follows the actual side
+  // rather than the declared — often missing — PININFO direction.
+  side?: 'left' | 'right';
 }
 
 function PortNodeImpl({ data }: NodeProps) {
@@ -45,14 +49,16 @@ function PortNodeImpl({ data }: NodeProps) {
 
   // Supply/ground ports live on the top/bottom rails (see repositionSupplyRails)
   // with the design below/above them, so their wire exits the bottom/top.
-  // Signal outputs sit on the right boundary (design to their left), inputs on
-  // the left (design to their right). Put the handle on the design-facing side
-  // and point the flag that way, so the wire comes straight out of the pin tip.
-  const isOutput = port.dir === 'O';
+  // Signal ports point toward the design with the wire leaving the fin tip:
+  // ports laid out on the right boundary point left, those on the left point
+  // right. The side comes from the layout (passed in via `side`) so a port
+  // whose PININFO direction disagrees with where it actually landed still
+  // points inward; we fall back to the declared direction if no side is given.
+  const onRight = d.side ? d.side === 'right' : port.dir === 'O';
   const handlePos = isPower ? Position.Bottom
     : isGround ? Position.Top
-    : isOutput ? Position.Left : Position.Right;
-  const orientClass = isPower ? ' pwr' : isGround ? ' gnd' : isOutput ? ' out' : ' in';
+    : onRight ? Position.Left : Position.Right;
+  const orientClass = isPower ? ' pwr' : isGround ? ' gnd' : onRight ? ' out' : ' in';
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -88,7 +94,7 @@ function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PortNodeData;
   const y = b.data as PortNodeData;
   return x.port === y.port && x.isFocused === y.isFocused && x.isHighlighted === y.isHighlighted &&
-    x.label === y.label && x.isBus === y.isBus && x.repNet === y.repNet &&
+    x.label === y.label && x.isBus === y.isBus && x.repNet === y.repNet && x.side === y.side &&
     x.isArrayPort === y.isArrayPort && x.count === y.count;
 }
 
