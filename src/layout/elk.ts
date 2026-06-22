@@ -196,14 +196,14 @@ function repositionSupplyRails(
   placeRow(groundPorts, maxY + ROW_GAP);
 }
 
-// ELK stacks every cell-boundary signal port in a single column per side, so a
-// cell with many inputs/outputs gets a port stack far taller than the schematic
-// it frames — the whole view ends up dominated by vertical whitespace. Wrap each
-// over-long side stack into a few side-by-side columns, adaptively: the number
-// of columns is whatever it takes for the stack to be no taller than the core
-// (capped at MAX_PORT_COLS), so small designs are left as a single column and
-// only the genuinely tall ones get compressed. Trades a little width for a much
-// shorter vertical spread. Supply/ground rails are placed separately above.
+// ELK aligns each cell-boundary signal port with whatever it wires to, so on a
+// tall schematic even a handful of ports get strung out across the whole height
+// with big gaps — the view ends up dominated by vertical whitespace. Repack each
+// side's stack into a compact, centred grid: a tight single column when there
+// are only a few ports, wrapping into 2-3 side-by-side columns as the count
+// grows, adaptively — taller cores hold more per column, shorter cores wrap
+// sooner. Trades a little width for a much shorter vertical spread. Supply/ground
+// rails are placed separately above and are left untouched.
 function compressBoundaryPorts(
   portGroups: ReturnType<typeof groupPorts>,
   netKindOf: (net: string) => string,
@@ -224,7 +224,9 @@ function compressBoundaryPorts(
   const coreCenterX = (minX + maxX) / 2;
   const coreCenterY = (minY + maxY) / 2;
   const coreHeight = Math.max(maxY - minY, PORT_ROW_PITCH);
-  const fit = Math.max(1, Math.floor(coreHeight / PORT_ROW_PITCH));
+  // How many ports a single column can hold within the core's height — the
+  // "size of design" the wrapping adapts to.
+  const perCol = Math.max(2, Math.floor(coreHeight / PORT_ROW_PITCH));
 
   // Signal ports only — rails were already lifted to the top/bottom rows.
   const left: string[] = [], right: string[] = [];
@@ -242,15 +244,26 @@ function compressBoundaryPorts(
   // already minimised crossings — and snakes the ports across the columns row
   // by row so each column spans the full height.
   const layoutSide = (ids: string[], dir: -1 | 1) => {
-    if (ids.length <= fit) return; // already fits in one column — leave it
-    const cols = Math.min(MAX_PORT_COLS, Math.ceil(ids.length / fit));
-    const rows = Math.ceil(ids.length / cols);
-    const sorted = [...ids].sort((a, b) => positions.get(a)!.y - positions.get(b)!.y);
+    const n = ids.length;
+    if (n < 2) return;
+    // A few ports stay in one (compact) column; once there are several, split
+    // into at least two side-by-side columns, adding a third only when even two
+    // would run taller than the core. Capped at MAX_PORT_COLS.
+    let cols = Math.min(MAX_PORT_COLS, Math.ceil(n / perCol));
+    if (n >= 4) cols = Math.max(cols, 2);
+    cols = Math.min(cols, n);
+    const rows = Math.ceil(n / cols);
+    const gridHeight = (rows - 1) * PORT_ROW_PITCH;
+
+    const xs = ids.map(id => positions.get(id)!.x);
+    const ys = ids.map(id => positions.get(id)!.y);
+    // Already compact in one column? Leave ELK's wire-aligned placement.
+    if (cols === 1 && Math.max(...ys) - Math.min(...ys) <= gridHeight * 1.15) return;
+
     // Anchor the inner column where ELK already placed this side.
-    const anchorX = dir < 0
-      ? Math.max(...ids.map(id => positions.get(id)!.x))
-      : Math.min(...ids.map(id => positions.get(id)!.x));
-    const startY = coreCenterY - ((rows - 1) * PORT_ROW_PITCH) / 2;
+    const anchorX = dir < 0 ? Math.max(...xs) : Math.min(...xs);
+    const startY = coreCenterY - gridHeight / 2;
+    const sorted = [...ids].sort((a, b) => positions.get(a)!.y - positions.get(b)!.y);
     sorted.forEach((id, i) => {
       const pos = positions.get(id)!;
       positions.set(id, {
