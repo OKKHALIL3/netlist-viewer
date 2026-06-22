@@ -486,10 +486,10 @@ body {
 .prim-node.array .array-badge { top: -7px; right: -10px; }
 
 /* ── Port node (cell-boundary connection) ─────────────────────────
-   A directional "flag" planted on the cell boundary, pointing OUTWARD (away
-   from the design) with the wire attaching to its flat inner base — the
-   conventional I/O-marker reading. Left-boundary ports point left, right-
-   boundary ports point right; the label sits on the outer side. */
+   A directional "flag" following signal flow (left→right): every signal port
+   points RIGHT. Left-boundary ports (inputs) point right INTO the design with
+   the wire exiting the tip; right-boundary ports (outputs) point right OUT of
+   the design with the wire on the inner base. The label sits on the outer side. */
 .port-node {
   display: flex; align-items: center; gap: 6px;
   cursor: pointer; position: relative;
@@ -499,13 +499,10 @@ body {
   position: relative;
   width: 15px; height: 16px; flex-shrink: 0;
   background: var(--port);
-  /* points left (outward — left-boundary ports, wire on the inner/right base) */
-  clip-path: polygon(45% 0, 100% 0, 100% 100%, 45% 100%, 0 50%);
-  transition: background 0.12s, box-shadow 0.12s;
-}
-.port-node.out .port-flag {
-  /* points right (outward — right-boundary ports, wire on the inner/left base) */
+  /* points right — left-boundary inputs point into the design (wire at the tip),
+     right-boundary outputs point out of it (wire on the inner base via .out). */
   clip-path: polygon(0 0, 55% 0, 100% 50%, 55% 100%, 0 100%);
+  transition: background 0.12s, box-shadow 0.12s;
 }
 /* A bundled port bus (e.g. addr<30:0>) — taller flag with a stacked-shadow
    trail so it reads as several pins collapsed into one, matching bus wires. */
@@ -514,18 +511,17 @@ body {
   box-shadow: 2px 2px 0 rgba(45, 212, 191, 0.35), 4px 4px 0 rgba(45, 212, 191, 0.18);
 }
 .port-node.bus .port-label { color: var(--txt-dim); font-weight: 700; }
-/* Supply/ground ports sit on the top/bottom rails and point outward away from
-   the design (up for power at the top, down for ground at the bottom), with the
-   wire attaching to the inner base — same outward convention as the side ports. */
+/* Supply/ground ports sit on the top/bottom rails and point into the design
+   (down for power at the top, up for ground at the bottom). */
 .port-node.pwr { flex-direction: column; }
 .port-node.gnd { flex-direction: column-reverse; }
 .port-node.pwr .port-flag {
-  /* points up (outward — top rail, wire on the inner/bottom base) */
-  clip-path: polygon(50% 0, 100% 55%, 100% 100%, 0 100%, 0 55%);
+  /* points down (toward the design below) */
+  clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
 }
 .port-node.gnd .port-flag {
-  /* points down (outward — bottom rail, wire on the inner/top base) */
-  clip-path: polygon(0 0, 100% 0, 100% 45%, 50% 100%, 0 45%);
+  /* points up (toward the design above) */
+  clip-path: polygon(50% 0, 100% 55%, 100% 100%, 0 100%, 0 55%);
 }
 .port-label {
   font-size: 9.5px; font-family: 'Space Mono', monospace;
