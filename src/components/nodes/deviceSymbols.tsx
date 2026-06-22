@@ -1,3 +1,13 @@
+// @jsxRuntime automatic
+// @jsxImportSource react
+//
+// The browser build uses the automatic JSX runtime (tsconfig.app.json's
+// `jsx: react-jsx`), but the headless layout path (server/subcircuit_visualize
+// → elk → deviceFootprint → deviceSymbol) is transpiled by `tsx`, which ignores
+// that tsconfig and defaults to the classic transform — emitting bare
+// `React.createElement` with no React import, so building a glyph to measure it
+// threw "React is not defined". These pragmas pin this file to the automatic
+// runtime in both pipelines, matching the browser build.
 import { Position } from '@xyflow/react';
 import type { Primitive } from '../../parser/types';
 
