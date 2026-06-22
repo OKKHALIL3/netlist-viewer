@@ -19,6 +19,10 @@ const PRIM_SIZE = 56;
 const PRIM_LABEL = 30; // room under a device for its id/model caption
 const PORT_WIDTH = 70;
 const PORT_HEIGHT = 54;
+// Multi-column wrapping for tall cell-boundary port stacks (compressBoundaryPorts).
+const MAX_PORT_COLS = 3;     // never widen a side into more than this many columns
+const PORT_ROW_PITCH = 42;   // vertical gap between stacked flags once wrapped
+const PORT_COL_PITCH = 120;  // horizontal gap between wrapped columns (flag + label)
 
 let elkInstance: InstanceType<typeof ELK> | null = null;
 function getElk() {
@@ -136,6 +140,7 @@ export async function layoutCell(
       });
     }
     repositionSupplyRails(portGroups, netKindOf, positions);
+    compressBoundaryPorts(portGroups, netKindOf, positions);
     return positions;
   } catch (err) {
     console.warn('ELK layout failed, using fallback grid', err);
@@ -189,6 +194,75 @@ function repositionSupplyRails(
 
   placeRow(powerPorts, minY - ROW_GAP - PORT_HEIGHT);
   placeRow(groundPorts, maxY + ROW_GAP);
+}
+
+// ELK stacks every cell-boundary signal port in a single column per side, so a
+// cell with many inputs/outputs gets a port stack far taller than the schematic
+// it frames — the whole view ends up dominated by vertical whitespace. Wrap each
+// over-long side stack into a few side-by-side columns, adaptively: the number
+// of columns is whatever it takes for the stack to be no taller than the core
+// (capped at MAX_PORT_COLS), so small designs are left as a single column and
+// only the genuinely tall ones get compressed. Trades a little width for a much
+// shorter vertical spread. Supply/ground rails are placed separately above.
+function compressBoundaryPorts(
+  portGroups: ReturnType<typeof groupPorts>,
+  netKindOf: (net: string) => string,
+  positions: Map<string, NodePosition>,
+): void {
+  const portId = (name: string) => `__port__:${name}`;
+  const portIds = new Set(portGroups.map(g => portId(g.repName)));
+
+  // Core bounds (everything that isn't a boundary port) give the height the
+  // columns should fit within and the centre to split left from right around.
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [id, p] of positions) {
+    if (portIds.has(id)) continue;
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x + p.width);
+    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y + p.height);
+  }
+  if (!isFinite(minX)) return;
+  const coreCenterX = (minX + maxX) / 2;
+  const coreCenterY = (minY + maxY) / 2;
+  const coreHeight = Math.max(maxY - minY, PORT_ROW_PITCH);
+  const fit = Math.max(1, Math.floor(coreHeight / PORT_ROW_PITCH));
+
+  // Signal ports only — rails were already lifted to the top/bottom rows.
+  const left: string[] = [], right: string[] = [];
+  for (const g of portGroups) {
+    const kind = netKindOf(g.repName);
+    if (kind === 'power' || kind === 'ground') continue;
+    const id = portId(g.repName);
+    const p = positions.get(id);
+    if (!p) continue;
+    (p.x + p.width / 2 < coreCenterX ? left : right).push(id);
+  }
+
+  // Lay one side's stack out as a grid growing outward from the design
+  // (dir = -1 to the left, +1 to the right). Keeps ELK's vertical order — it
+  // already minimised crossings — and snakes the ports across the columns row
+  // by row so each column spans the full height.
+  const layoutSide = (ids: string[], dir: -1 | 1) => {
+    if (ids.length <= fit) return; // already fits in one column — leave it
+    const cols = Math.min(MAX_PORT_COLS, Math.ceil(ids.length / fit));
+    const rows = Math.ceil(ids.length / cols);
+    const sorted = [...ids].sort((a, b) => positions.get(a)!.y - positions.get(b)!.y);
+    // Anchor the inner column where ELK already placed this side.
+    const anchorX = dir < 0
+      ? Math.max(...ids.map(id => positions.get(id)!.x))
+      : Math.min(...ids.map(id => positions.get(id)!.x));
+    const startY = coreCenterY - ((rows - 1) * PORT_ROW_PITCH) / 2;
+    sorted.forEach((id, i) => {
+      const pos = positions.get(id)!;
+      positions.set(id, {
+        ...pos,
+        x: anchorX + dir * (i % cols) * PORT_COL_PITCH,
+        y: startY + Math.floor(i / cols) * PORT_ROW_PITCH,
+      });
+    });
+  };
+
+  layoutSide(left, -1);
+  layoutSide(right, 1);
 }
 
 function fallbackGrid(nodes: ElkNode[]): Map<string, NodePosition> {
