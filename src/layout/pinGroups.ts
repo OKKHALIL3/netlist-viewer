@@ -224,10 +224,12 @@ export function computeRadialLayout(
       x += widths[i];
     }
   };
-  // Dot sits near the band's outer edge (top for supply, bottom for ground);
-  // BetaPinLabel offsets the label inward so the dot never lands on the word.
-  layBand(supply, 'supply', 'top', HEADER_H + 9);
-  layBand(ground, 'ground', 'bottom', height - BODY_PAD - 9);
+  // Supply rides the very top edge of the symbol body, ground the very bottom
+  // edge of the box — each rail leaves the side that matches its type (VDD up,
+  // VSS down), the way a schematic symbol reads. BetaPinLabel offsets the label
+  // inward (below the top dot, above the bottom dot) so it never lands on the dot.
+  layBand(supply, 'supply', 'top', HEADER_H);
+  layBand(ground, 'ground', 'bottom', height - 4);
 
   const sections: RadialSection[] = [];
   if (inputs.length) sections.push({ group: 'input', label: 'INPUTS', color: GROUP_META.input.color, y: inSecTop + SECTION_H / 2 });
