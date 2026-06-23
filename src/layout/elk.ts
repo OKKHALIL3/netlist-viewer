@@ -162,13 +162,16 @@ function repositionSupplyRails(
   const groundPorts = portGroups.filter(g => netKindOf(g.repName) === 'ground').map(g => portId(g.repName));
   if (powerPorts.length === 0 && groundPorts.length === 0) return;
 
-  const rail = new Set([...powerPorts, ...groundPorts]);
+  // Frame the rails around the actual schematic core — the instance/primitive
+  // blocks — and exclude ALL boundary ports. The signal ports are still in
+  // ELK's spread-out positions at this point (compressBoundaryPorts recompacts
+  // them afterward), so counting them here would anchor a rail to a port that is
+  // about to move, floating the rails far above/below the real content.
+  const ports = new Set(portGroups.map(g => portId(g.repName)));
 
-  // Bounds of the core schematic — everything that is NOT a rail port — so the
-  // two rails frame the actual content rather than each other.
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const [id, p] of positions) {
-    if (rail.has(id)) continue;
+    if (ports.has(id)) continue;
     minX = Math.min(minX, p.x);
     maxX = Math.max(maxX, p.x + p.width);
     minY = Math.min(minY, p.y);
