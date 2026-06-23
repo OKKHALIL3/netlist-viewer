@@ -762,3 +762,32 @@ body {
 .layer-chip.off { opacity: 0.4; text-decoration: line-through; }
 .layer-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 .nolayer-note { font-size: 11px; color: var(--txt-faint); font-style: italic; line-height: 1.5; }
+
+/* Layout canvas overlays: Fit button, legend, coordinate readout */
+.layout-fit {
+  position: absolute; top: 54px; right: 12px; z-index: 6;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--txt-dim);
+  padding: 5px 11px; border-radius: 7px; font-size: 11.5px; cursor: pointer;
+  font-family: 'Space Mono', monospace;
+}
+.layout-fit:hover { color: var(--txt); border-color: var(--accent); }
+.layout-legend {
+  position: absolute; bottom: 10px; left: 14px; z-index: 6; display: flex; gap: 16px;
+  padding: 7px 14px; border-radius: 9px; background: rgba(12,15,20,0.78);
+  border: 1px solid var(--line-soft); backdrop-filter: blur(3px);
+}
+.layout-legend span {
+  display: flex; align-items: center; gap: 6px; font-size: 10.5px;
+  color: var(--txt-dim); font-family: 'Space Mono', monospace;
+}
+.layout-legend i { width: 15px; height: 10px; border-radius: 2px; display: inline-block; }
+.layout-legend .sw-inst { background: rgba(79,157,255,0.18); border: 1.5px solid #4f9dff; }
+.layout-legend .sw-net { background: rgba(95,208,160,0.10); border: 1.5px dashed #5fd0a0; }
+.layout-legend .sw-conn { background: none; border: none; border-top: 2px solid #c084fc; height: 0; }
+.layout-legend .sw-sel { background: rgba(255,210,63,0.15); border: 1.5px solid #ffd23f; }
+.layout-readout {
+  position: absolute; bottom: 12px; right: 14px; z-index: 6;
+  font-size: 11px; color: var(--txt-faint); font-family: 'Space Mono', monospace;
+  padding: 4px 9px; border-radius: 7px; background: rgba(12,15,20,0.7);
+}
+.layout-hint { font-size: 10.5px; color: var(--txt-faint); font-style: italic; margin: 2px 0 8px; }

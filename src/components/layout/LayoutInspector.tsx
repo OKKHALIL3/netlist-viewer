@@ -26,6 +26,7 @@ export function LayoutInspector() {
           <div className="sub-h">Instance bbox</div>
           <div className="bboxline">SW <b>{i.bbox[0].toFixed(2)}, {i.bbox[1].toFixed(2)}</b><br />NE <b>{i.bbox[2].toFixed(2)}, {i.bbox[3].toFixed(2)}</b></div>
           <div className="sub-h">Nets at this block ({nets.length})</div>
+          <div className="layout-hint">Click a net to outline how far it physically reaches.</div>
           <div>{nets.map(n => <span key={n.name} className="chip net" onClick={() => setSelection({ type: 'net', name: n.name })}>{n.name}</span>)}</div>
         </div>
       );
@@ -44,6 +45,11 @@ export function LayoutInspector() {
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
           <div className="sub-h">Net bbox</div>
           <div className="bboxline">SW <b>{n.bbox[0].toFixed(2)}, {n.bbox[1].toFixed(2)}</b><br />NE <b>{n.bbox[2].toFixed(2)}, {n.bbox[3].toFixed(2)}</b></div>
+          <div className="sub-h">Spans blocks ({n.instances.length})</div>
+          <div>{n.instances.map(id => {
+            const inst = model.instances.find(x => x.id === id);
+            return <span key={id} className="chip" onClick={() => setSelection({ type: 'instance', id })}>{inst?.label ?? id}</span>;
+          })}</div>
           <div className="sub-h">Metal layers</div>
           {model.layers.length === 0
             ? <div className="nolayer-note">Not available — this DSPF was extracted without layer tags.</div>
