@@ -34,7 +34,7 @@ const GROUP_COLOR: Record<PinGroup, string> = {
 // The dot is colored by the pin's GROUP (not its side, since both sides hold a
 // mix). Center is set exactly at (x, y); an active pin lights up in the focused
 // net's own (brighter) category color.
-function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string) {
+function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string, onPick: (row: PlacedRow['row']) => void) {
   const isOutput = p.group === 'output';
   const isActive = rowMatchesActive(p.row.nets, activeNet);
   const position = p.side === 'left' ? Position.Left
@@ -49,6 +49,7 @@ function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string)
     border: isActive ? `2px solid ${activeColor}` : '2px solid var(--bg)',
     boxShadow: isActive ? `0 0 6px 1px ${activeColor}` : undefined,
     zIndex: isActive ? 10 : 3,
+    cursor: 'pointer',
   };
   const hiddenStyle = { ...posStyle, width: 8, height: 8, opacity: 0, pointerEvents: 'none' as const };
   return (
@@ -58,6 +59,10 @@ function edgeHandle(p: PlacedRow, activeNet: string | null, activeColor: string)
         position={position}
         id={`${p.row.repPin}-${isOutput ? 'src' : 'tgt'}`}
         style={visibleStyle}
+        // Clicking a pin selects its net (so a supply/ground pin can be picked
+        // directly); stopPropagation keeps the block-level click from also
+        // selecting the whole instance.
+        onClick={e => { e.stopPropagation(); onPick(p.row); }}
       />
       <Handle
         type={isOutput ? 'target' : 'source'}
@@ -107,10 +112,23 @@ function InstanceNodeImpl({ data }: NodeProps) {
   // re-render all blocks at once, which is what locked the tab up.
   const descend = useViewerStore(s => s.descend);
   const setSelection = useViewerStore(s => s.setSelection);
+  const setFocusNet = useViewerStore(s => s.setFocusNet);
+  const mode = useViewerStore(s => s.mode);
   const design = useViewerStore(s => s.design);
   const currentCell = useViewerStore(s => s.currentCell);
   const nodeLayout = useViewerStore(s => s.nodeLayout);
   const isArray = (arraySize ?? 1) > 1;
+
+  // Selecting a pin's net (used by the per-pin click handlers below). Mirrors
+  // PortNode/onEdgeClick: focus the net in Net mode, and select it everywhere so
+  // its wire + connected pins highlight — including supply/ground pins, which
+  // otherwise could only be reached by clicking their (often distant) wire.
+  const pickNet = (row: { nets: string[] }) => {
+    const net = row.nets[0];
+    if (!net) return;
+    if (mode === 'net') setFocusNet(net);
+    setSelection({ type: 'net', name: net });
+  };
 
   // Pins are grouped into IN / OUT / PWR / GND; supply/ground membership comes
   // from the net's kind, so we need a name → kind lookup.
@@ -157,7 +175,7 @@ function InstanceNodeImpl({ data }: NodeProps) {
         onDoubleClick={handleDoubleClick}
         title={isArray ? `Array of ${arraySize} - double-click to descend` : 'Double-click to descend'}
       >
-        {layout.rows.map(p => edgeHandle(p, activeNet, activeColor))}
+        {layout.rows.map(p => edgeHandle(p, activeNet, activeColor, pickNet))}
 
         <div className="inst-head">
           {arrayBadge}
@@ -203,6 +221,7 @@ function InstanceNodeImpl({ data }: NodeProps) {
             border: isActive ? `2px solid ${activeColor}` : '2px solid var(--bg)',
             boxShadow: isActive ? `0 0 6px 1px ${activeColor}` : undefined,
             zIndex: isActive ? 10 : undefined,
+            cursor: 'pointer',
           };
           const hiddenStyle = { top, width: 8, height: 8, opacity: 0, pointerEvents: 'none' as const };
           return (
@@ -212,6 +231,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
                 position={position}
                 id={`${row.repPin}-${isOutput ? 'src' : 'tgt'}`}
                 style={visibleStyle}
+                // Clicking a pin selects its net (supply/ground included);
+                // stopPropagation prevents also selecting the whole instance.
+                onClick={e => { e.stopPropagation(); pickNet(row); }}
               />
               <Handle
                 type={isOutput ? 'target' : 'source'}
