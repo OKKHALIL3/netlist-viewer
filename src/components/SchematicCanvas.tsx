@@ -68,9 +68,18 @@ function computeHighlight(cell: CellView, selection: SelectionType | null): { ne
     }
   };
 
+  // An explicit net selection highlights that exact net even when it's a shared
+  // power/ground rail — the user clicked this specific wire/pin. The signal-only
+  // guard in addNet only applies when tracing outward from a selected *node*,
+  // where following a rail would light up nearly the whole design.
   if (selection.type === 'net') {
     const net = cell.nets.find(n => n.name === selection.name);
-    if (net) addNet(net);
+    if (net) {
+      nets.add(net.name);
+      for (const [id, pin] of net.endpoints) {
+        nodes.add(id === '__port__' ? portNodeId(pin) : id);
+      }
+    }
     return { nets, nodes };
   }
 
@@ -224,7 +233,10 @@ function buildGraph(
     for (const net of cell.nets) {
       // "Hide supply nets" hides the supply/ground WIRES only — the pins (block
       // pins via InstanceNode, and the boundary ports added below) stay visible.
-      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net';
+      // An explicitly selected rail net is the exception: selecting it always
+      // reveals its wire so the highlight has something to land on.
+      const isSelectedNet = selection?.type === 'net' && selection.name === net.name;
+      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net' && !isSelectedNet;
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
@@ -480,6 +492,10 @@ function Canvas() {
         nodeTypes={nodeTypes}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        // Read-only viewer: nothing creates connections, and leaving handles
+        // connectable makes a pointer-down on a pin start a dangling drag that
+        // swallows the click. Disabling it lets pin dots fire onClick (select net).
+        nodesConnectable={false}
         fitView
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.05}
@@ -505,7 +521,7 @@ function Canvas() {
       >
         ⊡ Fit  <kbd>F</kbd>
       </button>
-      <div className="canvas-hint">click a block, port, or net to highlight its connections · double-click to descend · click a wire to focus net</div>
+      <div className="canvas-hint">click a block, pin, port, or net to highlight its connections · double-click to descend · click a wire to focus net</div>
     </div>
   );
 }
