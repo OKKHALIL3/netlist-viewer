@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "test": "node test-adapter.mjs",
+    "test:layout": "node --import tsx --test \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\"",
     "preview": "vite preview",
     "serve:viz": "tsx server/subcircuit_visualize.ts",
     "deploy": "npm run build && gh-pages -d dist"
