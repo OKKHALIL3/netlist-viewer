@@ -26,39 +26,52 @@ function draw(
   if (selNet) showNets.add(selNet);
   else if (selId !== null) for (const n of model.nets) if (n.instances.includes(selId)) showNets.add(n.name);
 
-  // connections (under everything)
-  for (const c of model.connections) {
-    if (hasLayers && c.layer && layers[c.layer] === false) continue;
-    const color = hasLayers && c.layer ? (LAYER_COLOR[c.layer] ?? NEUTRAL) : NEUTRAL;
-    const hot = selNet === c.net;
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = hot ? 0.95 : (selNet ? 0.12 : 0.7);
-    ctx.lineWidth = hot ? 2.4 : 1.4;
-    ctx.beginPath();
-    c.points.forEach((p, i) => {
-      const [sx, sy] = worldToScreen(v, p[0], p[1]);
-      if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-    });
-    ctx.stroke();
+  // connections (under everything) — ONLY for the selection's nets. Drawing
+  // every parasitic segment of a real design at once is unreadable noise, so
+  // with nothing selected we show just the boxes. Select a block or net to
+  // light up its RC-skeleton traces.
+  if (showNets.size > 0) {
+    for (const c of model.connections) {
+      if (!showNets.has(c.net)) continue;
+      if (hasLayers && c.layer && layers[c.layer] === false) continue;
+      const color = hasLayers && c.layer ? (LAYER_COLOR[c.layer] ?? NEUTRAL) : NEUTRAL;
+      const hot = selNet === c.net;
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = hot ? 0.95 : 0.65;
+      ctx.lineWidth = hot ? 2.4 : 1.4;
+      ctx.beginPath();
+      c.points.forEach((p, i) => {
+        const [sx, sy] = worldToScreen(v, p[0], p[1]);
+        if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      });
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
 
-  // net boxes (translucent dashed green / yellow when the net itself is selected)
+  // net boxes (translucent dashed). A block can touch dozens of nets, so the
+  // unfocused boxes are drawn faint and UNLABELLED (their names live in the
+  // inspector) — only the focused net gets a bold box + label, so the labels
+  // never pile into an unreadable stack.
   for (const n of model.nets) {
     if (!showNets.has(n.name)) continue;
     const hot = selNet === n.name;
     const [x0, y1s] = worldToScreen(v, n.bbox[0], n.bbox[3]);
     const [x1, y0s] = worldToScreen(v, n.bbox[2], n.bbox[1]);
     ctx.setLineDash([6, 4]);
+    ctx.globalAlpha = hot ? 1 : 0.3;
     ctx.strokeStyle = hot ? '#ffd23f' : '#5fd0a0';
-    ctx.fillStyle = hot ? 'rgba(255,210,63,0.10)' : 'rgba(95,208,160,0.08)';
-    ctx.lineWidth = 1.4;
+    ctx.fillStyle = hot ? 'rgba(255,210,63,0.10)' : 'rgba(95,208,160,0.05)';
+    ctx.lineWidth = hot ? 1.7 : 1.1;
     ctx.fillRect(x0, y1s, x1 - x0, y0s - y1s);
     ctx.strokeRect(x0, y1s, x1 - x0, y0s - y1s);
     ctx.setLineDash([]);
-    ctx.fillStyle = hot ? '#ffd23f' : '#5fd0a0';
-    ctx.font = '11px "Space Mono", monospace';
-    ctx.fillText(`${n.name} ·net`, x0 + 4, y1s + 12);
+    ctx.globalAlpha = 1;
+    if (hot) {
+      ctx.fillStyle = '#ffd23f';
+      ctx.font = '11px "Space Mono", monospace';
+      ctx.fillText(`${n.name} ·net`, x0 + 4, y1s + 12);
+    }
   }
 
   // instance boxes (solid blue, yellow when selected)
