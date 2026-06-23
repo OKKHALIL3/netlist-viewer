@@ -19,10 +19,10 @@ const PRIM_SIZE = 56;
 const PRIM_LABEL = 30; // room under a device for its id/model caption
 const PORT_WIDTH = 70;
 const PORT_HEIGHT = 54;
-// Multi-column wrapping for tall cell-boundary port stacks (compressBoundaryPorts).
-const MAX_PORT_COLS = 3;     // never widen a side into more than this many columns
-const PORT_ROW_PITCH = 42;   // vertical gap between stacked flags once wrapped
-const PORT_COL_PITCH = 120;  // horizontal gap between wrapped columns (flag + label)
+// Staggered single-column packing for cell-boundary port stacks (compressBoundaryPorts).
+const PORT_ROW_PITCH = 42;   // vertical gap between stacked flags
+const STAGGER_LANES = 2;     // flags zig-zag between this many horizontal lanes
+const STAGGER_PITCH = 32;    // horizontal step per lane (fans the leads toward the core)
 
 let elkInstance: InstanceType<typeof ELK> | null = null;
 function getElk() {
@@ -199,10 +199,10 @@ function repositionSupplyRails(
 // ELK aligns each cell-boundary signal port with whatever it wires to, so on a
 // tall schematic even a handful of ports get strung out across the whole height
 // with big gaps — the view ends up dominated by vertical whitespace. Repack each
-// side's stack into a compact, centred grid: a tight single column when there
-// are only a few ports, wrapping into 2-3 side-by-side columns as the count
-// grows, adaptively — taller cores hold more per column, shorter cores wrap
-// sooner. Trades a little width for a much shorter vertical spread. Supply/ground
+// side's stack into one compact column, centred on the core, with the flags
+// zig-zagging between STAGGER_LANES horizontal lanes: the inner lane sits closest
+// to the core (shortest lead) and outer lanes step away, so the leads fan toward
+// the design at varying lengths instead of forming a rigid grid. Supply/ground
 // rails are placed separately above and are left untouched.
 function compressBoundaryPorts(
   portGroups: ReturnType<typeof groupPorts>,
@@ -212,8 +212,8 @@ function compressBoundaryPorts(
   const portId = (name: string) => `__port__:${name}`;
   const portIds = new Set(portGroups.map(g => portId(g.repName)));
 
-  // Core bounds (everything that isn't a boundary port) give the height the
-  // columns should fit within and the centre to split left from right around.
+  // Core bounds (everything that isn't a boundary port) give the centre to
+  // stack the column around and to split left from right.
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const [id, p] of positions) {
     if (portIds.has(id)) continue;
@@ -223,10 +223,6 @@ function compressBoundaryPorts(
   if (!isFinite(minX)) return;
   const coreCenterX = (minX + maxX) / 2;
   const coreCenterY = (minY + maxY) / 2;
-  const coreHeight = Math.max(maxY - minY, PORT_ROW_PITCH);
-  // How many ports a single column can hold within the core's height — the
-  // "size of design" the wrapping adapts to.
-  const perCol = Math.max(2, Math.floor(coreHeight / PORT_ROW_PITCH));
 
   // Signal ports only — rails were already lifted to the top/bottom rows.
   const left: string[] = [], right: string[] = [];
@@ -239,37 +235,25 @@ function compressBoundaryPorts(
     (p.x + p.width / 2 < coreCenterX ? left : right).push(id);
   }
 
-  // Lay one side's stack out as a grid growing outward from the design
-  // (dir = -1 to the left, +1 to the right). Keeps ELK's vertical order — it
-  // already minimised crossings — and snakes the ports across the columns row
-  // by row so each column spans the full height.
+  // Stack one side as a single centred column (dir = -1 to the left of the core,
+  // +1 to the right). Keeps ELK's vertical order — it already minimised
+  // crossings — and zig-zags each flag between the lanes so vertically-adjacent
+  // labels never share an X and every lead reaches the core at its own length.
   const layoutSide = (ids: string[], dir: -1 | 1) => {
     const n = ids.length;
     if (n < 2) return;
-    // A few ports stay in one (compact) column; once there are several, split
-    // into at least two side-by-side columns, adding a third only when even two
-    // would run taller than the core. Capped at MAX_PORT_COLS.
-    let cols = Math.min(MAX_PORT_COLS, Math.ceil(n / perCol));
-    if (n >= 4) cols = Math.max(cols, 2);
-    cols = Math.min(cols, n);
-    const rows = Math.ceil(n / cols);
-    const gridHeight = (rows - 1) * PORT_ROW_PITCH;
-
-    const xs = ids.map(id => positions.get(id)!.x);
-    const ys = ids.map(id => positions.get(id)!.y);
-    // Already compact in one column? Leave ELK's wire-aligned placement.
-    if (cols === 1 && Math.max(...ys) - Math.min(...ys) <= gridHeight * 1.15) return;
-
-    // Anchor the inner column where ELK already placed this side.
-    const anchorX = dir < 0 ? Math.max(...xs) : Math.min(...xs);
-    const startY = coreCenterY - gridHeight / 2;
     const sorted = [...ids].sort((a, b) => positions.get(a)!.y - positions.get(b)!.y);
+    // Anchor the inner lane where ELK already placed this side's inner edge.
+    const xs = sorted.map(id => positions.get(id)!.x);
+    const anchorX = dir < 0 ? Math.max(...xs) : Math.min(...xs);
+    const colHeight = (n - 1) * PORT_ROW_PITCH;
+    const startY = coreCenterY - colHeight / 2;
     sorted.forEach((id, i) => {
       const pos = positions.get(id)!;
       positions.set(id, {
         ...pos,
-        x: anchorX + dir * (i % cols) * PORT_COL_PITCH,
-        y: startY + Math.floor(i / cols) * PORT_ROW_PITCH,
+        x: anchorX + dir * (i % STAGGER_LANES) * STAGGER_PITCH,
+        y: startY + i * PORT_ROW_PITCH,
       });
     });
   };
