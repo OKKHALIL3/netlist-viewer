@@ -59,9 +59,18 @@ export function computeHighlight(cell: Cell, selection: SelectionType | null): {
     }
   };
 
+  // An explicit net selection highlights that exact net even when it's a shared
+  // power/ground rail — the user clicked this specific wire. The signal-only
+  // guard in addNet only applies when tracing outward from a selected *node*,
+  // where following a rail would light up nearly the whole design.
   if (selection.type === 'net') {
     const net = cell.nets.find(n => n.name === selection.name);
-    if (net) addNet(net);
+    if (net) {
+      nets.add(net.name);
+      for (const [id, pin] of net.endpoints) {
+        nodes.add(id === '__port__' ? portNodeId(pin) : id);
+      }
+    }
     return { nets, nodes };
   }
 
@@ -185,7 +194,10 @@ export function buildGraph(
     for (const net of cell.nets) {
       // "Hide supply nets" hides the supply/ground WIRES only — the pins (block
       // pins via InstanceNode, and the boundary ports added below) stay visible.
-      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net';
+      // An explicitly selected rail net is the exception: selecting it always
+      // reveals its wire so the highlight has something to land on.
+      const isSelectedNet = selection?.type === 'net' && selection.name === net.name;
+      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net' && !isSelectedNet;
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
