@@ -6,15 +6,18 @@ import { CanvasErrorBoundary } from './components/CanvasErrorBoundary';
 import { InspectorPanel } from './components/InspectorPanel';
 import { DropZone } from './components/DropZone';
 import { SearchPalette } from './components/SearchPalette';
+import { LayoutView } from './components/layout/LayoutView';
 
 export default function App() {
-  const { design, warnings, currentCell } = useViewerStore();
+  const { design, warnings, currentCell, appMode } = useViewerStore();
 
   return (
     <div className="app">
       <TopBar />
       {!design ? (
         <DropZone />
+      ) : appMode === 'layout' ? (
+        <LayoutView />
       ) : (
         <div className="shell">
           <HierarchyPanel />
