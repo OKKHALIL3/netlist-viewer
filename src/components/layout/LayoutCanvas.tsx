@@ -3,7 +3,7 @@ import { useViewerStore } from '../../store/viewerStore';
 import type { View } from './transform';
 import { fitView, worldToScreen, screenToWorld, zoomAt, panBy } from './transform';
 import { pickInstance } from './pick';
-import type { LayoutModel } from '../../layout-viewer/model';
+import type { LayoutModel, Bbox } from '../../layout-viewer/model';
 
 const PAD = 48;
 const LAYER_COLOR: Record<string, string> = {
@@ -92,6 +92,7 @@ export function LayoutCanvas() {
   const layerVisibility = useViewerStore(s => s.layerVisibility);
   const selection = useViewerStore(s => s.selection);
   const setSelection = useViewerStore(s => s.setSelection);
+  const layoutFocusRequest = useViewerStore(s => s.layoutFocusRequest);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -126,7 +127,45 @@ export function LayoutCanvas() {
     return () => ro.disconnect();
   }, [render]);
 
-  const fit = () => { if (model && wrapRef.current) { viewRef.current = fitView(model.extent, wrapRef.current.clientWidth, wrapRef.current.clientHeight, PAD); force(n => n + 1); } };
+  const fitAll = useCallback(() => {
+    const wrap = wrapRef.current;
+    if (!model || !wrap) return;
+    viewRef.current = fitView(model.extent, wrap.clientWidth, wrap.clientHeight, PAD);
+    force(n => n + 1);
+  }, [model]);
+
+  // Frame the current selection when something requests focus (zone dropdown,
+  // insights panel) — NOT on plain canvas clicks, which would be jarring.
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!model || !selection || !wrap || layoutFocusRequest === 0) return;
+    let bbox: Bbox | undefined;
+    if (selection.type === 'instance') bbox = model.instances.find(i => i.id === selection.id)?.bbox;
+    else if (selection.type === 'net') bbox = model.nets.find(n => n.name === selection.name)?.bbox;
+    if (bbox) { viewRef.current = fitView(bbox, wrap.clientWidth, wrap.clientHeight, 90); render(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layoutFocusRequest]);
+
+  // Keyboard: F = fit all, Esc = deselect.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.key === 'f' || e.key === 'F') fitAll();
+      else if (e.key === 'Escape') setSelection(null);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fitAll, setSelection]);
+
+  const exportPng = () => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const a = document.createElement('a');
+    a.download = `${model?.design ?? 'layout'}-layout.png`;
+    a.href = cv.toDataURL('image/png');
+    a.click();
+  };
 
   const onWheel = (e: React.WheelEvent) => {
     if (!viewRef.current) return;
@@ -165,7 +204,10 @@ export function LayoutCanvas() {
          onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp}
          onMouseLeave={() => { drag.current = null; if (hoverRef.current) { hoverRef.current = null; force(n => n + 1); } }}>
       <canvas ref={canvasRef} />
-      <button className="layout-fit" onClick={fit} title="Fit to view">⤢ Fit</button>
+      <div className="layout-tools">
+        <button onClick={fitAll} title="Fit to view (F)">⤢ Fit</button>
+        <button onClick={exportPng} title="Export PNG">⬇ PNG</button>
+      </div>
       <div className="layout-legend">
         <span><i className="sw-inst" /> instance bbox</span>
         <span><i className="sw-net" /> net bbox</span>

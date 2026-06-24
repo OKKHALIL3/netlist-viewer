@@ -18,12 +18,15 @@ export function TopBar() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       setParseError(null);
+      setParsing(true);
       try {
         const data = await parseDspfAsync(ev.target?.result as string);
         loadLayout(data);
         setAppMode('layout');
       } catch (err) {
         setParseError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setParsing(false);
       }
     };
     reader.readAsText(file);

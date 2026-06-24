@@ -49,6 +49,9 @@ interface ViewerState {
   layoutModel: LayoutModel | null;
   layoutDepth: LayoutDepth;
   layerVisibility: Record<string, boolean>;
+  // Bumped to ask the layout canvas to frame the current selection (used by the
+  // zone dropdown and the sprawl-insights panel, not by plain canvas clicks).
+  layoutFocusRequest: number;
 
   // actions
   loadDesign: (design: Design) => void;
@@ -67,6 +70,7 @@ interface ViewerState {
   loadLayout: (data: LayoutData) => void;
   setLayoutDepth: (depth: LayoutDepth) => void;
   toggleLayer: (name: string) => void;
+  selectAndFocus: (sel: SelectionType) => void;
   getCell: () => Cell | undefined;
 }
 
@@ -89,6 +93,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   layoutModel: null,
   layoutDepth: 1,
   layerVisibility: {},
+  layoutFocusRequest: 0,
 
   loadDesign: (design) => {
     set({
@@ -178,6 +183,10 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
 
   toggleLayer: (name) =>
     set(s => ({ layerVisibility: { ...s.layerVisibility, [name]: !s.layerVisibility[name] } })),
+
+  // Select something AND request the canvas frame it (intentional navigation).
+  selectAndFocus: (sel) =>
+    set(s => ({ selection: sel, layoutFocusRequest: s.layoutFocusRequest + 1 })),
 
   getCell: () => {
     const { design, currentCell } = get();

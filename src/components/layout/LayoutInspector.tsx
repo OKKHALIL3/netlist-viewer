@@ -1,4 +1,5 @@
 import { useViewerStore } from '../../store/viewerStore';
+import { reachRatio } from '../../layout-viewer/insights';
 
 export function LayoutInspector() {
   const model = useViewerStore(s => s.layoutModel);
@@ -37,9 +38,13 @@ export function LayoutInspector() {
       body = <div className="insp-empty">No physical data for this net.</div>;
     } else {
       const w = n.bbox[2] - n.bbox[0], h = n.bbox[3] - n.bbox[1];
+      const reach = reachRatio(model, n.name);
       body = (
         <div className="insp-body">
           <div className="det-h"><span className="tag net">Net (PEX)</span><span className="ttl">{n.name}</span></div>
+          {reach >= 1.2 && (
+            <div className="reach-callout">Reaches <b>{reach.toFixed(1)}×</b> the footprint of the blocks it connects.</div>
+          )}
           <div className="kv"><span className="k">Subnodes</span><span className="v">{n.subnodes}</span></div>
           <div className="kv"><span className="k">Parasitics</span><span className="v">{n.parasitics}</span></div>
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
