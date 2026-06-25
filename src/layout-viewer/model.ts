@@ -3,53 +3,68 @@
 export type Bbox = [number, number, number, number];
 
 // ---- DSPF parse output (design-agnostic) -------------------------------
-export interface DspfSubnode { name: string; x: number; y: number }
-export interface DspfResistor { a: string; b: string; layer: string | null }
+export interface DspfPoint { name: string; x: number | null; y: number | null; layer: string | null }
+
+export interface DspfResistor {
+  name: string; a: string; b: string;
+  value: number | null;
+  layer: string | null;
+  x1: number | null; y1: number | null;
+  x2: number | null; y2: number | null;
+  width: number | null; length: number | null;
+}
+
+export interface DspfCapacitor {
+  name: string; a: string; b: string;
+  value: number | null;
+  layer: string | null;
+  x: number | null; y: number | null;
+  coupling: boolean;
+}
+
 export interface DspfNet {
   name: string;
-  subnodes: DspfSubnode[];
-  parasitics: number;          // count of R + C elements
-  resistors: DspfResistor[];   // endpoints + layer, for the RC skeleton
+  totalCap: number | null;
+  ports: DspfPoint[];
+  subnodes: DspfPoint[];
+  instPins: DspfPoint[];
+  resistors: DspfResistor[];
+  capacitors: DspfCapacitor[];
 }
+
 export interface DspfDevice { path: string; x: number; y: number }
+
+export interface DspfDiagnostics {
+  logicalLines: number; nets: number; devices: number;
+  resistors: number; resistorsWithGeometry: number;
+  capacitors: number; couplingCaps: number;
+  pointsWithCoords: number; unitScale: number;
+  unrecognized: number; warnings: string[];
+}
+
 export interface LayoutData {
-  divider: string;             // hierarchy separator from *|DIVIDER (e.g. "/")
-  delimiter: string;           // pin separator from *|DELIMITER (e.g. ":")
-  nets: DspfNet[];
-  devices: DspfDevice[];       // coordinate-bearing device points
-  layersPresent: boolean;
-  layers: string[];            // distinct layer names, [] when none
+  divider: string; delimiter: string; busDelimiter: string | null;
+  groundNets: string[]; design: string | null; generator: string | null;
+  layerMap: Record<string, string>; layersPresent: boolean; layers: string[];
+  nets: DspfNet[]; devices: DspfDevice[]; diagnostics: DspfDiagnostics;
 }
 
 // ---- Correlated, viewer-ready model ------------------------------------
 export interface LayoutInstance {
-  id: string;                  // normalized path, e.g. "xi9/xi26"
-  label: string;               // leaf instance id as written in CDL
-  depth: number;               // 0 = whole design, 1 = top children, ...
-  deviceCount: number;
-  bbox: Bbox;
+  id: string; label: string; depth: number; deviceCount: number; bbox: Bbox;
 }
 export interface LayoutNet {
-  name: string;
-  bbox: Bbox;
-  subnodes: number;
-  parasitics: number;
-  layers: string[];
-  instances: string[];         // instance ids this net touches
+  name: string; bbox: Bbox; subnodes: number; parasitics: number;
+  layers: string[]; instances: string[];
 }
 export interface LayoutConnection {
-  net: string;
-  layer: string | null;
-  points: Array<[number, number]>;
+  net: string; layer: string | null; points: Array<[number, number]>;
 }
 export interface LayoutModel {
-  design: string;
-  extent: Bbox;
-  layers: string[];            // [] ⇒ no-layer mode
-  instances: LayoutInstance[];
-  nets: LayoutNet[];
-  connections: LayoutConnection[];
+  design: string; extent: Bbox; layers: string[];
+  instances: LayoutInstance[]; nets: LayoutNet[]; connections: LayoutConnection[];
   stats: { instancesMatched: number; instancesTotal: number; devicesMatched: number };
+  diagnostics: DspfDiagnostics;
 }
 
 // ---- Geometry helpers --------------------------------------------------
