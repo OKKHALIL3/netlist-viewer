@@ -16,7 +16,7 @@ test('joins +-continuation lines into one logical line', () => {
 
 test('joins trailing-backslash continuations', () => {
   const text = 'R9 a b 1.0 $w=0.05 \\\n+   $layer=M2 $X=1 $Y=2';
-  assert.deepEqual(toLogicalLines(text), ['R9 a b 1.0 $w=0.05  $layer=M2 $X=1 $Y=2']);
+  assert.deepEqual(toLogicalLines(text), ['R9 a b 1.0 $w=0.05 $layer=M2 $X=1 $Y=2']);
 });
 
 test('drops blank lines and CRLF, right-trims', () => {
@@ -27,4 +27,17 @@ test('drops blank lines and CRLF, right-trims', () => {
 test('handles multiple consecutive + continuations', () => {
   const text = 'R1 a b 1\n+ $x=1\n+ $y=2\n+ $x2=3';
   assert.deepEqual(toLogicalLines(text), ['R1 a b 1 $x=1 $y=2 $x2=3']);
+});
+
+test('joins a plain (non-+) line after a trailing backslash', () => {
+  const text = 'R9 a b 1.0 \\\n   $x=1';
+  assert.deepEqual(toLogicalLines(text), ['R9 a b 1.0 $x=1']);
+});
+
+test('blank line before a + continuation does not inject a leading space', () => {
+  assert.deepEqual(toLogicalLines('foo\n\n+ bar'), ['foo bar']);
+});
+
+test('empty + continuation does not leave trailing space', () => {
+  assert.deepEqual(toLogicalLines('R1 a b\n+'), ['R1 a b']);
 });
