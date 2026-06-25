@@ -5,8 +5,7 @@ import { emptyBbox, extendBbox, bboxValid } from './model';
 export interface HierNode { id: string; label: string; depth: number; segs: string[] }
 
 // Lowercase a hierarchical name and split into segments, dropping finger
-// suffixes (`<@n>`, trailing `@n`). `seps` is the set of separator chars to
-// split on (DSPF divider+delimiter, or the CDL separators).
+// suffixes (`<@n>`, trailing `@n`). `seps` is the set of separator chars.
 export function normSegments(name: string, seps: string[]): string[] {
   const escaped = seps.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
   const splitter = new RegExp(`[${escaped}]`);
@@ -17,9 +16,6 @@ export function normSegments(name: string, seps: string[]): string[] {
     .filter(Boolean);
 }
 
-// Walk the CDL instance tree from the top cell. Returns one node per instance
-// at every depth, plus the depth-0 root (id ""). `id` is the normalized,
-// "/"-joined instance path; `segs` is the same as an array for prefix matching.
 export function enumerateHierarchy(design: Design): HierNode[] {
   const nodes: HierNode[] = [{ id: '', label: design.topCell, depth: 0, segs: [] }];
   const walk = (cellName: string, prefix: string[], depth: number) => {
@@ -39,17 +35,14 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   const dspfSeps = [data.divider, data.delimiter];
   const nodes = enumerateHierarchy(design);
 
-  // Index nodes by their normalized path string for prefix lookup.
   const nodeBox = new Map<string, Bbox>();
   const nodeCount = new Map<string, number>();
   for (const n of nodes) { nodeBox.set(n.id, emptyBbox()); nodeCount.set(n.id, 0); }
 
-  // Assign each device to every ancestor node whose path is a prefix of it.
   let devicesMatched = 0;
   for (const dev of data.devices) {
     const segs = normSegments(dev.path, dspfSeps);
     let matched = false;
-    // root (id "") always contains the device
     extendBbox(nodeBox.get('')!, dev.x, dev.y);
     nodeCount.set('', nodeCount.get('')! + 1);
     for (let len = 1; len <= segs.length; len++) {
@@ -67,37 +60,51 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
       deviceCount: nodeCount.get(n.id)!, bbox: nodeBox.get(n.id)!,
     }));
 
-  // Net bboxes + which instance nodes each net touches (by subnode prefix).
   const nodeIds = new Set(nodes.map(n => n.id));
   const nets: LayoutNet[] = data.nets.map(dn => {
     const box = emptyBbox();
     const touched = new Set<string>();
     const layerSet = new Set<string>();
-    for (const s of dn.subnodes) {
+    const points = [...dn.ports, ...dn.subnodes, ...dn.instPins];
+    for (const s of points) {
+      if (s.layer) layerSet.add(s.layer);
+      if (s.x === null || s.y === null) continue;
       extendBbox(box, s.x, s.y);
       const segs = normSegments(s.name, dspfSeps);
-      // deepest matching instance node for this subnode
       for (let len = segs.length - 1; len >= 1; len--) {
         const id = segs.slice(0, len).join('/');
         if (nodeIds.has(id)) { touched.add(id); break; }
       }
     }
-    for (const r of dn.resistors) if (r.layer) layerSet.add(r.layer);
+    for (const r of dn.resistors) {
+      if (r.layer) layerSet.add(r.layer);
+      if (r.x1 !== null && r.y1 !== null) extendBbox(box, r.x1, r.y1);
+      if (r.x2 !== null && r.y2 !== null) extendBbox(box, r.x2, r.y2);
+    }
+    for (const cp of dn.capacitors) if (cp.layer) layerSet.add(cp.layer);
     return {
       name: dn.name,
       bbox: bboxValid(box) ? box : [0, 0, 0, 0],
-      subnodes: dn.subnodes.length, parasitics: dn.parasitics,
+      subnodes: dn.subnodes.length,
+      parasitics: dn.resistors.length + dn.capacitors.length,
       layers: [...layerSet], instances: [...touched],
     };
   });
 
-  // RC skeleton: one polyline per resistor, endpoints resolved by subnode name.
+  // RC skeleton: prefer resistor slab geometry; else resolve endpoints by name.
   const connections: LayoutConnection[] = [];
   for (const dn of data.nets) {
     const coord = new Map<string, [number, number]>();
-    for (const s of dn.subnodes) coord.set(s.name, [s.x, s.y]);
+    for (const s of [...dn.ports, ...dn.subnodes, ...dn.instPins]) {
+      if (s.x !== null && s.y !== null) coord.set(s.name, [s.x, s.y]);
+    }
     for (const r of dn.resistors) {
-      const a = coord.get(r.a); const b = coord.get(r.b);
+      if (r.x1 !== null && r.y1 !== null && r.x2 !== null && r.y2 !== null) {
+        connections.push({ net: dn.name, layer: r.layer, points: [[r.x1, r.y1], [r.x2, r.y2]] });
+        continue;
+      }
+      const a = coord.get(r.a);
+      const b = coord.get(r.b);
       if (a && b) connections.push({ net: dn.name, layer: r.layer, points: [a, b] });
     }
   }
@@ -113,5 +120,6 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
       instancesTotal: nodes.filter(n => n.depth >= 1).length,
       devicesMatched,
     },
+    diagnostics: data.diagnostics,
   };
 }

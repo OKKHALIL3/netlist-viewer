@@ -72,3 +72,30 @@ test('no-layer DSPF ⇒ layers [], connection layer null', () => {
   assert.deepEqual(m.layers, []);
   assert.equal(m.connections[0].layer, null);
 });
+
+test('connections use resistor slab geometry when present', () => {
+  const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
+  const dspf = parseDspf([
+    '*|NET VOUT 1',
+    '*|S (X9/M1:o 4 5)', '*|S (X9/M2:o 8 9)',
+    'R1 X9/M1:o X9/M2:o 1 $layer=metal2 $X=4 $Y=5 $X2=8 $Y2=9',
+    '*|I (X9/M1:d X9/M1 d nch 0.5 4 5)',
+  ].join('\n'));
+  const m = correlate(design, dspf);
+  assert.deepEqual(m.connections, [{ net: 'VOUT', layer: 'metal2', points: [[4, 5], [8, 9]] }]);
+  assert.equal(m.diagnostics.resistorsWithGeometry, 1);
+});
+
+test('net layers gather from subnode + resistor + coupling cap', () => {
+  const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
+  const dspf = parseDspf([
+    '*3 m1', '*5 m3',
+    '*|NET N 1',
+    '*|S (X9/M1:o $lvl=3 0 0)', '*|S (X9/M2:o 2 2)',
+    'R1 X9/M1:o X9/M2:o 1 $lvl=5',
+    '*|I (X9/M1:d X9/M1 d nch 0.5 0 0)',
+  ].join('\n'));
+  const m = correlate(design, dspf);
+  const net = m.nets.find(n => n.name === 'N')!;
+  assert.deepEqual(net.layers.sort(), ['m1', 'm3']);
+});
