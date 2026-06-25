@@ -106,3 +106,10 @@ test('coupling capacitor flagged; ground net + design captured', () => {
   assert.equal(d.nets[0].capacitors[0].coupling, true);
   assert.equal(d.diagnostics.couplingCaps, 1);
 });
+
+test('capacitor coords participate in unit inference', () => {
+  const d = parseDspf('*|NET N 1\nC1 N:1 0 1f $X=1e-6 $Y=2e-6\n');
+  assert.equal(d.diagnostics.unitScale, 1e6);
+  assert.equal(d.nets[0].capacitors[0].x, 1);
+  assert.equal(d.nets[0].capacitors[0].y, 2);
+});

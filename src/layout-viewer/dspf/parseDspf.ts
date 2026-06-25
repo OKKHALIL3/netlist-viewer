@@ -167,6 +167,7 @@ function inferUnitScale(data: LayoutData): number {
     for (const p of n.subnodes) consider(p.x, p.y);
     for (const p of n.instPins) consider(p.x, p.y);
     for (const r of n.resistors) { consider(r.x1, r.y1); consider(r.x2, r.y2); }
+    for (const cp of n.capacitors) consider(cp.x, cp.y);
   }
   for (const d of data.devices) consider(d.x, d.y);
   return maxAbs > 0 && maxAbs < 1e-3 ? 1e6 : 1;
