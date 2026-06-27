@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import type { Design, Cell } from '../parser/types';
+import type { LayoutData, LayoutModel } from '../layout-viewer/model';
+import { correlate } from '../layout-viewer/correlate';
 
 export type ViewMode = 'inst' | 'both' | 'net';
+
+// Top-level app mode: the original schematic view, or the physical layout view.
+export type AppMode = 'schematic' | 'layout';
+export type LayoutDepth = 0 | 1 | 2 | 'all';
 
 // How each instance block arranges its pins. 'classic' is the stacked
 // IN/OUT/PWR/GND section list. 'beta' (the default) draws a schematic-symbol
@@ -37,6 +43,16 @@ interface ViewerState {
   // (e.g. after jumping to a search result), even if the cell didn't change.
   focusRequest: number;
 
+  // Abstract Layout Viewer state (second app mode).
+  appMode: AppMode;
+  layoutData: LayoutData | null;
+  layoutModel: LayoutModel | null;
+  layoutDepth: LayoutDepth;
+  layerVisibility: Record<string, boolean>;
+  // Bumped to ask the layout canvas to frame the current selection (used by the
+  // zone dropdown and the sprawl-insights panel, not by plain canvas clicks).
+  layoutFocusRequest: number;
+
   // actions
   loadDesign: (design: Design) => void;
   descend: (instanceId: string, masterCell: string) => void;
@@ -50,6 +66,11 @@ interface ViewerState {
   setParsing: (parsing: boolean) => void;
   setParseError: (error: string | null) => void;
   setSearchOpen: (open: boolean) => void;
+  setAppMode: (mode: AppMode) => void;
+  loadLayout: (data: LayoutData) => void;
+  setLayoutDepth: (depth: LayoutDepth) => void;
+  toggleLayer: (name: string) => void;
+  selectAndFocus: (sel: SelectionType) => void;
   getCell: () => Cell | undefined;
 }
 
@@ -67,6 +88,12 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   parseError: null,
   searchOpen: false,
   focusRequest: 0,
+  appMode: 'schematic',
+  layoutData: null,
+  layoutModel: null,
+  layoutDepth: 1,
+  layerVisibility: {},
+  layoutFocusRequest: 0,
 
   loadDesign: (design) => {
     set({
@@ -76,6 +103,11 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
       selection: null,
       focusNet: null,
       warnings: design.warnings,
+      // A new CDL invalidates any correlated layout; return to schematic mode.
+      appMode: 'schematic',
+      layoutData: null,
+      layoutModel: null,
+      layerVisibility: {},
     });
   },
 
@@ -135,6 +167,26 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
 
   setSearchOpen: (open) => set({ searchOpen: open }),
+
+  setAppMode: (appMode) => set({ appMode }),
+
+  loadLayout: (data) => {
+    const { design } = get();
+    if (!design) return;
+    const model = correlate(design, data);
+    const layerVisibility: Record<string, boolean> = {};
+    for (const l of model.layers) layerVisibility[l] = true;
+    set({ layoutData: data, layoutModel: model, layerVisibility, selection: null });
+  },
+
+  setLayoutDepth: (layoutDepth) => set({ layoutDepth }),
+
+  toggleLayer: (name) =>
+    set(s => ({ layerVisibility: { ...s.layerVisibility, [name]: !s.layerVisibility[name] } })),
+
+  // Select something AND request the canvas frame it (intentional navigation).
+  selectAndFocus: (sel) =>
+    set(s => ({ selection: sel, layoutFocusRequest: s.layoutFocusRequest + 1 })),
 
   getCell: () => {
     const { design, currentCell } = get();
