@@ -829,3 +829,55 @@ body {
   border-radius: 7px; padding: 7px 9px; margin: 4px 0 12px;
 }
 .reach-callout b { color: var(--sel); }
+
+/* ── Abstract-layout inspector: detail rows, chips, warnings ───── */
+.sub-h {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--txt-faint); margin: 16px 0 7px; font-weight: 600;
+}
+.kv {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+  font-size: 12px;
+}
+.kv .k { color: var(--txt-dim); }
+.kv .v { font-family: 'Space Mono', monospace; color: var(--txt); text-align: right; }
+.det-h { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
+.det-h .ttl { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px; color: var(--txt); }
+.det-sub { font-size: 11px; color: var(--txt-faint); margin-bottom: 10px; }
+.tag {
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px;
+  padding: 3px 8px; border-radius: 5px; font-weight: 600;
+}
+.tag.inst { background: #243244; color: #7fb4ff; }
+.tag.net { background: #1d3756; color: #7fb4ff; }
+.bboxline {
+  font-family: 'Space Mono', monospace; font-size: 11.5px; color: var(--txt-dim);
+  line-height: 1.7; background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: 7px; padding: 7px 9px;
+}
+.bboxline b { color: var(--txt); }
+.chip {
+  display: inline-block; font-family: 'Space Mono', monospace; font-size: 11px;
+  padding: 4px 8px; margin: 0 5px 5px 0; border-radius: 6px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--txt-dim);
+}
+.chip:hover { border-color: var(--accent); color: var(--txt); }
+.chip.net { color: #8fd4b4; }
+.chip.lay { cursor: default; }
+.chip.lay:hover { border-color: var(--line); color: var(--txt-dim); }
+
+/* Correlation / parse warnings (inspector list + layout-bar badge) */
+.layout-warnbox { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.warn-note {
+  font-size: 11.5px; line-height: 1.45; color: #f3d27a;
+  background: rgba(240,180,60,0.08); border: 1px solid rgba(240,180,60,0.28);
+  border-radius: 7px; padding: 7px 9px;
+}
+.layout-bar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+.layout-bar-right .layout-stats { margin-left: 0; }
+.layout-warn {
+  font-size: 11px; font-family: 'Space Mono', monospace; color: #f3d27a;
+  background: rgba(240,180,60,0.10); border: 1px solid rgba(240,180,60,0.30);
+  border-radius: 6px; padding: 3px 9px; cursor: default;
+}

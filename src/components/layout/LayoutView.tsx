@@ -18,12 +18,22 @@ export function LayoutView() {
           <ZoneSelect />
           <DepthSelector />
           <LayerPanel />
-          {model && ext && (
-            <span className="layout-stats">
-              {model.stats.instancesMatched}/{model.stats.instancesTotal} blocks placed
-              {' · '}{(ext[2] - ext[0]).toFixed(1)} × {(ext[3] - ext[1]).toFixed(1)} µm
-            </span>
-          )}
+          {model && ext && (() => {
+            const warnings = [...model.diagnostics.warnings, ...model.warnings];
+            return (
+              <div className="layout-bar-right">
+                {warnings.length > 0 && (
+                  <span className="layout-warn" title={warnings.join('\n')}>
+                    ⚠ {warnings.length} warning{warnings.length > 1 ? 's' : ''}
+                  </span>
+                )}
+                <span className="layout-stats">
+                  {model.stats.instancesMatched}/{model.stats.instancesTotal} blocks placed
+                  {' · '}{(ext[2] - ext[0]).toFixed(1)} × {(ext[3] - ext[1]).toFixed(1)} µm
+                </span>
+              </div>
+            );
+          })()}
         </div>
         {model ? (
           <>

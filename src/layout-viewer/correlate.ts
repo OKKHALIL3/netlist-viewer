@@ -4,27 +4,46 @@ import { emptyBbox, extendBbox, bboxValid } from './model';
 
 export interface HierNode { id: string; label: string; depth: number; segs: string[] }
 
-// Lowercase a hierarchical name and split into segments, dropping finger
-// suffixes (`<@n>`, trailing `@n`). `seps` is the set of separator chars.
+// Normalize one hierarchy segment: lowercase and drop finger suffixes
+// (`<@n>`, trailing `@n`) so a CDL id and a DSPF node name compare equal.
+function normSeg(seg: string): string {
+  return seg.toLowerCase().replace(/<@[^>]*>/g, '').replace(/@\d+$/, '').trim();
+}
+
+// Lowercase a hierarchical name and split into normalized segments. `seps` is
+// the set of separator chars.
 export function normSegments(name: string, seps: string[]): string[] {
   const escaped = seps.map(s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('');
   const splitter = new RegExp(`[${escaped}]`);
-  return name
-    .toLowerCase()
-    .split(splitter)
-    .map(seg => seg.replace(/<@[^>]*>/g, '').replace(/@\d+$/, '').trim())
-    .filter(Boolean);
+  return name.split(splitter).map(normSeg).filter(Boolean);
 }
 
 export function enumerateHierarchy(design: Design): HierNode[] {
   const nodes: HierNode[] = [{ id: '', label: design.topCell, depth: 0, segs: [] }];
+  const seen = new Set<string>(['']);
+  // Node ids are normalized the SAME way device paths are (normSeg), so finger
+  // suffixes match; dedup then collapses finger-expanded siblings (e.g. CDL
+  // MM7@1 + MM7@2 both → mm7) into one block instead of duplicate instances.
+  const add = (segs: string[], label: string, depth: number) => {
+    const id = segs.join('/');
+    if (seen.has(id)) return;
+    seen.add(id);
+    nodes.push({ id, label, depth, segs });
+  };
   const walk = (cellName: string, prefix: string[], depth: number) => {
     const cell = design.cells.get(cellName);
     if (!cell) return;
     for (const inst of cell.instances) {
-      const segs = [...prefix, inst.id.toLowerCase()];
-      nodes.push({ id: segs.join('/'), label: inst.id, depth, segs });
+      const segs = [...prefix, normSeg(inst.id) || inst.id.toLowerCase()];
+      add(segs, inst.id, depth);
       if (design.cells.has(inst.master)) walk(inst.master, segs, depth + 1);
+    }
+    // Primitive devices (MOSFETs/R/C) are leaf "blocks" too — without them a
+    // flat cell (all transistors, no subckt calls) has nothing to box and the
+    // canvas renders empty. The brief's data model treats e.g. MM15 as a depth-1
+    // instance with its own bbox.
+    for (const prim of cell.primitives) {
+      add([...prefix, normSeg(prim.id) || prim.id.toLowerCase()], prim.id, depth);
     }
   };
   walk(design.topCell, [], 1);
@@ -110,6 +129,17 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   }
 
   const extent = nodeBox.get('')!;
+  const devicesTotal = data.devices.length;
+
+  // Surface CDL↔DSPF correlation health so a mismatch reads as a clear message
+  // rather than a silently empty canvas.
+  const warnings: string[] = [];
+  if (devicesTotal > 0 && devicesMatched === 0) {
+    warnings.push(`None of ${devicesTotal} DSPF devices matched the CDL hierarchy — is this the right CDL/DSPF pair?`);
+  } else if (devicesTotal > 0 && devicesMatched / devicesTotal < 0.2) {
+    warnings.push(`Only ${devicesMatched} of ${devicesTotal} DSPF devices matched the CDL hierarchy (${Math.round((devicesMatched / devicesTotal) * 100)}%).`);
+  }
+
   return {
     design: design.topCell,
     extent: bboxValid(extent) ? extent : [0, 0, 1, 1],
@@ -118,8 +148,9 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     stats: {
       instancesMatched: instances.filter(i => i.depth >= 1).length,
       instancesTotal: nodes.filter(n => n.depth >= 1).length,
-      devicesMatched,
+      devicesMatched, devicesTotal,
     },
+    warnings,
     diagnostics: data.diagnostics,
   };
 }

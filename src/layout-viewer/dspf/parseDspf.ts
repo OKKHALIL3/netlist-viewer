@@ -48,7 +48,10 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
     diag.logicalLines++;
 
     if (line.startsWith('*|')) {
-      const sp = line.indexOf(' ');
+      // Tag and value are separated by whitespace — a space (Calibre xRC,
+      // Quantus) OR a tab (Calibre xACT). Splitting on space alone silently
+      // dropped every header directive in tab-delimited files.
+      const sp = line.search(/\s/);
       const tag = (sp < 0 ? line : line.slice(0, sp)).toUpperCase();
       const rest = sp < 0 ? '' : line.slice(sp + 1).trim();
       switch (tag) {
@@ -149,6 +152,11 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
   const scale = opts.unitScale ?? inferUnitScale(data);
   if (scale !== 1) applyScale(data, scale);
   diag.unitScale = scale;
+
+  // Honest signal: an RC-only extraction (no X/Y anywhere) can't be drawn.
+  if (diag.pointsWithCoords === 0 && (diag.nets > 0 || diag.devices > 0)) {
+    diag.warnings.push('This DSPF carries no coordinates — the physical map cannot be built (RC-only extraction).');
+  }
 
   data.layerMap = Object.fromEntries(layerMap);
   data.layers = [...layerSet];

@@ -11,6 +11,28 @@ test('header divider/delimiter parsed; defaults when absent', () => {
   assert.equal(noHeader.delimiter, ':');
 });
 
+test('tab-separated header (Calibre xACT) is parsed', () => {
+  const d = parseDspf([
+    '*|DSPF\t1.5',
+    '*|DESIGN\tX327T0408',
+    '*|DIVIDER\t|',
+    '*|DELIMITER\t:',
+    '*|GROUND_NET\t0',
+  ].join('\n'));
+  assert.equal(d.divider, '|');
+  assert.equal(d.delimiter, ':');
+  assert.equal(d.design, 'X327T0408');
+  assert.deepEqual(d.groundNets, ['0']);
+  assert.equal(d.diagnostics.unrecognized, 0);
+});
+
+test('warns when the DSPF carries no coordinates', () => {
+  const d = parseDspf('*|NET N 1\nC1 N:1 0 1f\n');
+  assert.equal(d.diagnostics.pointsWithCoords, 0);
+  assert.ok(d.diagnostics.warnings.some(w => /coordinate/i.test(w)),
+    `expected a no-coordinate warning, got ${JSON.stringify(d.diagnostics.warnings)}`);
+});
+
 test('net subnodes capture coords; *|I with coords yields a device, without does not', () => {
   const d = parseDspf([
     '*|NET VOUTP 1.0',

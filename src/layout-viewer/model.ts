@@ -63,7 +63,10 @@ export interface LayoutConnection {
 export interface LayoutModel {
   design: string; extent: Bbox; layers: string[];
   instances: LayoutInstance[]; nets: LayoutNet[]; connections: LayoutConnection[];
-  stats: { instancesMatched: number; instancesTotal: number; devicesMatched: number };
+  stats: { instancesMatched: number; instancesTotal: number; devicesMatched: number; devicesTotal: number };
+  // Correlation-level advisories (e.g. low/zero CDL↔DSPF match). Parse-level
+  // advisories live in diagnostics.warnings.
+  warnings: string[];
   diagnostics: DspfDiagnostics;
 }
 

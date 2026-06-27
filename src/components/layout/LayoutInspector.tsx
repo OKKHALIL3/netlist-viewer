@@ -11,8 +11,15 @@ export function LayoutInspector() {
     body = <div className="insp-empty"><div className="insp-empty-icon">▦</div>Load a DSPF to build the physical map.</div>;
   } else if (!selection || selection.type === 'primitive') {
     const d = model.diagnostics;
+    const st = model.stats;
+    const warnings = [...d.warnings, ...model.warnings];
     body = (
       <div className="insp-body">
+        {warnings.length > 0 && (
+          <div className="layout-warnbox">
+            {warnings.map((w, i) => <div key={i} className="warn-note">⚠ {w}</div>)}
+          </div>
+        )}
         <div className="insp-empty"><div className="insp-empty-icon">▦</div>Select a block or net on the canvas.</div>
         <div className="sub-h">Parse report</div>
         <div className="kv"><span className="k">Nets</span><span className="v">{d.nets}</span></div>
@@ -21,6 +28,9 @@ export function LayoutInspector() {
         <div className="kv"><span className="k">Capacitors</span><span className="v">{d.capacitors} ({d.couplingCaps} coupling)</span></div>
         <div className="kv"><span className="k">Points w/ coords</span><span className="v">{d.pointsWithCoords}</span></div>
         {d.unitScale !== 1 && <div className="kv"><span className="k">Units</span><span className="v">scaled ×{d.unitScale.toLocaleString()}</span></div>}
+        <div className="sub-h">Correlation</div>
+        <div className="kv"><span className="k">Devices matched</span><span className="v">{st.devicesMatched} / {st.devicesTotal}</span></div>
+        <div className="kv"><span className="k">Blocks placed</span><span className="v">{st.instancesMatched} / {st.instancesTotal}</span></div>
       </div>
     );
   } else if (selection.type === 'instance') {
