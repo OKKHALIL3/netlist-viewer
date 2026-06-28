@@ -6,8 +6,14 @@ export interface HierNode { id: string; label: string; depth: number; segs: stri
 
 // Normalize one hierarchy segment: lowercase and drop finger suffixes
 // (`<@n>`, trailing `@n`) so a CDL id and a DSPF node name compare equal.
-function normSeg(seg: string): string {
+export function normSeg(seg: string): string {
   return seg.toLowerCase().replace(/<@[^>]*>/g, '').replace(/@\d+$/, '').trim();
+}
+
+// Layout instance ids are the normalized instance-path segments joined by '/'.
+// Used by the hierarchy panel to map a clicked CDL node to its layout box.
+export function pathToInstanceId(instanceLabels: string[]): string {
+  return instanceLabels.map(normSeg).filter(Boolean).join('/');
 }
 
 // Lowercase a hierarchical name and split into normalized segments. `seps` is
@@ -33,17 +39,14 @@ export function enumerateHierarchy(design: Design): HierNode[] {
   const walk = (cellName: string, prefix: string[], depth: number) => {
     const cell = design.cells.get(cellName);
     if (!cell) return;
+    // Only subckt instances are blocks. Primitive devices (transistors, R, C)
+    // are intentionally NOT enumerated — this viewer shows instance boundaries,
+    // not device-level boxes. Devices still position their parent instance's
+    // bbox via the prefix match in correlate().
     for (const inst of cell.instances) {
       const segs = [...prefix, normSeg(inst.id) || inst.id.toLowerCase()];
       add(segs, inst.id, depth);
       if (design.cells.has(inst.master)) walk(inst.master, segs, depth + 1);
-    }
-    // Primitive devices (MOSFETs/R/C) are leaf "blocks" too — without them a
-    // flat cell (all transistors, no subckt calls) has nothing to box and the
-    // canvas renders empty. The brief's data model treats e.g. MM15 as a depth-1
-    // instance with its own bbox.
-    for (const prim of cell.primitives) {
-      add([...prefix, normSeg(prim.id) || prim.id.toLowerCase()], prim.id, depth);
     }
   };
   walk(design.topCell, [], 1);
@@ -58,7 +61,11 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   const nodeCount = new Map<string, number>();
   for (const n of nodes) { nodeBox.set(n.id, emptyBbox()); nodeCount.set(n.id, 0); }
 
-  let devicesMatched = 0;
+  // LVS markers for layout-only devices that have no schematic counterpart
+  // (fill, decap, antenna diodes, dummies). These can never correlate — they
+  // are not a CDL/DSPF mismatch, so we count them separately.
+  const DUMMY_RE = /(unmatched|noxref)/i;
+  let devicesMatched = 0, devicesDummy = 0, devicesTopLevel = 0, devicesHierMiss = 0;
   for (const dev of data.devices) {
     const segs = normSegments(dev.path, dspfSeps);
     let matched = false;
@@ -70,6 +77,9 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
       if (box) { extendBbox(box, dev.x, dev.y); nodeCount.set(id, nodeCount.get(id)! + 1); matched = true; }
     }
     if (matched) devicesMatched++;
+    else if (DUMMY_RE.test(dev.path)) devicesDummy++;   // layout-only dummy
+    else if (segs.length <= 1) devicesTopLevel++;        // direct top-cell device
+    else devicesHierMiss++;                              // path prefix not in the CDL
   }
 
   const instances: LayoutInstance[] = nodes
@@ -131,13 +141,16 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   const extent = nodeBox.get('')!;
   const devicesTotal = data.devices.length;
 
-  // Surface CDL↔DSPF correlation health so a mismatch reads as a clear message
-  // rather than a silently empty canvas.
+  // Surface CDL↔DSPF correlation health. A genuine naming mismatch (devices on
+  // hierarchy paths absent from the CDL) is worth a warning; LVS dummies and
+  // top-level devices are expected and not flagged. The full breakdown lives in
+  // the inspector so an empty/partial canvas explains itself.
   const warnings: string[] = [];
-  if (devicesTotal > 0 && devicesMatched === 0) {
-    warnings.push(`None of ${devicesTotal} DSPF devices matched the CDL hierarchy — is this the right CDL/DSPF pair?`);
-  } else if (devicesTotal > 0 && devicesMatched / devicesTotal < 0.2) {
-    warnings.push(`Only ${devicesMatched} of ${devicesTotal} DSPF devices matched the CDL hierarchy (${Math.round((devicesMatched / devicesTotal) * 100)}%).`);
+  const realDevices = devicesTotal - devicesDummy;
+  if (devicesHierMiss > 0 && realDevices > 0 && devicesHierMiss / realDevices >= 0.2) {
+    warnings.push(
+      `${devicesHierMiss} of ${realDevices} non-dummy devices sit on hierarchy paths not in the CDL — likely a CDL/DSPF naming mismatch.`,
+    );
   }
 
   return {
@@ -148,7 +161,7 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     stats: {
       instancesMatched: instances.filter(i => i.depth >= 1).length,
       instancesTotal: nodes.filter(n => n.depth >= 1).length,
-      devicesMatched, devicesTotal,
+      devicesMatched, devicesTotal, devicesDummy, devicesTopLevel, devicesHierMiss,
     },
     warnings,
     diagnostics: data.diagnostics,

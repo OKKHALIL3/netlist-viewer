@@ -842,6 +842,9 @@ body {
 }
 .kv .k { color: var(--txt-dim); }
 .kv .v { font-family: 'Space Mono', monospace; color: var(--txt); text-align: right; }
+.kv.sub { padding: 3px 0 3px 10px; border-bottom: none; font-size: 11px; }
+.kv.sub .k, .kv.sub .v { color: var(--txt-faint); }
+.tree-row.nobox { opacity: 0.45; }
 .det-h { display: flex; align-items: center; gap: 9px; margin-bottom: 4px; }
 .det-h .ttl { font-family: 'Space Mono', monospace; font-weight: 700; font-size: 15px; color: var(--txt); }
 .det-sub { font-size: 11px; color: var(--txt-faint); margin-bottom: 10px; }

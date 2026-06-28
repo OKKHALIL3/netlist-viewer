@@ -63,7 +63,13 @@ export interface LayoutConnection {
 export interface LayoutModel {
   design: string; extent: Bbox; layers: string[];
   instances: LayoutInstance[]; nets: LayoutNet[]; connections: LayoutConnection[];
-  stats: { instancesMatched: number; instancesTotal: number; devicesMatched: number; devicesTotal: number };
+  stats: {
+    instancesMatched: number; instancesTotal: number;
+    devicesMatched: number; devicesTotal: number;
+    // Breakdown of uncorrelated devices: layout-only dummies (LVS unmatched),
+    // direct top-cell devices, and devices whose hierarchy path isn't in the CDL.
+    devicesDummy: number; devicesTopLevel: number; devicesHierMiss: number;
+  };
   // Correlation-level advisories (e.g. low/zero CDL↔DSPF match). Parse-level
   // advisories live in diagnostics.warnings.
   warnings: string[];

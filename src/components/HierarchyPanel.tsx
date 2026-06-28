@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useViewerStore, type BreadcrumbEntry } from '../store/viewerStore';
+import { pathToInstanceId } from '../layout-viewer/correlate';
 import type { Design } from '../parser/types';
 
 interface TreeNode {
@@ -62,22 +63,39 @@ function TreeRow({
 }) {
   const [open, setOpen] = useState(depth < 2);
   const { goToPath } = useViewerStore();
+  const appMode = useViewerStore(s => s.appMode);
+  const layoutModel = useViewerStore(s => s.layoutModel);
+  const selection = useViewerStore(s => s.selection);
+  const selectAndFocus = useViewerStore(s => s.selectAndFocus);
   const hasChildren = node.children.length > 0;
-  const isActive = node.cellName === currentCell;
   const canDescend = !node.isExternal;
+
+  // In layout mode a row maps to a layout instance box (normalized instance path).
+  const layoutId = pathToInstanceId(node.path.slice(1).map(e => e.label));
+  const inLayout = appMode === 'layout' && !!layoutModel;
+  const hasBox = inLayout && layoutModel!.instances.some(i => i.id === layoutId);
+  const isActive = inLayout
+    ? selection?.type === 'instance' && selection.id === layoutId
+    : node.cellName === currentCell;
 
   const handleClick = () => {
     if (hasChildren) setOpen(o => !o);
-    if (canDescend) goToPath(node.path, null);
+    if (inLayout) {
+      if (hasBox) selectAndFocus({ type: 'instance', id: layoutId });   // highlight + frame on the canvas
+    } else if (canDescend) {
+      goToPath(node.path, null);
+    }
   };
 
   return (
     <>
       <div
-        className={`tree-row${isActive ? ' active' : ''}`}
+        className={`tree-row${isActive ? ' active' : ''}${inLayout && !hasBox ? ' nobox' : ''}`}
         style={{ paddingLeft: 8 + depth * 14 }}
         onClick={handleClick}
-        title={canDescend ? `Descend into ${node.cellName}` : 'External cell'}
+        title={inLayout
+          ? (hasBox ? `Show ${node.cellName} on the layout` : 'No correlated layout box')
+          : canDescend ? `Descend into ${node.cellName}` : 'External cell'}
       >
         <span className="tree-chev">{hasChildren ? (open ? '▾' : '▸') : ''}</span>
         <span className={`tree-ic ${node.isExternal ? 'leaf' : 'cell'}`}>
@@ -102,6 +120,10 @@ function TreeRow({
 
 export function HierarchyPanel() {
   const { design, currentCell, goToPath } = useViewerStore();
+  const appMode = useViewerStore(s => s.appMode);
+  const layoutModel = useViewerStore(s => s.layoutModel);
+  const selection = useViewerStore(s => s.selection);
+  const selectAndFocus = useViewerStore(s => s.selectAndFocus);
 
   const tree = useMemo(() => {
     if (!design) return [];
@@ -109,6 +131,16 @@ export function HierarchyPanel() {
   }, [design]);
 
   if (!design) return null;
+
+  const inLayout = appMode === 'layout' && !!layoutModel;
+  // The top row maps to the whole-design (depth-0) box in layout mode.
+  const topActive = inLayout
+    ? selection?.type === 'instance' && selection.id === ''
+    : design.topCell === currentCell;
+  const onTopClick = () => {
+    if (inLayout) selectAndFocus({ type: 'instance', id: '' });
+    else goToPath([{ label: design.topCell, cellName: design.topCell }], null);
+  };
 
   return (
     <div className="panel-left">
@@ -118,9 +150,9 @@ export function HierarchyPanel() {
       <div className="tree-scroll">
         {/* Top cell row */}
         <div
-          className={`tree-row${design.topCell === currentCell ? ' active' : ''}`}
+          className={`tree-row${topActive ? ' active' : ''}`}
           style={{ paddingLeft: 8 }}
-          onClick={() => goToPath([{ label: design.topCell, cellName: design.topCell }], null)}
+          onClick={onTopClick}
         >
           <span className="tree-chev">▾</span>
           <span className="tree-ic cell">▦</span>

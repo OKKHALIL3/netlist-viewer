@@ -30,6 +30,9 @@ export function LayoutInspector() {
         {d.unitScale !== 1 && <div className="kv"><span className="k">Units</span><span className="v">scaled ×{d.unitScale.toLocaleString()}</span></div>}
         <div className="sub-h">Correlation</div>
         <div className="kv"><span className="k">Devices matched</span><span className="v">{st.devicesMatched} / {st.devicesTotal}</span></div>
+        {st.devicesDummy > 0 && <div className="kv sub"><span className="k">· layout-only (fill/dummy)</span><span className="v">{st.devicesDummy}</span></div>}
+        {st.devicesTopLevel > 0 && <div className="kv sub"><span className="k">· top-level (no sub-block)</span><span className="v">{st.devicesTopLevel}</span></div>}
+        {st.devicesHierMiss > 0 && <div className="kv sub"><span className="k">· path not in CDL</span><span className="v">{st.devicesHierMiss}</span></div>}
         <div className="kv"><span className="k">Blocks placed</span><span className="v">{st.instancesMatched} / {st.instancesTotal}</span></div>
       </div>
     );

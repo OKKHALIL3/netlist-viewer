@@ -11,7 +11,24 @@ const LAYER_COLOR: Record<string, string> = {
   metal3: '#ffb454', metal4: '#ff6b8a', metal5: '#b79bea',
 };
 const NEUTRAL = '#6b7689';
-const INST = '#4f9dff', SEL = '#ffd23f', CONN = '#c084fc';
+const SEL = '#ffd23f', CONN = '#c084fc';
+
+// Per-block color families: each top-level block gets a stable hue so sibling
+// blocks read as distinct; descendants inherit their top block's hue. The
+// whole-design boundary (depth 0) is a neutral grey.
+const PALETTE = ['#4f9dff', '#5fd0a0', '#ffb454', '#ff6b8a', '#b79bea', '#4fd0e0', '#e0a3ff', '#7bd88f'];
+const ROOT_COLOR = '#8a93a6';
+function blockColor(id: string): string {
+  const top = id.split('/')[0];
+  if (!top) return ROOT_COLOR;
+  let h = 0;
+  for (let i = 0; i < top.length; i++) h = (h * 31 + top.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+function rgba(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
 
 function depthMax(d: 0 | 1 | 2 | 'all'): number { return d === 'all' ? Infinity : d; }
 
@@ -44,25 +61,40 @@ function draw(
   }
 
   // ── instance boxes ──
+  // depth 0 (the whole-design boundary) is drawn first as context; deeper boxes
+  // layer on top. When a block is selected, dim everything off its branch
+  // (self / ancestors / descendants); the depth-0 box always stays visible.
+  const onSelBranch = (id: string): boolean => {
+    if (selId === null || selId === '' || id === '' || id === selId) return true;
+    return selId.startsWith(id + '/') || id.startsWith(selId + '/');
+  };
   for (const inst of model.instances) {
-    if (inst.depth === 0 || inst.depth > depth) continue;
+    if (inst.depth > depth) continue;
     const isSel = selId === inst.id;
     const isTouch = touched.has(inst.id);
     const isHover = hoverId === inst.id && !isSel;
+    const faded = selId !== null ? !onSelBranch(inst.id) : (!!selNet && !isTouch);
+
+    const base = inst.depth === 0 ? ROOT_COLOR : blockColor(inst.id);
+    const stroke = isSel ? SEL : (isTouch && selNet) ? CONN : base;
+    const fill = isSel ? rgba(SEL, 0.14)
+      : (isTouch && selNet) ? rgba(CONN, 0.12)
+      : rgba(base, inst.depth === 0 ? 0.04 : 0.11);
+
     const [x0, y1s] = worldToScreen(v, inst.bbox[0], inst.bbox[3]);
     const [x1, y0s] = worldToScreen(v, inst.bbox[2], inst.bbox[1]);
     const bw = x1 - x0, bh = y0s - y1s;
 
-    ctx.globalAlpha = selNet && !isTouch && !isSel ? 0.18 : 1;
-    ctx.strokeStyle = isSel ? SEL : isTouch ? CONN : INST;
-    ctx.fillStyle = isSel ? 'rgba(255,210,63,0.13)' : isTouch ? 'rgba(192,132,252,0.12)' : 'rgba(79,157,255,0.10)';
-    ctx.lineWidth = isSel || isHover ? 2 : 1.3;
+    ctx.globalAlpha = faded ? 0.12 : 1;
+    ctx.strokeStyle = stroke;
+    ctx.fillStyle = fill;
+    ctx.lineWidth = isSel || isHover ? 2 : inst.depth === 0 ? 1.4 : 1.3;
     ctx.fillRect(x0, y1s, bw, bh);
     ctx.strokeRect(x0, y1s, bw, bh);
-    if (isHover) { ctx.strokeStyle = '#9cc4ff'; ctx.lineWidth = 1; ctx.strokeRect(x0 - 2, y1s - 2, bw + 4, bh + 4); }
+    if (isHover) { ctx.strokeStyle = rgba(base, 0.9); ctx.lineWidth = 1; ctx.strokeRect(x0 - 2, y1s - 2, bw + 4, bh + 4); }
 
     if (bw > 34 && bh > 12) {
-      ctx.fillStyle = isSel ? SEL : isTouch ? '#e7d4ff' : '#9cc4ff';
+      ctx.fillStyle = isSel ? SEL : faded ? rgba(base, 0.5) : stroke;
       ctx.font = '11px "Space Mono", monospace';
       ctx.fillText(inst.label, x0 + 5, y1s + 13);
     }
@@ -209,7 +241,7 @@ export function LayoutCanvas() {
         <button onClick={exportPng} title="Export PNG">⬇ PNG</button>
       </div>
       <div className="layout-legend">
-        <span><i className="sw-inst" /> instance bbox</span>
+        <span><i className="sw-inst" /> block (by hierarchy)</span>
         <span><i className="sw-net" /> net bbox</span>
         <span><i className="sw-conn" /> connection (by layer)</span>
         <span><i className="sw-sel" /> selected</span>
