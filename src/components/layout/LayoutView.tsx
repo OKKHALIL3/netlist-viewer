@@ -1,4 +1,5 @@
 import { HierarchyPanel } from '../HierarchyPanel';
+import { PanelToggles } from '../PanelToggles';
 import { LayoutCanvas } from './LayoutCanvas';
 import { DepthSelector } from './DepthSelector';
 import { LayerPanel } from './LayerPanel';
@@ -9,11 +10,15 @@ import { useViewerStore } from '../../store/viewerStore';
 
 export function LayoutView() {
   const model = useViewerStore(s => s.layoutModel);
+  const leftPanelOpen = useViewerStore(s => s.leftPanelOpen);
+  const rightPanelOpen = useViewerStore(s => s.rightPanelOpen);
   const ext = model?.extent;
+  const shellClass = `shell${leftPanelOpen ? '' : ' left-collapsed'}${rightPanelOpen ? '' : ' right-collapsed'}`;
   return (
-    <div className="shell">
+    <div className={shellClass}>
       <HierarchyPanel />
       <div className="canvas-col">
+        <PanelToggles />
         <div className="layout-bar">
           <ZoneSelect />
           <DepthSelector />

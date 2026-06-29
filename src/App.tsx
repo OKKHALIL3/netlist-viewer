@@ -4,12 +4,16 @@ import { HierarchyPanel } from './components/HierarchyPanel';
 import { SchematicCanvas } from './components/SchematicCanvas';
 import { CanvasErrorBoundary } from './components/CanvasErrorBoundary';
 import { InspectorPanel } from './components/InspectorPanel';
+import { PanelToggles } from './components/PanelToggles';
 import { DropZone } from './components/DropZone';
 import { SearchPalette } from './components/SearchPalette';
 import { LayoutView } from './components/layout/LayoutView';
 
 export default function App() {
   const { design, warnings, currentCell, appMode } = useViewerStore();
+  const leftPanelOpen = useViewerStore(s => s.leftPanelOpen);
+  const rightPanelOpen = useViewerStore(s => s.rightPanelOpen);
+  const shellClass = `shell${leftPanelOpen ? '' : ' left-collapsed'}${rightPanelOpen ? '' : ' right-collapsed'}`;
 
   return (
     <div className="app">
@@ -19,9 +23,10 @@ export default function App() {
       ) : appMode === 'layout' ? (
         <LayoutView />
       ) : (
-        <div className="shell">
+        <div className={shellClass}>
           <HierarchyPanel />
           <div className="canvas-col">
+            <PanelToggles />
             <CanvasErrorBoundary resetKey={currentCell}>
               <SchematicCanvas />
             </CanvasErrorBoundary>
