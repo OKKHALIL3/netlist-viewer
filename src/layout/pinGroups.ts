@@ -41,12 +41,25 @@ export function pinDirection(name: string, ports: Port[]): 'I' | 'O' | 'B' {
   return 'I';
 }
 
-// A pin tied to a power/ground net is a supply/ground pin regardless of its
-// declared direction; otherwise it's an input or output by direction.
-// Bidirectional / unknown-direction pins fall in with the inputs (left side).
+// Supply/ground PIN-NAME heuristic — mirrors PWR_RE/GND_RE in cdl_adapter.py.
+// A pin is a supply/ground pin by its role even when it's wired to an oddly
+// named rail (e.g. an AVD_0V8 supply pin tied to net AVRH one level up), so the
+// pin name governs grouping in addition to the net kind.
+const PWR_NAME = /^(?:a|d|p|io|dig)?v(?:dd|cc)|^(?:a|d|p|io|dig)?v[dc](?:[0-9_]|$)/i;
+const GND_NAME = /^(?:a|d|p|io|dig)?(?:gnd|vss)|^(?:a|d|p|io|dig)?vs(?:[0-9_]|$)/i;
+function pinNameKind(name: string): NetKind | null {
+  if (PWR_NAME.test(name)) return 'power';
+  if (GND_NAME.test(name)) return 'ground';
+  return null;
+}
+
+// A pin tied to a power/ground net — OR named like one — is a supply/ground pin
+// regardless of its declared direction; otherwise it's an input or output by
+// direction. Bidirectional / unknown-direction pins fall in with the inputs.
 export function classifyPin(pin: string, netKind: NetKind, ports: Port[]): PinGroup {
-  if (netKind === 'power') return 'supply';
-  if (netKind === 'ground') return 'ground';
+  const nameKind = pinNameKind(pin);
+  if (netKind === 'power' || nameKind === 'power') return 'supply';
+  if (netKind === 'ground' || nameKind === 'ground') return 'ground';
   return pinDirection(pin, ports) === 'O' ? 'output' : 'input';
 }
 

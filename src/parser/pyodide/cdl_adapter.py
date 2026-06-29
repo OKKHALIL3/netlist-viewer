@@ -34,8 +34,14 @@ def infer_x_kind(master: str):
 
 # ── Net classification ──────────────────────────────────────────────────────
 
-PWR_RE = re.compile(r"^(vcc|vdd|vddio|vccio|vccpst|vcco|vddo|dvdd|avdd|pvdd|iovdd)", re.I)
-GND_RE = re.compile(r"^(vss|gnd|vssio|vsso|agnd|dgnd|pgnd|iovss|avss)", re.I)
+# Supply/ground name heuristics. Cover the VDD/VCC and VSS/GND families with an
+# optional domain prefix (a=analog, d=digital, p=periphery, io) AND the
+# voltage-suffixed analog rails this PDK uses (AVD_0V8, AVS_1V2, ...). The
+# single-letter forms (V[DC]/VS) only count when followed by a digit, underscore
+# or end-of-string, so plain signals like "vdata"/"vsig" are not misread as
+# supplies. Keep in sync with PWR_NAME/GND_NAME in src/layout/pinGroups.ts.
+PWR_RE = re.compile(r"^(?:a|d|p|io|dig)?v(?:dd|cc)|^(?:a|d|p|io|dig)?v[dc](?:[0-9_]|$)", re.I)
+GND_RE = re.compile(r"^(?:a|d|p|io|dig)?(?:gnd|vss)|^(?:a|d|p|io|dig)?vs(?:[0-9_]|$)", re.I)
 
 
 def net_kind(name: str) -> str:

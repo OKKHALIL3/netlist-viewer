@@ -514,7 +514,7 @@ M1 a b c c nmos
 section('Net classification (power / ground / signal)');
 
 const NET_CDL = `
-.SUBCKT FOO vdd vss vddio vccpst agnd iovss sig
+.SUBCKT FOO vdd vss vddio vccpst agnd iovss avd_0v8 avs avdd avss vdata sig
 M1 sig vdd vss vss nmos
 .ENDS
 `;
@@ -527,6 +527,13 @@ check('vss → ground', netCell.nets.find(n => n.name === 'vss')?.kind, 'ground'
 check('agnd → ground', netCell.nets.find(n => n.name === 'agnd')?.kind, 'ground');
 check('iovss → ground', netCell.nets.find(n => n.name === 'iovss')?.kind, 'ground');
 check('sig → signal', netCell.nets.find(n => n.name === 'sig')?.kind, 'signal');
+// Analog families: single-letter AVD/AVS and voltage-suffixed supplies.
+check('avd_0v8 → power', netCell.nets.find(n => n.name === 'avd_0v8')?.kind, 'power');
+check('avdd → power', netCell.nets.find(n => n.name === 'avdd')?.kind, 'power');
+check('avs → ground', netCell.nets.find(n => n.name === 'avs')?.kind, 'ground');
+check('avss → ground', netCell.nets.find(n => n.name === 'avss')?.kind, 'ground');
+// Over-match guard: a plain signal that merely starts with "v" stays signal.
+check('vdata → signal', netCell.nets.find(n => n.name === 'vdata')?.kind, 'signal');
 
 // ─────────────────────────────────────────────────────────────────────────────
 section('Line ending variants');
