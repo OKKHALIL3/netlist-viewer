@@ -20,6 +20,7 @@ import { layoutCell } from '../layout/elk';
 import { clusterBusRibbons } from '../layout/busGrouping';
 import { computeInstanceLayout, pinDirection } from '../layout/pinGroups';
 import { buildCellView, type CellView } from '../layout/cellView';
+import { isFloatingNet } from '../layout/netStatus';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
@@ -176,11 +177,16 @@ function buildGraph(
     }
   }
 
+  // Dangling/floating nets (≤1 endpoint) — flag any device terminal sitting on
+  // one so it reads as a deliberately-marked open pin, not a rendering glitch.
+  const floatingNets = new Set(cell.nets.filter(isFloatingNet).map(n => n.name));
+
   for (const prim of cell.primitives) {
     const pos = positions.get(prim.id);
     if (!pos) continue;
     const isSelected = selPrimId === prim.id;
     const isConnected = !isSelected && highlightedNodes.has(prim.id);
+    const floatingTerms = prim.terms.filter(([, net]) => floatingNets.has(net)).map(([t]) => t);
     nodes.push({
       id: prim.id,
       type: 'primitiveNode',
@@ -191,6 +197,7 @@ function buildGraph(
         isConnected,
         arraySize: prim.arraySize,
         supplyStubs: supplyStubsByPrim.get(prim.id),
+        floatingTerms: floatingTerms.length ? floatingTerms : undefined,
       } as PrimitiveNodeData,
     });
   }

@@ -13,6 +13,9 @@ export interface PrimitiveNodeData extends Record<string, unknown> {
   // ("hide supply"). Each is capped with a ground/VDD stub glyph instead of
   // left as a bare, floating-looking pin. Keyed by terminal name.
   supplyStubs?: Record<string, 'power' | 'ground'>;
+  // Terminals on a dangling net (≤1 endpoint) — marked with an amber ring so a
+  // genuinely-floating pin is flagged rather than mistaken for a glitch.
+  floatingTerms?: string[];
 }
 
 const KIND_COLOR: Record<string, string> = {
@@ -32,7 +35,7 @@ function kindLabel(prim: Primitive): string {
 
 function PrimitiveNodeImpl({ data }: NodeProps) {
   const d = data as PrimitiveNodeData;
-  const { primitive, isSelected, isConnected, arraySize, supplyStubs } = d;
+  const { primitive, isSelected, isConnected, arraySize, supplyStubs, floatingTerms } = d;
   // Select just the action, not the whole store — see InstanceNode for why this
   // matters on big cells.
   const setSelection = useViewerStore(s => s.setSelection);
@@ -68,6 +71,10 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
               style={{ top: 8 + i * 16, width: 7, height: 7, background: color, border: '2px solid var(--bg)' }} />
             <Handle type="source" position={Position.Left} id={`${term}-src`}
               style={{ top: 8 + i * 16, width: 7, height: 7, opacity: 0, pointerEvents: 'none' }} />
+            {floatingTerms?.includes(term) && (
+              <div className="floating-pin" title={`Floating: terminal "${term}" connects to a dangling net`}
+                style={{ left: 0, top: 8 + i * 16, transform: 'translate(-50%, -50%)' }} />
+            )}
           </Fragment>
         ))}
         <div className="prim-glyph">{primitive.kind}</div>
@@ -139,6 +146,21 @@ function PrimitiveNodeImpl({ data }: NodeProps) {
             </Fragment>
           );
         })}
+
+        {/* Amber ring on any terminal whose net is dangling (≤1 endpoint), so a
+            genuinely-floating pin is flagged instead of read as a glitch. */}
+        {(floatingTerms ?? []).map(term => {
+          const slot = sym.slots[term];
+          if (!slot) return null;
+          return (
+            <div
+              key={`float-${term}`}
+              className="floating-pin"
+              title={`Floating: terminal "${term}" connects to a dangling net`}
+              style={{ left: slot.x, top: slot.y, transform: 'translate(-50%, -50%)' }}
+            />
+          );
+        })}
       </div>
       <div className="prim-label">
         <span title={primitive.id}>{primitive.id}</span>
@@ -153,7 +175,7 @@ function sameData(a: NodeProps, b: NodeProps): boolean {
   const x = a.data as PrimitiveNodeData;
   const y = b.data as PrimitiveNodeData;
   return x.primitive === y.primitive && x.isSelected === y.isSelected && x.isConnected === y.isConnected &&
-    x.arraySize === y.arraySize && x.supplyStubs === y.supplyStubs;
+    x.arraySize === y.arraySize && x.supplyStubs === y.supplyStubs && x.floatingTerms === y.floatingTerms;
 }
 
 export const PrimitiveNode = memo(PrimitiveNodeImpl, sameData);

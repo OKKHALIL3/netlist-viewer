@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useViewerStore } from '../store/viewerStore';
 import { describeCell, getApiKey, getCachedDescription, setApiKey } from '../ai/describeCell';
 import { buildCellView } from '../layout/cellView';
+import { isFloatingNet } from '../layout/netStatus';
 import type { Cell } from '../parser/types';
 
 const BULLET_RE = /^[-*•]\s+/;
@@ -190,6 +191,7 @@ function NetDetail() {
     ? 'var(--net-gnd)'
     : 'var(--net-sig)';
   const realEps = net.endpoints.filter(([id]) => id !== '__port__');
+  const floating = isFloatingNet(net);
 
   return (
     <div>
@@ -197,6 +199,13 @@ function NetDetail() {
         <span className="insp-tag net">Net</span>
         <span className="insp-title">{net.name}</span>
       </div>
+
+      {floating && (
+        <div className="floating-note">
+          ⚠ Floating net — connects to only {realEps.length} pin{realEps.length === 1 ? '' : 's'} and
+          nothing else (dangling in this cell).
+        </div>
+      )}
 
       <div className="kv-row">
         <span className="kv-key">Type</span>
