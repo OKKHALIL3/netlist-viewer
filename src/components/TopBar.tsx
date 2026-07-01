@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useViewerStore } from '../store/viewerStore';
 import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
@@ -11,6 +11,8 @@ export function TopBar() {
   } = useViewerStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const dspfRef = useRef<HTMLInputElement>(null);
+  // 0..1 while a DSPF parse is running in the worker, null otherwise.
+  const [dspfProgress, setDspfProgress] = useState<number | null>(null);
 
   const handleDspf = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -19,14 +21,16 @@ export function TopBar() {
     reader.onload = async (ev) => {
       setParseError(null);
       setParsing(true);
+      setDspfProgress(0);
       try {
-        const data = await parseDspfAsync(ev.target?.result as string);
+        const data = await parseDspfAsync(ev.target?.result as string, setDspfProgress);
         loadLayout(data);
         setAppMode('layout');
       } catch (err) {
         setParseError(err instanceof Error ? err.message : String(err));
       } finally {
         setParsing(false);
+        setDspfProgress(null);
       }
     };
     reader.readAsText(file);
@@ -100,7 +104,11 @@ export function TopBar() {
       {/* Right side */}
       <div className="topbar-right">
         {parseError && <span className="badge badge-error">{parseError}</span>}
-        {parsing && <span className="badge">Parsing…</span>}
+        {parsing && (
+          <span className="badge">
+            {dspfProgress !== null ? `Parsing DSPF… ${Math.round(dspfProgress * 100)}%` : 'Parsing…'}
+          </span>
+        )}
 
         {design && (
           <>

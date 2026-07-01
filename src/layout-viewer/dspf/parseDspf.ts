@@ -7,7 +7,7 @@ import { splitTokens, parseParenPayload, type ParenInfo } from './tokens';
 import { parseResistor, parseCapacitor, parseDeviceStatement, type ResolveLayer } from './elements';
 import { parseSpiceNumber, isNumericToken } from './units';
 
-export interface ParseDspfOptions { unitScale?: number }
+export interface ParseDspfOptions { unitScale?: number; onProgress?: (frac: number) => void }
 
 function freshDiagnostics(): DspfDiagnostics {
   return {
@@ -244,7 +244,7 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
         uniqueDevices.set(dev.name, { path: dev.name, model: dev.model, pins: dev.nodes.length });
       }
     }
-  });
+  }, opts.onProgress);
 
   // Ground nets declared but never sectioned still deserve a record (the
   // inspector lists them); sectioned ones get flagged.
