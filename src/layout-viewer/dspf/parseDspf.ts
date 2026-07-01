@@ -4,7 +4,7 @@ import type {
 } from '../model';
 import { forEachLogicalLine } from './lines';
 import { splitTokens, parseParenPayload, type ParenInfo } from './tokens';
-import { parseResistor, parseCapacitor, type ResolveLayer } from './elements';
+import { parseResistor, parseCapacitor, parseDeviceStatement, type ResolveLayer } from './elements';
 import { parseSpiceNumber, isNumericToken } from './units';
 
 export interface ParseDspfOptions { unitScale?: number }
@@ -220,14 +220,30 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
     if (c === 'c') {
       const cap = parseCapacitor(splitTokens(line), resolveLayer);
       if (cap && net) {
+        // Refine the provisional coupling flag: a cap to node 0, to any
+        // declared ground net, or between two nodes of THIS net is not
+        // cross-net coupling.
+        const sameNet = cap.b === net.name || cap.b.startsWith(net.name + data.delimiter);
+        cap.coupling = cap.b !== '' && cap.b !== '0' && !groundSet.has(cap.b) && !sameNet;
         net.capacitors.push(cap); diag.capacitors++;
         if (cap.coupling) diag.couplingCaps++;
         addLayer(cap.layer);
       }
       return;
     }
-    // other letters: device instance statements — handled in the instance
-    // section pass (parseDeviceStatement); nothing to do for the map yet
+
+    // Any other letter: a device instance statement (M/X/D/Q/…), typically in
+    // the trailing "*Instance Section". It contributes identity + model; its
+    // terminal nodes already carry coordinates via the net sections.
+    const dev = parseDeviceStatement(splitTokens(line));
+    if (dev) {
+      const known = uniqueDevices.get(dev.name);
+      if (known) {
+        if (!known.model && dev.model) known.model = dev.model;
+      } else {
+        uniqueDevices.set(dev.name, { path: dev.name, model: dev.model, pins: dev.nodes.length });
+      }
+    }
   });
 
   // Ground nets declared but never sectioned still deserve a record (the

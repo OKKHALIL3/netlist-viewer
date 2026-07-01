@@ -226,3 +226,47 @@ test('quoted *|NET names are unquoted', () => {
   const d = parseDspf('*|NET "N1" 1e-15\n*|S (N1:1 0 0)\n');
   assert.equal(d.nets[0].name, 'N1');
 });
+
+// ── Task 4 additions: elements + instance-section devices ──────────────────
+
+test('coupling cap = b node on a foreign net; ground/same-net caps are not coupling', () => {
+  const d = parseDspf([
+    '*|DELIMITER :', '*|GROUND_NET 0', '*|NET A 1f', '*|S (A:1 0 0)',
+    'C1 A:1 0 1f',        // ground cap
+    'C2 A:1 A:2 1f',      // same-net cap
+    'C3 A:1 B:9 1f',      // coupling to net B
+  ].join('\n'));
+  const caps = d.nets[0].capacitors;
+  assert.deepEqual(caps.map(c => c.coupling), [false, false, true]);
+  assert.equal(d.diagnostics.couplingCaps, 1);
+});
+
+test('caps to a declared ground net are not coupling (Quantus CB to 0-style)', () => {
+  const d = parseDspf([
+    '*|DELIMITER #', '*|GROUND_NET GNDX', '*|NET A 1f', '*|S (A#1 0 0)',
+    'Cg1 A#1 GNDX 1f',
+  ].join('\n'));
+  assert.equal(d.nets[0].capacitors[0].coupling, false);
+  assert.equal(d.diagnostics.couplingCaps, 0);
+});
+
+test('instance-section devices merge into the device list with models', () => {
+  const d = parseDspf([
+    '*|DELIMITER #', '*|NET N 1f', '*|I (M7#d M7 d B 0 1 2)',
+    '*Instance Section',
+    'M7 M7#d M7#g nch_mac l=6e-9',
+    'D60 D60#POS D60#NEG nwdio AREA=1',
+  ].join('\n'));
+  assert.equal(d.devices.length, 2);
+  assert.equal(d.devices.find(x => x.path === 'M7')!.model, 'nch_mac');
+  assert.equal(d.devices.find(x => x.path === 'D60')!.model, 'nwdio');
+});
+
+test('TAB-delimited instance lines with continuations parse (Quantus)', () => {
+  const d = parseDspf([
+    '*|NET N 1f',
+    'D61_unmatched\tD61_unmatched#POS\tD61_unmatched#NEG\tnwdio',
+    '+ AREA=4.69526e-12\tPJ=1.1028e-05',
+  ].join('\n'));
+  assert.equal(d.devices.find(x => x.path === 'D61_unmatched')!.model, 'nwdio');
+});

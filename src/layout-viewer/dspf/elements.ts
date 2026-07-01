@@ -35,6 +35,24 @@ export function parseCapacitor(tokens: string[], resolveLayer: ResolveLayer): Ds
     value: Number.isFinite(value) ? value : null,
     layer: resolveLayer(params),
     x: num(params.get('x')), y: num(params.get('y')),
+    // Provisional: node "0" is always ground. The section parser refines this
+    // with the declared ground nets and the owning net's name (same-net caps
+    // are not coupling).
     coupling: b !== '' && b !== '0',
   };
+}
+
+// A device statement (M/X/D/Q/… line, typically in the trailing "Instance
+// Section"): instance name, terminal-node refs, then the model, then params.
+export function parseDeviceStatement(
+  tokens: string[],
+): { name: string; nodes: string[]; model: string | null } | null {
+  if (tokens.length < 2) return null;
+  const name = tokens[0];
+  const { rest } = parseKeyVals(tokens.slice(1));
+  if (rest.length === 0) return null;
+  // last non-param token is the model; everything before it is node refs
+  const model = rest.length >= 2 ? rest[rest.length - 1] : null;
+  const nodes = model !== null ? rest.slice(0, -1) : rest;
+  return { name, nodes, model };
 }
