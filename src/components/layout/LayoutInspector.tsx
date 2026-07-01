@@ -37,7 +37,7 @@ export function LayoutInspector() {
         <div className="kv"><span className="k">Capacitors</span><span className="v">{d.capacitors} ({d.couplingCaps} coupling)</span></div>
         <div className="kv"><span className="k">Points w/ coords</span><span className="v">{d.pointsWithCoords}</span></div>
         {layoutData && layoutData.groundNets.length > 0 && (
-          <div className="kv"><span className="k">Ground nets</span><span className="v">{layoutData.groundNets.join(', ')}</span></div>
+          <div className="kv"><span className="k">Ground nets</span><span className="v">{layoutData.groundNets.map(g => `"${g}"`).join(', ')}</span></div>
         )}
         {d.unitScale !== 1 && <div className="kv"><span className="k">Units</span><span className="v">scaled ×{d.unitScale.toLocaleString()}</span></div>}
         <div className="sub-h">Correlation</div>
@@ -54,7 +54,10 @@ export function LayoutInspector() {
     if (!i) {
       body = <div className="insp-empty">No physical data for this block.</div>;
     } else {
-      const nets = model.nets.filter(n => n.instances.includes(i.id));
+      // A net touches this block if it reaches the block itself OR anything
+      // inside it (touch resolution records the DEEPEST block per node).
+      const nets = model.nets.filter(n =>
+        n.instances.some(id => id === i.id || id.startsWith(i.id + '/')));
       const w = i.bbox[2] - i.bbox[0], h = i.bbox[3] - i.bbox[1];
       body = (
         <div className="insp-body">

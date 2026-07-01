@@ -179,8 +179,12 @@ export function LayoutCanvas() {
       return n && bboxArea(n.bbox) > 0 ? [n] : [];
     }
     if (selection?.type === 'instance') {
+      // Nets touching the block itself or anything nested inside it (touch
+      // resolution records the DEEPEST block per node).
+      const sel = selection.id;
       return model.nets
-        .filter(n => n.instances.includes(selection.id) && bboxArea(n.bbox) > 0)
+        .filter(n => bboxArea(n.bbox) > 0 &&
+          n.instances.some(id => id === sel || id.startsWith(sel + '/')))
         .sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))
         .slice(0, MAX_NET_BOXES);
     }
