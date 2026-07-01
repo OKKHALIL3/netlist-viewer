@@ -780,6 +780,17 @@ body {
 .layer-chip.off { opacity: 0.4; text-decoration: line-through; }
 .layer-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 .nolayer-note { font-size: 11px; color: var(--txt-faint); font-style: italic; line-height: 1.5; }
+/* Disabled layer panel (this DSPF carries no layer tags) — explained, not hidden */
+.layer-chips.disabled {
+  opacity: 0.75; border: 1px dashed var(--line); border-radius: 7px; padding: 4px 9px;
+  cursor: help;
+}
+.layer-note { font-size: 11px; color: var(--txt-faint); font-family: 'Space Mono', monospace; }
+/* Layer color swatch inside inspector chips */
+.chip.lay .lay-sw {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 5px; vertical-align: middle;
+}
 
 /* Floating (dangling) net: inspector callout + canvas terminal ring */
 .floating-note {

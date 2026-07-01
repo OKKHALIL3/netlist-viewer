@@ -1,8 +1,15 @@
 import { useViewerStore } from '../../store/viewerStore';
 import { reachRatio } from '../../layout-viewer/insights';
+import { layerColor } from './layerColors';
+
+// Total-cap display: DSPF writes Farads.
+function fmtCap(f: number): string {
+  return f >= 1e-12 ? `${(f * 1e12).toFixed(3)} pF` : `${(f * 1e15).toFixed(3)} fF`;
+}
 
 export function LayoutInspector() {
   const model = useViewerStore(s => s.layoutModel);
+  const layoutData = useViewerStore(s => s.layoutData);
   const selection = useViewerStore(s => s.selection);
   const setSelection = useViewerStore(s => s.setSelection);
 
@@ -22,11 +29,16 @@ export function LayoutInspector() {
         )}
         <div className="insp-empty"><div className="insp-empty-icon">▦</div>Select a block or net on the canvas.</div>
         <div className="sub-h">Parse report</div>
+        {layoutData?.generator && <div className="kv"><span className="k">Extractor</span><span className="v" title={layoutData.generator}>{layoutData.generator.slice(0, 28)}</span></div>}
         <div className="kv"><span className="k">Nets</span><span className="v">{d.nets}</span></div>
-        <div className="kv"><span className="k">Devices</span><span className="v">{d.devices}</span></div>
+        <div className="kv"><span className="k">Devices (unique)</span><span className="v">{d.devices}</span></div>
+        <div className="kv"><span className="k">Device pin points</span><span className="v">{d.devicePinPoints}</span></div>
         <div className="kv"><span className="k">Resistors</span><span className="v">{d.resistors} ({d.resistorsWithGeometry} w/ geometry)</span></div>
         <div className="kv"><span className="k">Capacitors</span><span className="v">{d.capacitors} ({d.couplingCaps} coupling)</span></div>
         <div className="kv"><span className="k">Points w/ coords</span><span className="v">{d.pointsWithCoords}</span></div>
+        {layoutData && layoutData.groundNets.length > 0 && (
+          <div className="kv"><span className="k">Ground nets</span><span className="v">{layoutData.groundNets.join(', ')}</span></div>
+        )}
         {d.unitScale !== 1 && <div className="kv"><span className="k">Units</span><span className="v">scaled ×{d.unitScale.toLocaleString()}</span></div>}
         <div className="sub-h">Correlation</div>
         <div className="kv"><span className="k">Devices matched</span><span className="v">{st.devicesMatched} / {st.devicesTotal}</span></div>
@@ -34,6 +46,7 @@ export function LayoutInspector() {
         {st.devicesTopLevel > 0 && <div className="kv sub"><span className="k">· top-level (no sub-block)</span><span className="v">{st.devicesTopLevel}</span></div>}
         {st.devicesHierMiss > 0 && <div className="kv sub"><span className="k">· path not in CDL</span><span className="v">{st.devicesHierMiss}</span></div>}
         <div className="kv"><span className="k">Blocks placed</span><span className="v">{st.instancesMatched} / {st.instancesTotal}</span></div>
+        {st.physicalBlocks > 0 && <div className="kv"><span className="k">Physical-only blocks</span><span className="v">{st.physicalBlocks}</span></div>}
       </div>
     );
   } else if (selection.type === 'instance') {
@@ -46,7 +59,11 @@ export function LayoutInspector() {
       body = (
         <div className="insp-body">
           <div className="det-h"><span className="tag inst">Instance</span><span className="ttl">{i.label}</span></div>
-          <div className="det-sub">depth {i.depth}</div>
+          <div className="det-sub">{i.master ? `master ${i.master} · ` : ''}depth {i.depth}</div>
+          {i.origin === 'dspf' && (
+            <div className="warn-note">◇ Physical-only block — present in the DSPF but not matched to any
+            CDL instance (extractor-renamed hierarchy or fill family).</div>
+          )}
           <div className="kv"><span className="k">Devices</span><span className="v">{i.deviceCount}</span></div>
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
           <div className="sub-h">Instance bbox</div>
@@ -67,9 +84,14 @@ export function LayoutInspector() {
       body = (
         <div className="insp-body">
           <div className="det-h"><span className="tag net">Net (PEX)</span><span className="ttl">{n.name}</span></div>
+          {n.isGround && <div className="det-sub">declared ground net (*|GROUND_NET)</div>}
           {reach >= 1.2 && (
             <div className="reach-callout">Reaches <b>{reach.toFixed(1)}×</b> the footprint of the blocks it connects.</div>
           )}
+          {n.totalCap !== null && (
+            <div className="kv"><span className="k">Total cap</span><span className="v">{fmtCap(n.totalCap)}</span></div>
+          )}
+          <div className="kv"><span className="k">Ports</span><span className="v">{n.ports}</span></div>
           <div className="kv"><span className="k">Subnodes</span><span className="v">{n.subnodes}</span></div>
           <div className="kv"><span className="k">Parasitics</span><span className="v">{n.parasitics}</span></div>
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
@@ -83,7 +105,11 @@ export function LayoutInspector() {
           <div className="sub-h">Metal layers</div>
           {model.layers.length === 0
             ? <div className="nolayer-note">Not available — this DSPF was extracted without layer tags.</div>
-            : <div>{n.layers.map(l => <span key={l} className="chip lay">{l}</span>)}</div>}
+            : <div>{n.layers.map(l => (
+                <span key={l} className="chip lay">
+                  <i className="lay-sw" style={{ background: layerColor(l) }} />{l}
+                </span>
+              ))}</div>}
         </div>
       );
     }
