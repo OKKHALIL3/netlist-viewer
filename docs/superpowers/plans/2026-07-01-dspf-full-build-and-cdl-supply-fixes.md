@@ -34,7 +34,7 @@
 - Produces: `nameNetKind(name: string): 'power' | 'ground' | 'signal'`, `refineNetKinds(design: Design): void` (mutates `net.kind` in place), exported `PWR_RE`, `GND_RE`.
 - Consumers: `pyodideParser.jsonToDesign` (every parse), `validateDesign.netKind`, later tasks read `net.kind` as today.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // src/parser/netKinds.test.ts
@@ -159,12 +159,12 @@ test('name heuristic outranks topology', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `node --import tsx --test src/parser/netKinds.test.ts`
 Expected: FAIL — `Cannot find module './netKinds'`.
 
-- [ ] **Step 3: Implement `src/parser/netKinds.ts`**
+- [x] **Step 3: Implement `src/parser/netKinds.ts`**
 
 ```ts
 // Net classification: is a net a power rail, a ground rail, or a signal?
@@ -267,12 +267,12 @@ export function refineNetKinds(design: Design): void {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `node --import tsx --test src/parser/netKinds.test.ts`
 Expected: PASS (7 tests). If `VGND`/`GROUND`/`0` fail, the GND_RE alternation is wrong — every alternative must be anchored (`^v?gnd`, `^ground$`, `^0$`).
 
-- [ ] **Step 5: Wire into the parse path + consolidate validateDesign**
+- [x] **Step 5: Wire into the parse path + consolidate validateDesign**
 
 In `src/parser/pyodide/pyodideParser.ts`, import and call:
 
@@ -305,12 +305,12 @@ In `package.json`, extend the layout test glob:
 "test:layout": "node --import tsx --test \"src/parser/netKinds.test.ts\" \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\" \"src/layout/**/*.test.ts\"",
 ```
 
-- [ ] **Step 6: Run the full fast suite**
+- [x] **Step 6: Run the full fast suite**
 
 Run: `npm run test:layout`
 Expected: PASS (old 16 layout + new netKinds tests). Also run `npm test` (pyodide adapter suite) — expected 65/65 pass, since the adapter itself is untouched.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/parser/netKinds.ts src/parser/netKinds.test.ts src/parser/pyodide/pyodideParser.ts src/viz/validateDesign.ts package.json
@@ -329,7 +329,7 @@ git commit -m "fix(schematic): classify supply/ground nets by topology + hierarc
 **Interfaces:**
 - Produces: `classifyDangling(net: Pick<Net,'name'|'endpoints'>): 'floating' | 'dummy-leg' | null` (null = normally connected). `isFloatingNet` unchanged.
 
-- [ ] **Step 1: Add failing tests to `src/layout/netStatus.test.ts`**
+- [x] **Step 1: Add failing tests to `src/layout/netStatus.test.ts`**
 
 ```ts
 import { classifyDangling } from './netStatus';
@@ -369,12 +369,12 @@ test('floating net whose sole device also drives __dmy nets is a dummy leg', () 
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `node --import tsx --test src/layout/netStatus.test.ts`
 Expected: FAIL — `classifyDangling` not exported.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Append to `src/layout/netStatus.ts`:
 
@@ -405,11 +405,11 @@ export function classifyDangling(
 
 Add `Cell` to the type import at the top: `import type { Net, Cell } from '../parser/types';`
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `node --import tsx --test src/layout/netStatus.test.ts` — PASS.
 
-- [ ] **Step 5: Inspector copy**
+- [x] **Step 5: Inspector copy**
 
 In `src/components/InspectorPanel.tsx`, replace the floating-note block (uses `getCell()` result already in scope as `cell`):
 
@@ -433,7 +433,7 @@ const dangling = classifyDangling(net, cell);
 
 Import: `import { classifyDangling } from '../layout/netStatus';` (replacing or alongside `isFloatingNet`).
 
-- [ ] **Step 6: Full fast suite + commit**
+- [x] **Step 6: Full fast suite + commit**
 
 Run: `npm run test:layout` — PASS.
 
@@ -485,7 +485,7 @@ export interface DspfDiagnostics {
 }
 ```
 
-- [ ] **Step 1: Failing tests** (extend `parseDspf.test.ts`; keep every existing test compiling by updating field names where the type changed — `data.devices` becomes `data.devicePoints` where positions are asserted)
+- [x] **Step 1: Failing tests** (extend `parseDspf.test.ts`; keep every existing test compiling by updating field names where the type changed — `data.devices` becomes `data.devicePoints` where positions are asserted)
 
 ```ts
 test('net totalCap parses engineering suffixes (xACT)', () => {
@@ -552,12 +552,12 @@ test('global node-coordinate index covers ports, subnodes, inst pins', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `node --import tsx --test src/layout-viewer/dspf/parseDspf.test.ts`
 Expected: FAIL (type + behavior).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `tokens.ts` — extend `ParenInfo` so callers see the raw fields:
 
@@ -639,12 +639,12 @@ for (const g of data.groundNets) {
 
 CLKGEN device fallback (no `*|I` coords anywhere): unchanged in spirit but now populates BOTH `devices` (dedup by stripped path) and `devicePoints`.
 
-- [ ] **Step 4: Run the dspf test files**
+- [x] **Step 4: Run the dspf test files**
 
 Run: `node --import tsx --test "src/layout-viewer/dspf/*.test.ts"`
 Expected: PASS after updating pre-existing assertions to the new field names (`devicePoints`, `ports[0].name`…).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/layout-viewer/model.ts src/layout-viewer/dspf/ src/layout-viewer/correlate.ts
@@ -665,7 +665,7 @@ git commit -m "feat(dspf): full header/net-section coverage — ground nets, fin
 **Interfaces:**
 - Produces: `parseDeviceStatement(tokens: string[]): { name: string; nodes: string[]; model: string | null } | null`; capacitor classification `coupling` now means "b-node belongs to a different net".
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```ts
 // elements.test.ts
@@ -714,9 +714,9 @@ test('instance-section devices merge into the device list with models', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure** — `node --import tsx --test "src/layout-viewer/dspf/*.test.ts"` FAILS.
+- [x] **Step 2: Run to verify failure** — `node --import tsx --test "src/layout-viewer/dspf/*.test.ts"` FAILS.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `elements.ts`:
 - `parseKeyVals` already routes `$active` (no `=`) into `rest` — resistor/capacitor take `a=rest[0], b=rest[1], value=parseSpiceNumber(rest[2])`; ignore later bare flags. (`$W=0.006` → `params.w` — already the `width` source.)
@@ -756,9 +756,9 @@ const sameNet = (node: string, netName: string) =>
 cap.coupling = cap.b !== '' && cap.b !== '0' && !groundSet.has(cap.b) && !sameNet(cap.b, net.name);
 ```
 
-- [ ] **Step 4: Run tests** — PASS. Also spot-check no regression: `node --import tsx --test "src/layout-viewer/**/*.test.ts"`.
+- [x] **Step 4: Run tests** — PASS. Also spot-check no regression: `node --import tsx --test "src/layout-viewer/**/*.test.ts"`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/layout-viewer/dspf/
@@ -778,7 +778,7 @@ git commit -m "feat(dspf): element robustness (bare flags, suffixes) + instance-
 - Produces: `LayoutModel` with `instances` including `origin:'dspf'` fallback blocks (ids prefixed `dspf:`), enriched nets, `stats.devicesUnique`, `stats.physicalBlocks`.
 - `enumerateHierarchy` nodes carry `master` so instances get it.
 
-- [ ] **Step 1: Failing tests (`correlate.test.ts`)**
+- [x] **Step 1: Failing tests (`correlate.test.ts`)**
 
 ```ts
 test('device stats count unique devices, not pin points', () => {
@@ -848,9 +848,9 @@ test('net enrichment: totalCap, isGround, ports flow through', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure.**
+- [x] **Step 2: Run to verify failure.**
 
-- [ ] **Step 3: Implement in `correlate.ts`**
+- [x] **Step 3: Implement in `correlate.ts`**
 
 Key changes (complete behaviors):
 
@@ -901,9 +901,9 @@ for (const [seg0, group] of physGroups) {
 //    devicePinPoints via diagnostics (already there). physicalBlocks = count.
 ```
 
-- [ ] **Step 4: Run tests** — `node --import tsx --test "src/layout-viewer/**/*.test.ts"` PASS (update the handful of existing correlate assertions that counted pin-points as devices: n16g-style doubled-X test still passes because attach logic is unchanged).
+- [x] **Step 4: Run tests** — `node --import tsx --test "src/layout-viewer/**/*.test.ts"` PASS (update the handful of existing correlate assertions that counted pin-points as devices: n16g-style doubled-X test still passes because attach logic is unchanged).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/layout-viewer/
@@ -921,12 +921,12 @@ git commit -m "feat(correlate): unique-device accounting, coordless net→block 
 
 **Interfaces:** none new — this task is the compile-and-verify checkpoint between the data layer and the canvas work.
 
-- [ ] **Step 1: Run the full fast suite + typecheck**
+- [x] **Step 1: Run the full fast suite + typecheck**
 
 Run: `npm run test:layout && npx tsc -b`
 Expected: PASS/clean. Fix any compile fallout (e.g. `LayoutInstance` literals in tests missing `master`/`origin` — add `master: null, origin: 'cdl'`).
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add -A src/
@@ -951,7 +951,7 @@ git commit -m "chore(layout): compile fallout for enriched layout model"
   3. Physical-only (`origin:'dspf'`) blocks draw with `setLineDash([5,4])`, hue `#e0a3ff`, and a `◇` prefix on the label.
   4. Click picking: shown net-box edges first (8 px tolerance), then instances.
 
-- [ ] **Step 1: Failing pick tests**
+- [x] **Step 1: Failing pick tests**
 
 ```ts
 // pick.test.ts additions
@@ -964,9 +964,9 @@ test('pickNetBox hits only near the box edge, not deep inside', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify failure.**
+- [x] **Step 2: Run to verify failure.**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `pick.ts`:
 
@@ -1022,12 +1022,12 @@ setSelection(id !== null ? { type: 'instance', id } : null);
 
 Legend/note: when `!drawAll && !selNet`, render `<div className="layout-conn-note">RC skeleton hidden at this scale ({totalSegs.toLocaleString()} segments) — select a net to trace it.</div>` inside the canvas wrap.
 
-- [ ] **Step 4: Run tests + manual sanity**
+- [x] **Step 4: Run tests + manual sanity**
 
 Run: `node --import tsx --test "src/components/layout/*.test.ts"` — PASS.
 Run: `npm run dev`, load `StrongARMLatch.cdl` + `StrongARMLatch_pex.dspf`: layer-colored skeleton visible immediately; select `MM15`-block → green dashed VOUTP/VDD net boxes; click a net box edge → net selection.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/layout/ src/index.css
@@ -1046,7 +1046,7 @@ git commit -m "feat(layout): mockup-parity canvas — always-on layered RC skele
 
 **Interfaces:** consumes Task 5's `master`, `origin`, `totalCap`, `isGround`, `ports`, `stats.devicesUnique`, `stats.physicalBlocks`.
 
-- [ ] **Step 1: Implement LayerPanel disabled state** (mockup `clkgen_no_layers`):
+- [x] **Step 1: Implement LayerPanel disabled state** (mockup `clkgen_no_layers`):
 
 ```tsx
 if (!model) return null;
@@ -1059,7 +1059,7 @@ if (model.layers.length === 0) {
 }
 ```
 
-- [ ] **Step 2: LayoutInspector**
+- [x] **Step 2: LayoutInspector**
 
 Instance view adds:
 
@@ -1092,9 +1092,9 @@ Overview (no selection) adds:
 
 (`groundNets` comes from `useViewerStore(s => s.layoutData)?.groundNets`.)
 
-- [ ] **Step 3: ZoneSelect label per brief** — first option text becomes `Zone (from CDL)…`; include `origin==='cdl'` depth-1 blocks only (physical-only blocks are canvas objects, not CDL zones).
+- [x] **Step 3: ZoneSelect label per brief** — first option text becomes `Zone (from CDL)…`; include `origin==='cdl'` depth-1 blocks only (physical-only blocks are canvas objects, not CDL zones).
 
-- [ ] **Step 4: Verify + commit**
+- [x] **Step 4: Verify + commit**
 
 Run: `npm run test:layout && npx tsc -b` — PASS/clean; `npm run dev` sanity on CLKGEN pair (disabled layer chip with tooltip, physical-only blocks visible and inspectable).
 
@@ -1115,11 +1115,11 @@ git commit -m "feat(layout): layer-panel no-layer state, inspector master/cap/po
 - Worker message union: `{ id, progress }` interleaved before the final `{ id, ok, data }`.
 - `parseDspfAsync(text, onProgress?)`.
 
-- [ ] **Step 1: Implement** (no isolated unit test — exercised by the integration script; the worker protocol change is 20 lines). `TopBar` state: `const [dspfProgress, setDspfProgress] = useState<number | null>(null)`; badge text `Parsing… {Math.round(p*100)}%` while parsing.
+- [x] **Step 1: Implement** (no isolated unit test — exercised by the integration script; the worker protocol change is 20 lines). `TopBar` state: `const [dspfProgress, setDspfProgress] = useState<number | null>(null)`; badge text `Parsing… {Math.round(p*100)}%` while parsing.
 
-- [ ] **Step 2: Verify with CLKGEN (22 MB) in `npm run dev` — badge counts up; UI stays responsive.**
+- [x] **Step 2: Verify with CLKGEN (22 MB) in `npm run dev` — badge counts up; UI stays responsive.**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/layout-viewer/dspf/ src/components/TopBar.tsx
@@ -1136,7 +1136,7 @@ git commit -m "feat(dspf): parse-progress reporting from the worker (22 MB files
 
 **Interfaces:** consumes the public APIs only (`parseDspf`, `correlate`, pyodide adapter). Loads the three pairs from `~/Downloads/Abstract_Layout_Viewer_Handoff/`; skips gracefully (exit 0 with a notice) when the directory is absent so CI/other machines don't break.
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```js
 // scripts/validate-real.mjs — parse+correlate the three real handoff pairs and
@@ -1217,9 +1217,9 @@ console.log(failures ? `\n${failures} expectation(s) FAILED` : '\nall real-file 
 process.exit(failures ? 1 : 0);
 ```
 
-- [ ] **Step 2: Run** `npm run validate:real` — all expectations hold. Iterate on parser/correlate until they do; any legitimate discovery (e.g. n16g layer list) gets encoded back into these expectations.
+- [x] **Step 2: Run** `npm run validate:real` — all expectations hold. Iterate on parser/correlate until they do; any legitimate discovery (e.g. n16g layer list) gets encoded back into these expectations.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add scripts/validate-real.mjs package.json
@@ -1234,16 +1234,16 @@ git commit -m "test(real): three-extractor validation harness asserting the brie
 - Modify: `ARCHITECTURE.md` (DSPF section: directives covered, device identity, physical-only blocks, net-kind pipeline)
 - Modify: `docs/superpowers/plans/2026-07-01-dspf-full-build-and-cdl-supply-fixes.md` (check boxes)
 
-- [ ] **Step 1: Run everything**
+- [x] **Step 1: Run everything**
 
 ```bash
 npm run test:layout && npm test && npm run validate:real && npm run build
 ```
 Expected: all green, build clean.
 
-- [ ] **Step 2: Update ARCHITECTURE.md** — extend the parser section with: net-kind refinement pipeline (name → bulk topology → port propagation), DSPF directive coverage table, unique-device identity, physical-only block fallback, connection budget.
+- [x] **Step 2: Update ARCHITECTURE.md** — extend the parser section with: net-kind refinement pipeline (name → bulk topology → port propagation), DSPF directive coverage table, unique-device identity, physical-only block fallback, connection budget.
 
-- [ ] **Step 3: Final commit**
+- [x] **Step 3: Final commit**
 
 ```bash
 git add ARCHITECTURE.md docs/
