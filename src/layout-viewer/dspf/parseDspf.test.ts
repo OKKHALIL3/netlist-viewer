@@ -33,7 +33,7 @@ test('warns when the DSPF carries no coordinates', () => {
     `expected a no-coordinate warning, got ${JSON.stringify(d.diagnostics.warnings)}`);
 });
 
-test('net subnodes capture coords; *|I with coords yields a device, without does not', () => {
+test('net subnodes capture coords; *|I with coords yields a point, identity either way', () => {
   const d = parseDspf([
     '*|NET VOUTP 1.0',
     '*|S (VOUTP:1 9.94 3.81)',
@@ -44,7 +44,9 @@ test('net subnodes capture coords; *|I with coords yields a device, without does
   assert.equal(d.nets.length, 1);
   assert.equal(d.nets[0].subnodes.length, 2);
   assert.deepEqual([d.nets[0].subnodes[0].x, d.nets[0].subnodes[0].y], [9.94, 3.81]);
-  assert.deepEqual(d.devices, [{ path: 'X100/M1', x: 3.99, y: 8.33 }]);
+  assert.deepEqual(d.devicePoints, [{ path: 'X100/M1', x: 3.99, y: 8.33 }]);
+  // BOTH devices exist as identities — the coordinate-less one still maps nets to blocks.
+  assert.deepEqual(d.devices.map(x => x.path).sort(), ['X100/M1', 'X100/M2']);
 });
 
 test('resistor geometry + $layer captured; layers collected', () => {
@@ -80,7 +82,7 @@ test('+ continuation across an *|I line is parsed', () => {
     '*|I (X1/M1:d X1/M1',
     '+    d nch 0.5 4 5)',
   ].join('\n'));
-  assert.deepEqual(d.devices, [{ path: 'X1/M1', x: 4, y: 5 }]);
+  assert.deepEqual(d.devicePoints, [{ path: 'X1/M1', x: 4, y: 5 }]);
 });
 
 test('no $layer anywhere ⇒ layersPresent false, layers []', () => {
@@ -89,14 +91,15 @@ test('no $layer anywhere ⇒ layersPresent false, layers []', () => {
   assert.deepEqual(d.layers, []);
 });
 
-test('devices fall back to *|S names when no *|I has coords (CLKGEN)', () => {
+test('device points fall back to *|S names when no *|I has coords (CLKGEN)', () => {
   const d = parseDspf([
     '*|DELIMITER :',
     '*|NET N 1',
     '*|S (X9/X26/M1:s 4 5)',
     '*|I (X9/X26/M1:g X9/X26/M1 g nch 0.5)',
   ].join('\n'));
-  assert.deepEqual(d.devices, [{ path: 'X9/X26/M1', x: 4, y: 5 }]);
+  assert.deepEqual(d.devicePoints, [{ path: 'X9/X26/M1', x: 4, y: 5 }]);
+  assert.deepEqual(d.devices.map(x => x.path), ['X9/X26/M1']);
 });
 
 test('meters coordinates are auto-scaled to microns', () => {
@@ -134,4 +137,92 @@ test('capacitor coords participate in unit inference', () => {
   assert.equal(d.diagnostics.unitScale, 1e6);
   assert.equal(d.nets[0].capacitors[0].x, 1);
   assert.equal(d.nets[0].capacitors[0].y, 2);
+});
+
+// ── Task 3 additions: full header/net-section coverage ─────────────────────
+
+test('net totalCap parses engineering suffixes (xACT)', () => {
+  const d = parseDspf('*|DELIMITER :\n*|NET N1 0.259853f\n*|S (N1:1 1.0 2.0)\n');
+  assert.equal(d.nets[0].totalCap, 0.259853e-15);
+});
+
+test('GROUND_NET marks nets, accepts multiple names, ghosts unsectioned ones', () => {
+  const d = parseDspf('*|GROUND_NET GND VSS2\n*|NET GND 1e-15\n*|S (GND:1 0 0)\n');
+  assert.deepEqual(d.groundNets, ['GND', 'VSS2']);
+  assert.equal(d.nets.find(n => n.name === 'GND')!.isGround, true);
+  // VSS2 never had a section — it still exists as a record
+  assert.equal(d.nets.find(n => n.name === 'VSS2')!.isGround, true);
+});
+
+test('GROUND_NET declared AFTER the net section still marks it', () => {
+  const d = parseDspf('*|NET G 1e-15\n*|S (G:1 0 0)\n*|GROUND_NET G\n');
+  assert.equal(d.nets.find(n => n.name === 'G')!.isGround, true);
+  assert.equal(d.nets.length, 1);
+});
+
+test('DeviceFingerDelim is read and unquoted', () => {
+  const d = parseDspf('*|DeviceFingerDelim "@"\n');
+  assert.equal(d.fingerDelim, '@');
+});
+
+test('duplicate *|NET sections merge', () => {
+  const d = parseDspf('*|NET A 1e-15\n*|S (A:1 0 0)\n*|NET A 1e-15\n*|S (A:2 1 1)\n');
+  assert.equal(d.nets.length, 1);
+  assert.equal(d.nets[0].subnodes.length, 2);
+  assert.equal(d.diagnostics.netsMerged, 1);
+});
+
+test('*|I captures instance identity even with no coords (xACT)', () => {
+  const d = parseDspf('*|DIVIDER |\n*|DELIMITER :\n*|NET X1|n 1f\n*|I (X1|M3:g X1|M3 g B 0.0)\n');
+  const ip = d.nets[0].instPins[0];
+  assert.equal(ip.inst, 'X1|M3');
+  assert.equal(ip.pin, 'g');
+  assert.equal(ip.pinType, 'B');
+  assert.equal(ip.x, null);
+});
+
+test('*|P captures pinType and cap, with and without coords', () => {
+  const d = parseDspf('*|NET A 1f\n*|P (A X 0 2.07 0.21)\n*|P (B I 0.0)\n');
+  assert.equal(d.nets[0].ports[0].pinType, 'X');
+  assert.equal(d.nets[0].ports[0].cap, 0);
+  assert.deepEqual([d.nets[0].ports[0].x, d.nets[0].ports[0].y], [2.07, 0.21]);
+  assert.equal(d.nets[0].ports[1].pinType, 'I');
+  assert.equal(d.nets[0].ports[1].x, null);
+  assert.equal(d.diagnostics.ports, 2);
+});
+
+test('.SUBCKT records top cell name and ports (case-insensitive keyword)', () => {
+  const d = parseDspf('.subckt StrongARMLatch1  VDD VOUTN GND\n*|NET A 1f\n');
+  assert.equal(d.topCellName, 'StrongARMLatch1');
+  assert.deepEqual(d.topPorts, ['VDD', 'VOUTN', 'GND']);
+});
+
+test('unique devices dedupe from *|I; pin points stay per-pin', () => {
+  const d = parseDspf([
+    '*|DELIMITER :', '*|NET N 1f',
+    '*|I (M1:d M1 d B 0 1 1)', '*|I (M1:g M1 g B 0 2 2)', '*|I (M2:d M2 d B 0 3 3)',
+  ].join('\n'));
+  assert.equal(d.devices.length, 2);
+  assert.equal(d.devicePoints.length, 3);
+  assert.equal(d.diagnostics.devices, 2);
+  assert.equal(d.diagnostics.devicePinPoints, 3);
+  assert.equal(d.devices.find(x => x.path === 'M1')!.pins, 2);
+});
+
+test('global node-coordinate index covers ports, subnodes, inst pins', () => {
+  const d = parseDspf('*|NET A 1f\n*|P (A X 0 5 6)\n*|S (A:1 7 8)\n*|I (M1:d M1 d B 0 9 10)\n');
+  assert.deepEqual(d.nodeCoord.get('A'), [5, 6]);
+  assert.deepEqual(d.nodeCoord.get('A:1'), [7, 8]);
+  assert.deepEqual(d.nodeCoord.get('M1:d'), [9, 10]);
+});
+
+test('nodeCoord values are unit-scaled with everything else', () => {
+  const d = parseDspf('*|NET N 1\n*|S (N:1 1.322e-6 0.7e-6)\n*|S (N:2 1.347e-6 0.945e-6)\n');
+  assert.equal(d.diagnostics.unitScale, 1e6);
+  assert.deepEqual(d.nodeCoord.get('N:1'), [1.322, 0.7]);
+});
+
+test('quoted *|NET names are unquoted', () => {
+  const d = parseDspf('*|NET "N1" 1e-15\n*|S (N1:1 0 0)\n');
+  assert.equal(d.nets[0].name, 'N1');
 });

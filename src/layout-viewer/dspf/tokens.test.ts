@@ -12,7 +12,7 @@ test('parseKeyVals separates $key=val from positional tokens', () => {
 
 test('parseParenPayload: trailing two numerics are the coords', () => {
   assert.deepEqual(parseParenPayload('(VOUTP:1 9.94 3.81)'),
-    { name: 'VOUTP:1', x: 9.94, y: 3.81, params: new Map() });
+    { name: 'VOUTP:1', rest: ['VOUTP:1', '9.94', '3.81'], x: 9.94, y: 3.81, params: new Map() });
 });
 
 test('parseParenPayload: variable arity, coords still trailing', () => {

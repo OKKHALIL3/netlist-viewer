@@ -77,7 +77,7 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     return hit;
   };
   let devicesMatched = 0, devicesDummy = 0, devicesTopLevel = 0, devicesHierMiss = 0;
-  for (const dev of data.devices) {
+  for (const dev of data.devicePoints) {
     extendBbox(nodeBox.get('')!, dev.x, dev.y);
     nodeCount.set('', nodeCount.get('')! + 1);
     const segs = normSegments(dev.path, dspfSeps);
@@ -152,7 +152,7 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   }
 
   const extent = nodeBox.get('')!;
-  const devicesTotal = data.devices.length;
+  const devicesTotal = data.devicePoints.length;
 
   // Surface CDL↔DSPF correlation health. A genuine naming mismatch (devices on
   // hierarchy paths absent from the CDL) is worth a warning; LVS dummies and

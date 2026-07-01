@@ -1,14 +1,20 @@
-import type { LayoutData, DspfNet, DspfPoint, DspfDevice, DspfDiagnostics } from '../model';
+import type {
+  LayoutData, DspfNet, DspfPoint, DspfPort, DspfInstPin,
+  DspfDevicePoint, DspfDeviceInfo, DspfDiagnostics,
+} from '../model';
 import { forEachLogicalLine } from './lines';
-import { splitTokens, parseParenPayload } from './tokens';
+import { splitTokens, parseParenPayload, type ParenInfo } from './tokens';
 import { parseResistor, parseCapacitor, type ResolveLayer } from './elements';
+import { parseSpiceNumber, isNumericToken } from './units';
 
 export interface ParseDspfOptions { unitScale?: number }
 
 function freshDiagnostics(): DspfDiagnostics {
   return {
-    logicalLines: 0, nets: 0, devices: 0, resistors: 0,
-    resistorsWithGeometry: 0, capacitors: 0, couplingCaps: 0,
+    logicalLines: 0, nets: 0, netsMerged: 0,
+    devices: 0, devicePinPoints: 0,
+    resistors: 0, resistorsWithGeometry: 0, capacitors: 0, couplingCaps: 0,
+    ports: 0, instPins: 0, subnodes: 0,
     pointsWithCoords: 0, unitScale: 1, unrecognized: 0, warnings: [],
   };
 }
@@ -16,6 +22,22 @@ function freshDiagnostics(): DspfDiagnostics {
 function stripPin(name: string, delimiter: string): string {
   const cut = name.lastIndexOf(delimiter);
   return cut > 0 ? name.slice(0, cut) : name;
+}
+
+const unquote = (s: string) => s.replace(/^"(.*)"$/, '$1');
+
+// The positional fields between a paren payload's name and its trailing
+// coordinates (e.g. *|I's "instName pin pinType cap"). Coordinates consumed
+// two tokens only when they came positionally (not from $x/$y params).
+function midFields(info: ParenInfo): string[] {
+  const posCoords = info.x !== null && !info.params.has('x');
+  return info.rest.slice(1, info.rest.length - (posCoords ? 2 : 0));
+}
+
+function numOrNull(tok: string | undefined): number | null {
+  if (tok === undefined) return null;
+  const v = parseSpiceNumber(tok);
+  return Number.isFinite(v) ? v : null;
 }
 
 export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData {
@@ -30,19 +52,28 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
 
   const diag = freshDiagnostics();
   const data: LayoutData = {
-    divider: '/', delimiter: ':', busDelimiter: null,
+    divider: '/', delimiter: ':', busDelimiter: null, fingerDelim: null,
     groundNets: [], design: null, generator: null,
+    topCellName: null, topPorts: [],
     layerMap: {}, layersPresent: false, layers: [],
-    nets: [], devices: [], diagnostics: diag,
+    nets: [], devicePoints: [], devices: [],
+    nodeCoord: new Map(), diagnostics: diag,
   };
   const layerSet = new Set<string>();
+  const netByName = new Map<string, DspfNet>();
+  const groundSet = new Set<string>();
+  const uniqueDevices = new Map<string, DspfDeviceInfo>();
   let net: DspfNet | null = null;
   let sawInstCoords = false;
-  const subnodePoints: DspfPoint[] = [];
-  const instDevices: DspfDevice[] = [];
+  const subnodeFallback: DspfDevicePoint[] = [];
+  const devicePoints: DspfDevicePoint[] = [];
 
   const addLayer = (l: string | null) => { if (l) layerSet.add(l); };
-  const recordPoint = (pt: DspfPoint) => { if (pt.x !== null) diag.pointsWithCoords++; addLayer(pt.layer); };
+  const recordCoord = (name: string, x: number | null, y: number | null) => {
+    if (x === null || y === null) return;
+    diag.pointsWithCoords++;
+    if (!data.nodeCoord.has(name)) data.nodeCoord.set(name, [x, y]);
+  };
 
   forEachLogicalLine(text, (line) => {
     diag.logicalLines++;
@@ -58,27 +89,60 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
         case '*|DIVIDER': data.divider = rest.split(/\s+/)[0] || '/'; break;
         case '*|DELIMITER': data.delimiter = rest.split(/\s+/)[0] || ':'; break;
         case '*|BUSBIT':
-        case '*|BUS_DELIMITER': data.busDelimiter = rest.split(/\s+/)[0] || null; break;
-        case '*|GROUND_NET': if (rest) data.groundNets.push(rest.split(/\s+/)[0]); break;
-        case '*|DESIGN': data.design = rest.replace(/^"|"$/g, '') || null; break;
+        case '*|BUS_DELIMITER': data.busDelimiter = unquote(rest.split(/\s+/)[0] ?? '') || null; break;
+        case '*|DEVICEFINGERDELIM': data.fingerDelim = unquote(rest.trim()) || null; break;
+        case '*|GROUND_NET':
+          for (const g of rest.split(/\s+/).filter(Boolean)) {
+            const name = unquote(g);
+            if (!groundSet.has(name)) { groundSet.add(name); data.groundNets.push(name); }
+          }
+          break;
+        case '*|DESIGN': data.design = unquote(rest) || null; break;
         case '*|DSPF':
         case '*|PROGRAM':
-        case '*|VERSION': data.generator = (data.generator ? data.generator + ' ' : '') + rest; break;
+        case '*|VERSION': data.generator = (data.generator ? data.generator + ' ' : '') + unquote(rest); break;
+        case '*|DATE':
+        case '*|VENDOR':
+        case '*|GLOBAL_TEMPERATURE':
+        case '*|OPERATING_TEMPERATURE':
+          break; // recognized; nothing the viewer needs
         case '*|NET': {
           const tok = rest.split(/\s+/);
-          const cap = tok[1] !== undefined ? Number(tok[1]) : NaN;
-          net = {
-            name: tok[0] ?? '', totalCap: Number.isFinite(cap) ? cap : null,
-            ports: [], subnodes: [], instPins: [], resistors: [], capacitors: [],
-          };
-          data.nets.push(net); diag.nets++;
+          const name = unquote(tok[0] ?? '');
+          const cap = tok[1] !== undefined ? parseSpiceNumber(tok[1]) : NaN;
+          const existing = netByName.get(name);
+          if (existing) {
+            // Extractors may re-open a net section (or declare a ground net
+            // before its section) — merge rather than duplicate.
+            if (existing.totalCap === null && Number.isFinite(cap)) existing.totalCap = cap;
+            net = existing;
+            diag.netsMerged++;
+          } else {
+            net = {
+              name, totalCap: Number.isFinite(cap) ? cap : null,
+              isGround: groundSet.has(name),
+              ports: [], subnodes: [], instPins: [], resistors: [], capacitors: [],
+            };
+            netByName.set(name, net);
+            data.nets.push(net);
+            diag.nets++;
+          }
           break;
         }
         case '*|P': {
           const info = parseParenPayload(rest);
           if (info && net) {
-            const pt: DspfPoint = { name: info.name, x: info.x, y: info.y, layer: resolveLayer(info.params) };
-            net.ports.push(pt); recordPoint(pt);
+            const f = midFields(info);
+            const port: DspfPort = {
+              name: info.name,
+              pinType: f[0] !== undefined && !isNumericToken(f[0]) ? f[0] : null,
+              cap: numOrNull(f[0] !== undefined && !isNumericToken(f[0]) ? f[1] : f[0]),
+              x: info.x, y: info.y, layer: resolveLayer(info.params),
+            };
+            net.ports.push(port);
+            diag.ports++;
+            recordCoord(port.name, port.x, port.y);
+            addLayer(port.layer);
           }
           break;
         }
@@ -86,20 +150,36 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
           const info = parseParenPayload(rest);
           if (info && net) {
             const pt: DspfPoint = { name: info.name, x: info.x, y: info.y, layer: resolveLayer(info.params) };
-            net.subnodes.push(pt); recordPoint(pt);
-            if (pt.x !== null && pt.y !== null) subnodePoints.push(pt);
+            net.subnodes.push(pt);
+            diag.subnodes++;
+            recordCoord(pt.name, pt.x, pt.y);
+            addLayer(pt.layer);
+            if (pt.x !== null && pt.y !== null) {
+              subnodeFallback.push({ path: stripPin(pt.name, data.delimiter), x: pt.x, y: pt.y });
+            }
           }
           break;
         }
         case '*|I': {
           const info = parseParenPayload(rest);
           if (info) {
-            const pt: DspfPoint = { name: info.name, x: info.x, y: info.y, layer: resolveLayer(info.params) };
-            if (net) net.instPins.push(pt);
-            recordPoint(pt);
-            if (info.x !== null && info.y !== null) {
+            const f = midFields(info);
+            const inst = f[0] ?? stripPin(info.name, data.delimiter);
+            const pin: DspfInstPin = {
+              name: info.name, inst,
+              pin: f[1] ?? '', pinType: f[2] ?? null, cap: numOrNull(f[3]),
+              x: info.x, y: info.y, layer: resolveLayer(info.params),
+            };
+            if (net) net.instPins.push(pin);
+            diag.instPins++;
+            recordCoord(pin.name, pin.x, pin.y);
+            addLayer(pin.layer);
+            const known = uniqueDevices.get(inst);
+            if (known) known.pins++;
+            else uniqueDevices.set(inst, { path: inst, model: null, pins: 1 });
+            if (pin.x !== null && pin.y !== null) {
               sawInstCoords = true;
-              instDevices.push({ path: stripPin(info.name, data.delimiter), x: info.x, y: info.y });
+              devicePoints.push({ path: inst, x: pin.x, y: pin.y });
             }
           }
           break;
@@ -112,11 +192,20 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
     if (line.startsWith('*')) {
       const m = /^\*(\d+)\s+(\S+)/.exec(line);
       if (m) layerMap.set(m[1], m[2].replace(/:.*$/, ''));
-      return; // plain comment
+      return; // plain comment ("*Net Section", "*Instance Section", …)
     }
 
     const head = line[0];
-    if (head === '.') return; // .SUBCKT/.ENDS/.GLOBAL/.PARAM — structure not needed for the abstract map
+    if (head === '.') {
+      // .SUBCKT carries the extracted cell's name and port order; other dot
+      // cards (.ENDS/.END/.PARAM/.GLOBAL) add nothing to the abstract map.
+      const tok = splitTokens(line);
+      if (tok[0].toUpperCase() === '.SUBCKT' && data.topCellName === null) {
+        data.topCellName = tok[1] ?? null;
+        data.topPorts = tok.slice(2);
+      }
+      return;
+    }
 
     const c = head.toLowerCase();
     if (c === 'r') {
@@ -137,17 +226,30 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
       }
       return;
     }
-    // device instance lines (m/x/q/d/...) carry no coordinates for the abstract map → ignored
+    // other letters: device instance statements — handled in the instance
+    // section pass (parseDeviceStatement); nothing to do for the map yet
   });
 
-  // CLKGEN fallback: no *|I carried coords → derive device points from *|S names.
-  if (!sawInstCoords) {
-    for (const s of subnodePoints) {
-      instDevices.push({ path: stripPin(s.name, data.delimiter), x: s.x as number, y: s.y as number });
-    }
+  // Ground nets declared but never sectioned still deserve a record (the
+  // inspector lists them); sectioned ones get flagged.
+  for (const g of data.groundNets) {
+    const existing = netByName.get(g);
+    if (existing) { existing.isGround = true; continue; }
+    const ghost: DspfNet = {
+      name: g, totalCap: null, isGround: true,
+      ports: [], subnodes: [], instPins: [], resistors: [], capacitors: [],
+    };
+    netByName.set(g, ghost);
+    data.nets.push(ghost);
+    diag.nets++;
   }
-  data.devices = instDevices;
-  diag.devices = instDevices.length;
+
+  // CLKGEN fallback: *|I carried no coords anywhere → derive coordinate
+  // samples from *|S names (net-node paths still prefix-match the blocks).
+  data.devicePoints = sawInstCoords ? devicePoints : subnodeFallback;
+  data.devices = [...uniqueDevices.values()];
+  diag.devices = data.devices.length;
+  diag.devicePinPoints = data.devicePoints.length;
 
   const scale = opts.unitScale ?? inferUnitScale(data);
   if (scale !== 1) applyScale(data, scale);
@@ -177,12 +279,15 @@ function inferUnitScale(data: LayoutData): number {
     for (const r of n.resistors) { consider(r.x1, r.y1); consider(r.x2, r.y2); }
     for (const cp of n.capacitors) consider(cp.x, cp.y);
   }
-  for (const d of data.devices) consider(d.x, d.y);
+  for (const d of data.devicePoints) consider(d.x, d.y);
   return maxAbs > 0 && maxAbs < 1e-3 ? 1e6 : 1;
 }
 
 function applyScale(data: LayoutData, s: number): void {
-  const sp = (p: DspfPoint) => { if (p.x !== null) p.x *= s; if (p.y !== null) p.y *= s; };
+  const sp = (p: { x: number | null; y: number | null }) => {
+    if (p.x !== null) p.x *= s;
+    if (p.y !== null) p.y *= s;
+  };
   for (const n of data.nets) {
     n.ports.forEach(sp); n.subnodes.forEach(sp); n.instPins.forEach(sp);
     for (const r of n.resistors) {
@@ -191,5 +296,6 @@ function applyScale(data: LayoutData, s: number): void {
     }
     for (const cp of n.capacitors) { if (cp.x !== null) cp.x *= s; if (cp.y !== null) cp.y *= s; }
   }
-  for (const d of data.devices) { d.x *= s; d.y *= s; }
+  for (const d of data.devicePoints) { d.x *= s; d.y *= s; }
+  for (const [name, [x, y]] of data.nodeCoord) data.nodeCoord.set(name, [x * s, y * s]);
 }

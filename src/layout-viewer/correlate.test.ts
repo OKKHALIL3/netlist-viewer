@@ -60,7 +60,7 @@ test('flat design (only primitives) has no instance boxes; devices are top-level
 
 test('finger-suffixed instance (XI5@2) still matches its DSPF devices', () => {
   const design = makeDesign('TOP', { TOP: [['XI5@2', 'BLK']], BLK: [] });
-  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XI5@2/M1:d a d nch 0.5 4 5)\n'));
+  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XI5@2/M1:d XI5@2/M1 d nch 0.5 4 5)\n'));
   assert.ok(m.instances.find(i => i.id === 'xi5'), 'finger-suffixed instance should match');
   assert.equal(m.stats.devicesMatched, 1);
 });
@@ -69,8 +69,8 @@ test('finger-expanded instances (XI7@1, XI7@2) collapse to one block', () => {
   const design = makeDesign('TOP', { TOP: [['XI7@1', 'BLK'], ['XI7@2', 'BLK']], BLK: [] });
   const dspf = parseDspf([
     '*|NET N 1',
-    '*|I (XI7@1/M1:d a d nch 0.5 0 0)',
-    '*|I (XI7@2/M1:d a d nch 0.5 4 4)',
+    '*|I (XI7@1/M1:d XI7@1/M1 d nch 0.5 0 0)',
+    '*|I (XI7@2/M1:d XI7@2/M1 d nch 0.5 4 4)',
   ].join('\n'));
   const m = correlate(design, dspf);
   const xi7 = m.instances.filter(i => i.id === 'xi7');
@@ -83,11 +83,11 @@ test('categorizes uncorrelated devices into dummy / top-level / hierarchy-miss',
   const design = makeDesign('TOP', { TOP: [['XI1', 'BLK']], BLK: [] });
   const dspf = parseDspf([
     '*|NET N 1',
-    '*|I (XI1/M1:d a d nch 0.5 0 0)',            // matched (under XI1)
-    '*|I (XI1/M0_unmatched:d a d nch 0.5 1 1)',  // matched wins over the dummy marker
-    '*|I (M9_noxref:d a d nch 0.5 2 2)',         // LVS dummy (no schematic xref)
-    '*|I (MTOP:d a d nch 0.5 3 3)',              // top-level primitive
-    '*|I (XZZ/M1:d a d nch 0.5 4 4)',            // hierarchy path not in the CDL
+    '*|I (XI1/M1:d XI1/M1 d nch 0.5 0 0)',            // matched (under XI1)
+    '*|I (XI1/M0_unmatched:d XI1/M0_unmatched d nch 0.5 1 1)',  // matched wins over the dummy marker
+    '*|I (M9_noxref:d M9_noxref d nch 0.5 2 2)',         // LVS dummy (no schematic xref)
+    '*|I (MTOP:d MTOP d nch 0.5 3 3)',              // top-level primitive
+    '*|I (XZZ/M1:d XZZ/M1 d nch 0.5 4 4)',            // hierarchy path not in the CDL
   ].join('\n'));
   const m = correlate(design, dspf);
   assert.equal(m.stats.devicesTotal, 5);
@@ -101,7 +101,7 @@ test('doubled leading X in DSPF paths correlates to the CDL instance (XXI107 →
   const design = makeDesign('TOP', { TOP: [['XI107', 'BLK']], BLK: [['XI3', 'SUB']], SUB: [] });
   // The extractor writes the top instance as XXI107 (extra leading X); the
   // deeper segments (XI3, MM1) line up with the CDL.
-  const dspf = parseDspf('*|NET N 1\n*|I (XXI107/XI3/MM1:d a d nch 0.5 4 5)\n');
+  const dspf = parseDspf('*|NET N 1\n*|I (XXI107/XI3/MM1:d XXI107/XI3/MM1 d nch 0.5 4 5)\n');
   const m = correlate(design, dspf);
   assert.ok(m.instances.find(i => i.id === 'xi107'), 'XXI107 should map to CDL XI107');
   assert.ok(m.instances.find(i => i.id === 'xi107/xi3'), 'nested XI3 box too');
@@ -111,21 +111,21 @@ test('doubled leading X in DSPF paths correlates to the CDL instance (XXI107 →
 
 test('the X-collapse fallback only fires on an unmatched path (no double-count)', () => {
   const design = makeDesign('TOP', { TOP: [['XI107', 'BLK']], BLK: [] });
-  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XI107/MM1:d a d nch 0.5 1 1)\n'));
+  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XI107/MM1:d XI107/MM1 d nch 0.5 1 1)\n'));
   assert.equal(m.stats.devicesMatched, 1);
   assert.deepEqual(m.instances.find(i => i.id === 'xi107')!.bbox, [1, 1, 1, 1]);
 });
 
 test('a genuinely-absent doubled-X path stays a hierarchy-miss (no false match)', () => {
   const design = makeDesign('TOP', { TOP: [['XI107', 'BLK']], BLK: [] });
-  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XXZZ/MM1:d a d nch 0.5 2 2)\n'));
+  const m = correlate(design, parseDspf('*|NET N 1\n*|I (XXZZ/MM1:d XXZZ/MM1 d nch 0.5 2 2)\n'));
   assert.equal(m.stats.devicesMatched, 0);
   assert.equal(m.stats.devicesHierMiss, 1);
 });
 
 test('warns about hierarchy-miss devices (naming mismatch), not about dummies', () => {
   const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
-  const dspf = parseDspf('*|NET N 1\n*|I (ZZ/M1:d a d nch 0.5 4 5)\n');
+  const dspf = parseDspf('*|NET N 1\n*|I (ZZ/M1:d ZZ/M1 d nch 0.5 4 5)\n');
   const m = correlate(design, dspf);
   assert.equal(m.stats.devicesHierMiss, 1);
   assert.ok(m.warnings.some(w => /mismatch|hierarch/i.test(w)),

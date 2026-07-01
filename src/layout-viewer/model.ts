@@ -5,6 +5,21 @@ export type Bbox = [number, number, number, number];
 // ---- DSPF parse output (design-agnostic) -------------------------------
 export interface DspfPoint { name: string; x: number | null; y: number | null; layer: string | null }
 
+// *|P (pinName pinType pinCap [X Y]) — a port of the extracted cell.
+export interface DspfPort {
+  name: string; pinType: string | null; cap: number | null;
+  x: number | null; y: number | null; layer: string | null;
+}
+
+// *|I (pinNodeName instName pin pinType pinCap [X Y]) — a device pin. The
+// instance identity (2nd token) is authoritative: it is present even when the
+// extractor emits no coordinates (Calibre xACT), which is what lets nets map
+// to blocks in coordinate-less files.
+export interface DspfInstPin {
+  name: string; inst: string; pin: string; pinType: string | null; cap: number | null;
+  x: number | null; y: number | null; layer: string | null;
+}
+
 export interface DspfResistor {
   name: string; a: string; b: string;
   value: number | null;
@@ -25,28 +40,45 @@ export interface DspfCapacitor {
 export interface DspfNet {
   name: string;
   totalCap: number | null;
-  ports: DspfPoint[];
+  isGround: boolean;
+  ports: DspfPort[];
   subnodes: DspfPoint[];
-  instPins: DspfPoint[];
+  instPins: DspfInstPin[];
   resistors: DspfResistor[];
   capacitors: DspfCapacitor[];
 }
 
-export interface DspfDevice { path: string; x: number; y: number }
+// One coordinate sample for a device (one per coordinate-bearing pin).
+export interface DspfDevicePoint { path: string; x: number; y: number }
+// One physical device (unique path), with its model when the file's
+// instance section declares one.
+export interface DspfDeviceInfo { path: string; model: string | null; pins: number }
 
 export interface DspfDiagnostics {
-  logicalLines: number; nets: number; devices: number;
+  logicalLines: number; nets: number; netsMerged: number;
+  devices: number; devicePinPoints: number;
   resistors: number; resistorsWithGeometry: number;
   capacitors: number; couplingCaps: number;
+  ports: number; instPins: number; subnodes: number;
   pointsWithCoords: number; unitScale: number;
   unrecognized: number; warnings: string[];
 }
 
 export interface LayoutData {
   divider: string; delimiter: string; busDelimiter: string | null;
+  // *|DeviceFingerDelim — separates a device name from its finger index.
+  fingerDelim: string | null;
   groundNets: string[]; design: string | null; generator: string | null;
+  // .SUBCKT wrapper of the extracted cell (name + port order).
+  topCellName: string | null; topPorts: string[];
   layerMap: Record<string, string>; layersPresent: boolean; layers: string[];
-  nets: DspfNet[]; devices: DspfDevice[]; diagnostics: DspfDiagnostics;
+  nets: DspfNet[];
+  devicePoints: DspfDevicePoint[];
+  devices: DspfDeviceInfo[];
+  // Every named node that carries coordinates (ports, subnodes, instance
+  // pins) — lets R/C endpoints resolve across net sections.
+  nodeCoord: Map<string, [number, number]>;
+  diagnostics: DspfDiagnostics;
 }
 
 // ---- Correlated, viewer-ready model ------------------------------------

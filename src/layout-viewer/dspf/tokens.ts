@@ -17,7 +17,10 @@ export function parseKeyVals(tokens: string[]): SplitKV {
   return { params, rest };
 }
 
-export interface ParenInfo { name: string; x: number | null; y: number | null; params: Map<string, string> }
+// `rest` is the full positional token list (name at rest[0]) so directive
+// consumers can read the fields between the name and the coordinates
+// (*|I instance identity, *|P pin type / cap).
+export interface ParenInfo { name: string; rest: string[]; x: number | null; y: number | null; params: Map<string, string> }
 
 export function parseParenPayload(payload: string): ParenInfo | null {
   const inner = payload.trim().replace(/^\(/, '').replace(/\)$/, '').trim();
@@ -37,5 +40,5 @@ export function parseParenPayload(payload: string): ParenInfo | null {
     const b = rest[rest.length - 1];
     if (isNumericToken(a) && isNumericToken(b)) { x = Number(a); y = Number(b); }
   }
-  return { name, x, y, params };
+  return { name, rest, x, y, params };
 }
