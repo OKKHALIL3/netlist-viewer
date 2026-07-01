@@ -8,23 +8,15 @@
 // See docs/subcircuit-visualize.md for the full field reference.
 
 import type { Cell, Design, Instance, Net, Port, Primitive } from '../parser/types';
+// Same name-based net classification the parser pipeline uses, so derived
+// nets are tagged identically to parser-produced ones.
+import { nameNetKind as netKind } from '../parser/netKinds';
 
 export class DesignValidationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'DesignValidationError';
   }
-}
-
-// Same net classification the Python adapter uses, so derived nets are tagged
-// identically to parser-produced ones.
-const PWR_RE = /^(vcc|vdd|vddio|vccio|vccpst|vcco|vddo|dvdd|avdd|pvdd|iovdd)/i;
-const GND_RE = /^(vss|gnd|vssio|vsso|agnd|dgnd|pgnd|iovss|avss)/i;
-
-function netKind(name: string): Net['kind'] {
-  if (PWR_RE.test(name)) return 'power';
-  if (GND_RE.test(name)) return 'ground';
-  return 'signal';
 }
 
 type Json = Record<string, unknown>;
