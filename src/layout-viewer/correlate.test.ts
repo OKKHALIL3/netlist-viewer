@@ -192,6 +192,113 @@ test('connections use resistor slab geometry when present', () => {
   assert.equal(m.diagnostics.resistorsWithGeometry, 1);
 });
 
+// ── Task 5 additions: unique devices, identity mapping, physical blocks ────
+
+test('device stats count unique devices, not pin points', () => {
+  const design = makeDesign('TOP', { TOP: [['XA', 'LEAF']], LEAF: [] });
+  const data = parseDspf([
+    '*|DELIMITER :', '*|DIVIDER /', '*|NET N 1f',
+    '*|I (XA/M1:d XA/M1 d B 0 1 1)', '*|I (XA/M1:g XA/M1 g B 0 2 2)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  assert.equal(m.stats.devicesUnique, 1);
+  assert.equal(m.stats.devicesTotal, 1);
+  assert.equal(m.stats.devicesMatched, 1);
+  const xa = m.instances.find(i => i.id === 'xa')!;
+  assert.equal(xa.deviceCount, 1);
+  assert.deepEqual(xa.bbox, [1, 1, 2, 2]); // both pin points still shape the box
+});
+
+test('net→instances resolves through *|I inst identity even with no coords', () => {
+  const design = makeDesign('TOP', { TOP: [['X1', 'LEAF']], LEAF: [] });
+  const data = parseDspf([
+    '*|DIVIDER |', '*|DELIMITER :', '*|NET n 1f',
+    '*|S (n:1 1 1)', '*|I (X1|M3:g X1|M3 g B 0.0)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  assert.deepEqual(m.nets[0].instances, ['x1']);
+});
+
+test('net→instances applies the doubled-X collapse too', () => {
+  const design = makeDesign('TOP', { TOP: [['XI107', 'LEAF']], LEAF: [] });
+  const data = parseDspf([
+    '*|DIVIDER /', '*|DELIMITER #', '*|NET n 1f',
+    '*|I (XXI107/MM1#d XXI107/MM1 d B 0 1 1)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  assert.deepEqual(m.nets[0].instances, ['xi107']);
+});
+
+test('unmatched multi-segment paths become physical-only blocks', () => {
+  const design = makeDesign('TOP', { TOP: [] });
+  const data = parseDspf([
+    '*|DIVIDER |', '*|DELIMITER :', '*|NET n 1f',
+    '*|I (X100|M0:d X100|M0 d B 0 1 1)', '*|I (X100|M1:d X100|M1 d B 0 2 2)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  const phys = m.instances.filter(i => i.origin === 'dspf');
+  assert.equal(phys.length, 1);
+  assert.equal(phys[0].label, 'X100');
+  assert.equal(phys[0].id, 'dspf:x100');
+  assert.equal(phys[0].deviceCount, 2);
+  assert.equal(m.stats.physicalBlocks, 1);
+  assert.deepEqual(phys[0].bbox, [1, 1, 2, 2]);
+  // the net touches the physical block
+  assert.deepEqual(m.nets[0].instances, ['dspf:x100']);
+});
+
+test('bus-indexed physical families collapse into one block', () => {
+  const design = makeDesign('TOP', { TOP: [] });
+  const data = parseDspf([
+    '*|DIVIDER |', '*|DELIMITER :', '*|NET n 1f',
+    '*|I (XDCAP1[3]|M0:d XDCAP1[3]|M0 d B 0 0 0)',
+    '*|I (XDCAP1[7]|M0:d XDCAP1[7]|M0 d B 0 5 5)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  const phys = m.instances.filter(i => i.origin === 'dspf');
+  assert.equal(phys.length, 1);
+  assert.equal(phys[0].label, 'XDCAP1');
+  assert.deepEqual(phys[0].bbox, [0, 0, 5, 5]);
+});
+
+test('dummy devices do NOT form physical blocks', () => {
+  const design = makeDesign('TOP', { TOP: [] });
+  const data = parseDspf([
+    '*|DIVIDER /', '*|DELIMITER #', '*|NET n 1f',
+    '*|I (XX9/M0_unmatched#d XX9/M0_unmatched d B 0 1 1)',
+  ].join('\n'));
+  const m = correlate(design, data);
+  assert.equal(m.instances.filter(i => i.origin === 'dspf').length, 0);
+});
+
+test('connections resolve endpoints across sections via the global node index', () => {
+  const design = makeDesign('TOP', { TOP: [] });
+  const data = parseDspf([
+    '*|DELIMITER :', '*|NET A 1f', '*|P (A X 0 5 6)', '*|S (A:1 7 8)',
+    'R1 A A:1 10',
+  ].join('\n'));
+  const m = correlate(design, data);
+  assert.deepEqual(m.connections[0].points, [[5, 6], [7, 8]]);
+});
+
+test('net enrichment: totalCap, isGround, ports flow through', () => {
+  const design = makeDesign('TOP', { TOP: [] });
+  const data = parseDspf('*|GROUND_NET G\n*|NET G 2f\n*|P (G X 0 1 1)\n');
+  const m = correlate(design, data);
+  assert.equal(m.nets[0].totalCap, 2e-15);
+  assert.equal(m.nets[0].isGround, true);
+  assert.equal(m.nets[0].ports, 1);
+});
+
+test('CDL instances carry master + origin', () => {
+  const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
+  const data = parseDspf('*|NET N 1\n*|I (X9/M1:d X9/M1 d nch 0.5 4 5)\n');
+  const m = correlate(design, data);
+  const x9 = m.instances.find(i => i.id === 'x9')!;
+  assert.equal(x9.master, 'BLK');
+  assert.equal(x9.origin, 'cdl');
+});
+
 test('net layers gather from subnode + resistor + coupling cap', () => {
   const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
   const dspf = parseDspf([

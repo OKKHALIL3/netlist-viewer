@@ -83,10 +83,17 @@ export interface LayoutData {
 
 // ---- Correlated, viewer-ready model ------------------------------------
 export interface LayoutInstance {
-  id: string; label: string; depth: number; deviceCount: number; bbox: Bbox;
+  id: string; label: string;
+  // CDL master cell (null for the design root and physical-only blocks).
+  master: string | null;
+  // 'cdl' = a CDL instance placed by its DSPF devices; 'dspf' = a block that
+  // exists only in the DSPF (extractor-renamed hierarchy, fill families).
+  origin: 'cdl' | 'dspf';
+  depth: number; deviceCount: number; bbox: Bbox;
 }
 export interface LayoutNet {
   name: string; bbox: Bbox; subnodes: number; parasitics: number;
+  totalCap: number | null; isGround: boolean; ports: number;
   layers: string[]; instances: string[];
 }
 export interface LayoutConnection {
@@ -97,10 +104,12 @@ export interface LayoutModel {
   instances: LayoutInstance[]; nets: LayoutNet[]; connections: LayoutConnection[];
   stats: {
     instancesMatched: number; instancesTotal: number;
-    devicesMatched: number; devicesTotal: number;
+    devicesMatched: number; devicesTotal: number; devicesUnique: number;
     // Breakdown of uncorrelated devices: layout-only dummies (LVS unmatched),
     // direct top-cell devices, and devices whose hierarchy path isn't in the CDL.
     devicesDummy: number; devicesTopLevel: number; devicesHierMiss: number;
+    // DSPF-only block families surfaced on the canvas.
+    physicalBlocks: number;
   };
   // Correlation-level advisories (e.g. low/zero CDL↔DSPF match). Parse-level
   // advisories live in diagnostics.warnings.
