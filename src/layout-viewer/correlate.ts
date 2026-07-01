@@ -65,16 +65,29 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   // (fill, decap, antenna diodes, dummies). These can never correlate — they
   // are not a CDL/DSPF mismatch, so we count them separately.
   const DUMMY_RE = /(unmatched|noxref)/i;
-  let devicesMatched = 0, devicesDummy = 0, devicesTopLevel = 0, devicesHierMiss = 0;
-  for (const dev of data.devices) {
-    const segs = normSegments(dev.path, dspfSeps);
-    let matched = false;
-    extendBbox(nodeBox.get('')!, dev.x, dev.y);
-    nodeCount.set('', nodeCount.get('')! + 1);
+  // Extend every CDL instance box on this device's ancestor path; return whether
+  // any hierarchy level matched.
+  const attach = (segs: string[], dev: { x: number; y: number }): boolean => {
+    let hit = false;
     for (let len = 1; len <= segs.length; len++) {
       const id = segs.slice(0, len).join('/');
       const box = nodeBox.get(id);
-      if (box) { extendBbox(box, dev.x, dev.y); nodeCount.set(id, nodeCount.get(id)! + 1); matched = true; }
+      if (box) { extendBbox(box, dev.x, dev.y); nodeCount.set(id, nodeCount.get(id)! + 1); hit = true; }
+    }
+    return hit;
+  };
+  let devicesMatched = 0, devicesDummy = 0, devicesTopLevel = 0, devicesHierMiss = 0;
+  for (const dev of data.devices) {
+    extendBbox(nodeBox.get('')!, dev.x, dev.y);
+    nodeCount.set('', nodeCount.get('')! + 1);
+    const segs = normSegments(dev.path, dspfSeps);
+    let matched = attach(segs, dev);
+    // Layout↔schematic naming: some extractors prefix a nested subckt instance
+    // with an extra X (DSPF "XXI107" vs CDL "XI107"). ONLY when the path didn't
+    // match as-is, retry with a doubled leading X collapsed — a safe fallback
+    // that can't disturb paths that already correlate.
+    if (!matched && /^xx/.test(segs[0] ?? '')) {
+      matched = attach([segs[0].replace(/^x/, ''), ...segs.slice(1)], dev);
     }
     if (matched) devicesMatched++;
     else if (DUMMY_RE.test(dev.path)) devicesDummy++;   // layout-only dummy
