@@ -180,11 +180,13 @@ export function LayoutCanvas() {
     }
     if (selection?.type === 'instance') {
       // Nets touching the block itself or anything nested inside it (touch
-      // resolution records the DEEPEST block per node).
+      // resolution records the DEEPEST block per node). The design root
+      // contains everything — show its PORT nets (the I/O at this boundary).
       const sel = selection.id;
       return model.nets
-        .filter(n => bboxArea(n.bbox) > 0 &&
-          n.instances.some(id => id === sel || id.startsWith(sel + '/')))
+        .filter(n => bboxArea(n.bbox) > 0 && (sel === ''
+          ? n.ports > 0
+          : n.instances.some(id => id === sel || id.startsWith(sel + '/'))))
         .sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))
         .slice(0, MAX_NET_BOXES);
     }

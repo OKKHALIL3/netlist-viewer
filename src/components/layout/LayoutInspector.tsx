@@ -56,8 +56,13 @@ export function LayoutInspector() {
     } else {
       // A net touches this block if it reaches the block itself OR anything
       // inside it (touch resolution records the DEEPEST block per node).
-      const nets = model.nets.filter(n =>
-        n.instances.some(id => id === i.id || id.startsWith(i.id + '/')));
+      // The design root contains every net by definition — list its PORT
+      // nets (the I/O at this boundary) instead of a meaningless 0 or 1524.
+      const isRoot = i.id === '';
+      const nets = isRoot
+        ? model.nets.filter(n => n.ports > 0)
+        : model.nets.filter(n =>
+            n.instances.some(id => id === i.id || id.startsWith(i.id + '/')));
       const w = i.bbox[2] - i.bbox[0], h = i.bbox[3] - i.bbox[1];
       body = (
         <div className="insp-body">
@@ -71,7 +76,7 @@ export function LayoutInspector() {
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
           <div className="sub-h">Instance bbox</div>
           <div className="bboxline">SW <b>{i.bbox[0].toFixed(2)}, {i.bbox[1].toFixed(2)}</b><br />NE <b>{i.bbox[2].toFixed(2)}, {i.bbox[3].toFixed(2)}</b></div>
-          <div className="sub-h">Nets at this block ({nets.length})</div>
+          <div className="sub-h">{isRoot ? `Top-level (port) nets (${nets.length})` : `Nets at this block (${nets.length})`}</div>
           <div className="layout-hint">Click a net to outline how far it physically reaches.</div>
           <div>{nets.map(n => <span key={n.name} className="chip net" onClick={() => setSelection({ type: 'net', name: n.name })}>{n.name}</span>)}</div>
         </div>
