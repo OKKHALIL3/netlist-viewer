@@ -1,17 +1,23 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { View } from './transform';
 import { fitView, worldToScreen, screenToWorld, zoomAt, panBy } from './transform';
-import { pickInstance } from './pick';
-import type { LayoutModel, Bbox } from '../../layout-viewer/model';
+import { pickInstance, pickNetBox } from './pick';
+import { layerColor } from './layerColors';
+import type { LayoutModel, LayoutNet, Bbox } from '../../layout-viewer/model';
+import { bboxArea } from '../../layout-viewer/model';
 
 const PAD = 48;
-const LAYER_COLOR: Record<string, string> = {
-  poly: '#d06bd0', od: '#7a8c5a', metal1: '#4f9dff', metal2: '#5fd0a0',
-  metal3: '#ffb454', metal4: '#ff6b8a', metal5: '#b79bea',
-};
 const NEUTRAL = '#6b7689';
-const SEL = '#ffd23f', CONN = '#c084fc';
+const SEL = '#ffd23f', CONN = '#c084fc', NETBOX = '#5fd0a0';
+// Physical-only blocks (in the DSPF, absent from the CDL) get their own hue.
+const PHYS = '#e0a3ff';
+
+// Above this many RC-skeleton segments the always-on connection layer stops
+// being readable (and cheap) — fall back to selected-net tracing only.
+const SEG_BUDGET = 24_000;
+// Net boxes drawn for a selected block: the largest N nets touching it.
+const MAX_NET_BOXES = 12;
 
 // Per-block color families: each top-level block gets a stable hue so sibling
 // blocks read as distinct; descendants inherit their top block's hue. The
@@ -36,31 +42,66 @@ function draw(
   ctx: CanvasRenderingContext2D, model: LayoutModel, v: View, w: number, h: number,
   depth: number, layers: Record<string, boolean>, hasLayers: boolean,
   selId: string | null, selNet: string | null, hoverId: string | null,
+  shownNetBoxes: LayoutNet[], drawAll: boolean,
 ) {
   ctx.clearRect(0, 0, w, h);
 
   const netObj = selNet ? model.nets.find(n => n.name === selNet) ?? null : null;
   const touched = new Set(netObj?.instances ?? []);
 
-  // ── connections: ONLY the selected net's RC skeleton, colored by layer ──
-  if (netObj) {
+  // ── pass 1: the RC skeleton (under everything) ──────────────────────────
+  // Always drawn when the design fits the segment budget (mockup behavior);
+  // a selected net is traced bold while the rest dim away. Over budget, only
+  // the selected net is traced. Batched into one Path2D per style so big
+  // files cost a handful of stroke() calls, not tens of thousands.
+  if (drawAll || netObj) {
+    const byStyle = new Map<string, { color: string; width: number; alpha: number; path: Path2D }>();
     for (const c of model.connections) {
-      if (c.net !== selNet) continue;
       if (hasLayers && c.layer && layers[c.layer] === false) continue;
-      ctx.strokeStyle = hasLayers && c.layer ? (LAYER_COLOR[c.layer] ?? NEUTRAL) : NEUTRAL;
-      ctx.globalAlpha = 0.9;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      c.points.forEach((p, i) => {
-        const [sx, sy] = worldToScreen(v, p[0], p[1]);
-        if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-      });
-      ctx.stroke();
+      const isSel = selNet !== null && c.net === selNet;
+      if (!drawAll && !isSel) continue;
+      const color = hasLayers && c.layer ? layerColor(c.layer) : NEUTRAL;
+      const alpha = selNet ? (isSel ? 0.95 : 0.12) : 0.85;
+      const width = isSel ? 2.6 : 1.4;
+      const key = `${color}|${alpha}|${width}`;
+      let st = byStyle.get(key);
+      if (!st) { st = { color, width, alpha, path: new Path2D() }; byStyle.set(key, st); }
+      const pts = c.points;
+      for (let i = 0; i < pts.length; i++) {
+        const [sx, sy] = worldToScreen(v, pts[i][0], pts[i][1]);
+        if (i === 0) st.path.moveTo(sx, sy); else st.path.lineTo(sx, sy);
+      }
+    }
+    ctx.lineJoin = 'round';
+    for (const st of byStyle.values()) {
+      ctx.strokeStyle = st.color;
+      ctx.globalAlpha = st.alpha;
+      ctx.lineWidth = st.width;
+      ctx.stroke(st.path);
     }
     ctx.globalAlpha = 1;
   }
 
-  // ── instance boxes ──
+  // ── pass 2: net boundary boxes (dashed, translucent) ────────────────────
+  // The selected net's box, or every net touching the selected block — the
+  // two-boxes-at-once view the brief is built around.
+  for (const n of shownNetBoxes) {
+    const hot = selNet === n.name;
+    const [x0, y1s] = worldToScreen(v, n.bbox[0], n.bbox[3]);
+    const [x1, y0s] = worldToScreen(v, n.bbox[2], n.bbox[1]);
+    ctx.setLineDash([7, 5]);
+    ctx.strokeStyle = hot ? SEL : NETBOX;
+    ctx.fillStyle = hot ? 'rgba(255,210,63,0.08)' : 'rgba(95,208,160,0.05)';
+    ctx.lineWidth = hot ? 1.8 : 1.2;
+    ctx.fillRect(x0, y1s, x1 - x0, y0s - y1s);
+    ctx.strokeRect(x0, y1s, x1 - x0, y0s - y1s);
+    ctx.setLineDash([]);
+    ctx.fillStyle = hot ? SEL : NETBOX;
+    ctx.font = '11px "Space Mono", monospace';
+    ctx.fillText(`${n.name} · net`, x0 + 5, y1s + 14);
+  }
+
+  // ── pass 3: instance boxes ──────────────────────────────────────────────
   // depth 0 (the whole-design boundary) is drawn first as context; deeper boxes
   // layer on top. When a block is selected, dim everything off its branch
   // (self / ancestors / descendants); the depth-0 box always stays visible.
@@ -70,16 +111,17 @@ function draw(
   };
   for (const inst of model.instances) {
     if (inst.depth > depth) continue;
+    const isPhys = inst.origin === 'dspf';
     const isSel = selId === inst.id;
     const isTouch = touched.has(inst.id);
     const isHover = hoverId === inst.id && !isSel;
     const faded = selId !== null ? !onSelBranch(inst.id) : (!!selNet && !isTouch);
 
-    const base = inst.depth === 0 ? ROOT_COLOR : blockColor(inst.id);
+    const base = inst.depth === 0 ? ROOT_COLOR : isPhys ? PHYS : blockColor(inst.id);
     const stroke = isSel ? SEL : (isTouch && selNet) ? CONN : base;
     const fill = isSel ? rgba(SEL, 0.14)
       : (isTouch && selNet) ? rgba(CONN, 0.12)
-      : rgba(base, inst.depth === 0 ? 0.04 : 0.11);
+      : rgba(base, inst.depth === 0 ? 0.04 : isPhys ? 0.06 : 0.11);
 
     const [x0, y1s] = worldToScreen(v, inst.bbox[0], inst.bbox[3]);
     const [x1, y0s] = worldToScreen(v, inst.bbox[2], inst.bbox[1]);
@@ -89,32 +131,18 @@ function draw(
     ctx.strokeStyle = stroke;
     ctx.fillStyle = fill;
     ctx.lineWidth = isSel || isHover ? 2 : inst.depth === 0 ? 1.4 : 1.3;
+    if (isPhys) ctx.setLineDash([5, 4]);
     ctx.fillRect(x0, y1s, bw, bh);
     ctx.strokeRect(x0, y1s, bw, bh);
+    ctx.setLineDash([]);
     if (isHover) { ctx.strokeStyle = rgba(base, 0.9); ctx.lineWidth = 1; ctx.strokeRect(x0 - 2, y1s - 2, bw + 4, bh + 4); }
 
     if (bw > 34 && bh > 12) {
       ctx.fillStyle = isSel ? SEL : faded ? rgba(base, 0.5) : stroke;
       ctx.font = '11px "Space Mono", monospace';
-      ctx.fillText(inst.label, x0 + 5, y1s + 13);
+      ctx.fillText((isPhys ? '◇ ' : '') + inst.label, x0 + 5, y1s + 13);
     }
     ctx.globalAlpha = 1;
-  }
-
-  // ── the selected net's bounding box (the wide dashed box) — drawn on top ──
-  if (netObj) {
-    const [x0, y1s] = worldToScreen(v, netObj.bbox[0], netObj.bbox[3]);
-    const [x1, y0s] = worldToScreen(v, netObj.bbox[2], netObj.bbox[1]);
-    ctx.setLineDash([7, 5]);
-    ctx.strokeStyle = SEL;
-    ctx.fillStyle = 'rgba(255,210,63,0.06)';
-    ctx.lineWidth = 1.8;
-    ctx.fillRect(x0, y1s, x1 - x0, y0s - y1s);
-    ctx.strokeRect(x0, y1s, x1 - x0, y0s - y1s);
-    ctx.setLineDash([]);
-    ctx.fillStyle = SEL;
-    ctx.font = '11px "Space Mono", monospace';
-    ctx.fillText(`${netObj.name} · net`, x0 + 5, y1s + 14);
   }
 }
 
@@ -134,6 +162,31 @@ export function LayoutCanvas() {
   const hoverRef = useRef<string | null>(null);
   const [, force] = useState(0);
 
+  const totalSegs = useMemo(() => {
+    if (!model) return 0;
+    let total = 0;
+    for (const c of model.connections) total += c.points.length - 1;
+    return total;
+  }, [model]);
+  const drawAll = totalSegs > 0 && totalSegs <= SEG_BUDGET;
+
+  // The net boxes on screen: the selected net's, or the (largest) nets that
+  // touch the selected block. Shared by draw() and edge picking.
+  const shownNetBoxes = useMemo((): LayoutNet[] => {
+    if (!model) return [];
+    if (selection?.type === 'net') {
+      const n = model.nets.find(x => x.name === selection.name);
+      return n && bboxArea(n.bbox) > 0 ? [n] : [];
+    }
+    if (selection?.type === 'instance') {
+      return model.nets
+        .filter(n => n.instances.includes(selection.id) && bboxArea(n.bbox) > 0)
+        .sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))
+        .slice(0, MAX_NET_BOXES);
+    }
+    return [];
+  }, [model, selection]);
+
   const render = useCallback(() => {
     const cv = canvasRef.current, wrap = wrapRef.current;
     if (!cv || !wrap || !model) return;
@@ -148,8 +201,9 @@ export function LayoutCanvas() {
     else viewRef.current = { ...viewRef.current, h };
     const selId = selection?.type === 'instance' ? selection.id : null;
     const selNet = selection?.type === 'net' ? selection.name : null;
-    draw(ctx, model, viewRef.current, w, h, depthMax(layoutDepth), layerVisibility, model.layers.length > 0, selId, selNet, hoverRef.current);
-  }, [model, layoutDepth, layerVisibility, selection]);
+    draw(ctx, model, viewRef.current, w, h, depthMax(layoutDepth), layerVisibility,
+      model.layers.length > 0, selId, selNet, hoverRef.current, shownNetBoxes, drawAll);
+  }, [model, layoutDepth, layerVisibility, selection, shownNetBoxes, drawAll]);
 
   useEffect(() => { viewRef.current = null; render(); }, [model]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { render(); });
@@ -227,6 +281,10 @@ export function LayoutCanvas() {
     if (!d || d.moved || !viewRef.current || !model) return;
     const r = canvasRef.current!.getBoundingClientRect();
     const [wx, wy] = screenToWorld(viewRef.current, e.clientX - r.left, e.clientY - r.top);
+    // A visible net box's edge outranks the blocks under it (it is above them
+    // visually); its interior stays block-clickable.
+    const netHit = pickNetBox(shownNetBoxes, wx, wy, 8 / viewRef.current.scale);
+    if (netHit) { setSelection({ type: 'net', name: netHit }); return; }
     const id = pickInstance(model, depthMax(layoutDepth), wx, wy);
     setSelection(id !== null ? { type: 'instance', id } : null);
   };
@@ -240,10 +298,16 @@ export function LayoutCanvas() {
         <button onClick={fitAll} title="Fit to view (F)">⤢ Fit</button>
         <button onClick={exportPng} title="Export PNG">⬇ PNG</button>
       </div>
+      {model && totalSegs > SEG_BUDGET && selection?.type !== 'net' && (
+        <div className="layout-conn-note">
+          RC skeleton hidden at this scale ({totalSegs.toLocaleString()} segments) — select a net to trace it.
+        </div>
+      )}
       <div className="layout-legend">
         <span><i className="sw-inst" /> block (by hierarchy)</span>
+        {model && model.stats.physicalBlocks > 0 && <span><i className="sw-phys" /> ◇ physical-only (not in CDL)</span>}
         <span><i className="sw-net" /> net bbox</span>
-        <span><i className="sw-conn" /> connection (by layer)</span>
+        <span><i className="sw-conn" /> RC skeleton (by layer)</span>
         <span><i className="sw-sel" /> selected</span>
       </div>
       <div ref={readoutRef} className="layout-readout">— µm</div>

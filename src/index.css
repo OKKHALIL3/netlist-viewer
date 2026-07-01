@@ -815,6 +815,15 @@ body {
 .layout-legend .sw-net { background: rgba(95,208,160,0.10); border: 1.5px dashed #5fd0a0; }
 .layout-legend .sw-conn { background: none; border: none; border-top: 2px solid #c084fc; height: 0; }
 .layout-legend .sw-sel { background: rgba(255,210,63,0.15); border: 1.5px solid #ffd23f; }
+.layout-legend .sw-phys { background: rgba(224,163,255,0.08); border: 1.5px dashed #e0a3ff; }
+
+/* Over-budget notice: the always-on RC skeleton is disabled for huge files. */
+.layout-conn-note {
+  position: absolute; top: 92px; right: 12px; z-index: 6;
+  background: rgba(17, 21, 28, 0.9); border: 1px solid var(--line-soft);
+  color: var(--txt-dim); font-size: 11px; font-family: 'Space Mono', monospace;
+  padding: 4px 9px; border-radius: 7px; pointer-events: none; max-width: 340px;
+}
 .layout-readout {
   position: absolute; bottom: 12px; right: 14px; z-index: 6;
   font-size: 11px; color: var(--txt-faint); font-family: 'Space Mono', monospace;
