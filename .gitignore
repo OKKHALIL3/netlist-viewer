@@ -24,3 +24,6 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+# Internal planning docs (agent-generated) stay out of the repo
+docs/superpowers/
