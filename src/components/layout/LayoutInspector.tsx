@@ -1,10 +1,60 @@
+import { useMemo, useState } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
 import { reachRatio } from '../../layout-viewer/insights';
 import { layerColor } from './layerColors';
+import { groupNetChips } from './netChips';
+import type { LayoutNet } from '../../layout-viewer/model';
 
 // Total-cap display: DSPF writes Farads.
 function fmtCap(f: number): string {
   return f >= 1e-12 ? `${(f * 1e12).toFixed(3)} pF` : `${(f * 1e15).toFixed(3)} fF`;
+}
+
+// A block's net list: bus siblings collapse into one expandable group chip;
+// hovering a net chip previews its extent on the canvas, clicking traces it.
+// Mounted with key={blockId} so expansion state resets per block.
+function BlockNetChips({ nets }: { nets: LayoutNet[] }) {
+  const setSelection = useViewerStore(s => s.setSelection);
+  const setNetPreview = useViewerStore(s => s.setNetPreview);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const groups = useMemo(() => groupNetChips(nets.map(n => n.name)), [nets]);
+
+  const chip = (name: string) => (
+    <span
+      key={name}
+      className="chip net"
+      onMouseEnter={() => setNetPreview(name)}
+      onMouseLeave={() => setNetPreview(null)}
+      onClick={() => setSelection({ type: 'net', name })}
+    >
+      {name}
+    </span>
+  );
+
+  return (
+    <div>
+      {groups.map(g => {
+        if (g.members.length === 1) return chip(g.members[0]);
+        const open = expanded.has(g.label);
+        return (
+          <span key={g.label}>
+            <span
+              className={`chip bus${open ? ' open' : ''}`}
+              title={open ? 'Collapse bus' : `Expand ${g.members.length} bus bits`}
+              onClick={() => setExpanded(prev => {
+                const next = new Set(prev);
+                if (next.has(g.label)) next.delete(g.label); else next.add(g.label);
+                return next;
+              })}
+            >
+              {open ? '▾ ' : '▸ '}{g.label} ×{g.members.length}
+            </span>
+            {open && g.members.map(chip)}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 export function LayoutInspector() {
@@ -12,6 +62,8 @@ export function LayoutInspector() {
   const layoutData = useViewerStore(s => s.layoutData);
   const selection = useViewerStore(s => s.selection);
   const setSelection = useViewerStore(s => s.setSelection);
+  const showNetExtents = useViewerStore(s => s.showNetExtents);
+  const toggleNetExtents = useViewerStore(s => s.toggleNetExtents);
 
   let body: React.ReactNode;
   if (!model) {
@@ -76,9 +128,17 @@ export function LayoutInspector() {
           <div className="kv"><span className="k">Width × Height</span><span className="v">{w.toFixed(2)} × {h.toFixed(2)} µm</span></div>
           <div className="sub-h">Instance bbox</div>
           <div className="bboxline">SW <b>{i.bbox[0].toFixed(2)}, {i.bbox[1].toFixed(2)}</b><br />NE <b>{i.bbox[2].toFixed(2)}, {i.bbox[3].toFixed(2)}</b></div>
-          <div className="sub-h">{isRoot ? `Top-level (port) nets (${nets.length})` : `Nets at this block (${nets.length})`}</div>
-          <div className="layout-hint">Click a net to outline how far it physically reaches.</div>
-          <div>{nets.map(n => <span key={n.name} className="chip net" onClick={() => setSelection({ type: 'net', name: n.name })}>{n.name}</span>)}</div>
+          <div className="sub-h nets-h">
+            <span>{isRoot ? `Top-level (port) nets (${nets.length})` : `Nets at this block (${nets.length})`}</span>
+            {nets.length > 0 && (
+              <button className="mini-toggle" onClick={toggleNetExtents}
+                      title="Outline the largest net extents at once (can be busy on blocks with many nets)">
+                {showNetExtents ? 'hide outlines' : 'outline all'}
+              </button>
+            )}
+          </div>
+          <div className="layout-hint">Hover a net to preview its extent; click to trace it.</div>
+          <BlockNetChips key={i.id} nets={nets} />
         </div>
       );
     }

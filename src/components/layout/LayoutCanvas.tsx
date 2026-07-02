@@ -4,7 +4,7 @@ import type { View } from './transform';
 import { fitView, worldToScreen, screenToWorld, zoomAt, panBy } from './transform';
 import { pickInstance, pickNetBox } from './pick';
 import { layerColor } from './layerColors';
-import type { LayoutModel, LayoutNet, Bbox } from '../../layout-viewer/model';
+import type { LayoutModel, LayoutInstance, LayoutNet, Bbox } from '../../layout-viewer/model';
 import { bboxArea } from '../../layout-viewer/model';
 
 const PAD = 48;
@@ -36,13 +36,13 @@ function rgba(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-function depthMax(d: 0 | 1 | 2 | 'all'): number { return d === 'all' ? Infinity : d; }
+function depthMax(d: number | 'all'): number { return d === 'all' ? Infinity : d; }
 
 function draw(
   ctx: CanvasRenderingContext2D, model: LayoutModel, v: View, w: number, h: number,
   depth: number, layers: Record<string, boolean>, hasLayers: boolean,
   selId: string | null, selNet: string | null, hoverId: string | null,
-  shownNetBoxes: LayoutNet[], drawAll: boolean,
+  shownNetBoxes: LayoutNet[], drawAll: boolean, focusMode: boolean,
 ) {
   ctx.clearRect(0, 0, w, h);
 
@@ -105,17 +105,45 @@ function draw(
   // depth 0 (the whole-design boundary) is drawn first as context; deeper boxes
   // layer on top. When a block is selected, dim everything off its branch
   // (self / ancestors / descendants); the depth-0 box always stays visible.
+  // FOCUS MODE goes further: off-branch blocks are hidden outright, ancestors
+  // reduce to faint outlines, and the selected block's WHOLE subtree is shown
+  // regardless of the depth cap — a clean per-level focus view.
+  const inFocus = focusMode && selId !== null && selId !== '';
   const onSelBranch = (id: string): boolean => {
     if (selId === null || selId === '' || id === '' || id === selId) return true;
     return selId.startsWith(id + '/') || id.startsWith(selId + '/');
   };
   for (const inst of model.instances) {
-    if (inst.depth > depth) continue;
+    const isAncestor = inst.id === '' || (selId !== null && selId !== inst.id && selId.startsWith(inst.id + '/'));
+    const inSubtree = selId !== null && (inst.id === selId || inst.id.startsWith(selId + '/'));
+    if (inFocus) {
+      if (!isAncestor && !inSubtree) continue; // off-branch: hidden entirely
+    } else if (inst.depth > depth) {
+      continue;
+    }
     const isPhys = inst.origin === 'dspf';
     const isSel = selId === inst.id;
     const isTouch = touched.has(inst.id);
     const isHover = hoverId === inst.id && !isSel;
-    const faded = selId !== null ? !onSelBranch(inst.id) : (!!selNet && !isTouch);
+    const faded = inFocus ? false : selId !== null ? !onSelBranch(inst.id) : (!!selNet && !isTouch);
+
+    if (inFocus && isAncestor && !isSel) {
+      // Ancestor context: faint outline only, no fill, so the focused subtree
+      // reads against an uncluttered background.
+      const [ax0, ay1] = worldToScreen(v, inst.bbox[0], inst.bbox[3]);
+      const [ax1, ay0] = worldToScreen(v, inst.bbox[2], inst.bbox[1]);
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = inst.depth === 0 ? ROOT_COLOR : blockColor(inst.id);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(ax0, ay1, ax1 - ax0, ay0 - ay1);
+      if (ax1 - ax0 > 34 && ay0 - ay1 > 12) {
+        ctx.fillStyle = ctx.strokeStyle;
+        ctx.font = '11px "Space Mono", monospace';
+        ctx.fillText(inst.label, ax0 + 5, ay1 + 13);
+      }
+      ctx.globalAlpha = 1;
+      continue;
+    }
 
     const base = inst.depth === 0 ? ROOT_COLOR : isPhys ? PHYS : blockColor(inst.id);
     const stroke = isSel ? SEL : (isTouch && selNet) ? CONN : base;
@@ -153,6 +181,9 @@ export function LayoutCanvas() {
   const selection = useViewerStore(s => s.selection);
   const setSelection = useViewerStore(s => s.setSelection);
   const layoutFocusRequest = useViewerStore(s => s.layoutFocusRequest);
+  const netPreview = useViewerStore(s => s.netPreview);
+  const showNetExtents = useViewerStore(s => s.showNetExtents);
+  const focusMode = useViewerStore(s => s.focusMode);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -170,8 +201,11 @@ export function LayoutCanvas() {
   }, [model]);
   const drawAll = totalSegs > 0 && totalSegs <= SEG_BUDGET;
 
-  // The net boxes on screen: the selected net's, or the (largest) nets that
-  // touch the selected block. Shared by draw() and edge picking.
+  // The net boxes on screen. Default is QUIET: selecting a block draws no net
+  // boxes at all — hovering a net chip in the inspector previews that one
+  // extent, clicking traces it. "Outline all" (showNetExtents) opts back into
+  // drawing the largest MAX_NET_BOXES nets at once (a block can touch dozens
+  // and the full set overwhelms the canvas). Shared by draw() + edge picking.
   const shownNetBoxes = useMemo((): LayoutNet[] => {
     if (!model) return [];
     if (selection?.type === 'net') {
@@ -181,17 +215,31 @@ export function LayoutCanvas() {
     if (selection?.type === 'instance') {
       // Nets touching the block itself or anything nested inside it (touch
       // resolution records the DEEPEST block per node). The design root
-      // contains everything — show its PORT nets (the I/O at this boundary).
+      // contains everything — its list is the PORT nets (I/O at the boundary).
       const sel = selection.id;
-      return model.nets
+      const boxes = !showNetExtents ? [] : model.nets
         .filter(n => bboxArea(n.bbox) > 0 && (sel === ''
           ? n.ports > 0
           : n.instances.some(id => id === sel || id.startsWith(sel + '/'))))
         .sort((a, b) => bboxArea(b.bbox) - bboxArea(a.bbox))
         .slice(0, MAX_NET_BOXES);
+      if (netPreview && !boxes.some(n => n.name === netPreview)) {
+        const p = model.nets.find(n => n.name === netPreview);
+        if (p && bboxArea(p.bbox) > 0) return [...boxes, p];
+      }
+      return boxes;
     }
     return [];
-  }, [model, selection]);
+  }, [model, selection, netPreview, showNetExtents]);
+
+  // In focus mode, hover/click picking is confined to the selected branch —
+  // plus the design root, so a click outside the branch exits focus cleanly
+  // back to the whole-design view.
+  const focusEligible = useMemo(() => {
+    if (!focusMode || selection?.type !== 'instance' || selection.id === '') return undefined;
+    const sel = selection.id;
+    return (inst: LayoutInstance) => inst.id === '' || inst.id === sel || inst.id.startsWith(sel + '/');
+  }, [focusMode, selection]);
 
   const render = useCallback(() => {
     const cv = canvasRef.current, wrap = wrapRef.current;
@@ -208,8 +256,8 @@ export function LayoutCanvas() {
     const selId = selection?.type === 'instance' ? selection.id : null;
     const selNet = selection?.type === 'net' ? selection.name : null;
     draw(ctx, model, viewRef.current, w, h, depthMax(layoutDepth), layerVisibility,
-      model.layers.length > 0, selId, selNet, hoverRef.current, shownNetBoxes, drawAll);
-  }, [model, layoutDepth, layerVisibility, selection, shownNetBoxes, drawAll]);
+      model.layers.length > 0, selId, selNet, hoverRef.current, shownNetBoxes, drawAll, focusMode);
+  }, [model, layoutDepth, layerVisibility, selection, shownNetBoxes, drawAll, focusMode]);
 
   useEffect(() => { viewRef.current = null; render(); }, [model]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { render(); });
@@ -279,7 +327,7 @@ export function LayoutCanvas() {
     }
     const [wx, wy] = screenToWorld(v, sx, sy);
     if (readoutRef.current) readoutRef.current.textContent = `${wx.toFixed(2)}, ${wy.toFixed(2)} µm`;
-    const hov = pickInstance(model, depthMax(layoutDepth), wx, wy);
+    const hov = pickInstance(model, focusEligible ? Infinity : depthMax(layoutDepth), wx, wy, focusEligible);
     if (hov !== hoverRef.current) { hoverRef.current = hov; force(n => n + 1); }
   };
   const onUp = (e: React.MouseEvent) => {
@@ -291,7 +339,7 @@ export function LayoutCanvas() {
     // visually); its interior stays block-clickable.
     const netHit = pickNetBox(shownNetBoxes, wx, wy, 8 / viewRef.current.scale);
     if (netHit) { setSelection({ type: 'net', name: netHit }); return; }
-    const id = pickInstance(model, depthMax(layoutDepth), wx, wy);
+    const id = pickInstance(model, focusEligible ? Infinity : depthMax(layoutDepth), wx, wy, focusEligible);
     setSelection(id !== null ? { type: 'instance', id } : null);
   };
 

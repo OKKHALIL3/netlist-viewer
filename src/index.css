@@ -842,6 +842,23 @@ body {
 }
 .layout-hint { font-size: 10.5px; color: var(--txt-faint); font-style: italic; margin: 2px 0 8px; }
 
+/* "Nets at this block" header row: label + the outline-all mini toggle */
+.sub-h.nets-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mini-toggle {
+  background: none; border: 1px solid var(--line); color: var(--txt-dim);
+  font-size: 10px; font-family: 'Space Mono', monospace; padding: 1px 7px;
+  border-radius: 6px; cursor: pointer; white-space: nowrap;
+}
+.mini-toggle:hover { color: var(--txt); border-color: var(--accent); }
+
+/* Collapsed bus-group chip in the block net list */
+.chip.bus { cursor: pointer; border-style: dashed; }
+.chip.bus.open { border-style: solid; }
+
+/* Focus-mode toggle riding the depth row */
+.depth-row .focus-btn { margin-left: 10px; }
+.depth-row .focus-btn.on { color: var(--sel, #ffd23f); border-color: var(--sel, #ffd23f); }
+
 /* Zone (block) jump dropdown in the layout bar */
 .zone-select {
   background: var(--panel-2); border: 1px solid var(--line); color: var(--txt);

@@ -7,7 +7,8 @@ export type ViewMode = 'inst' | 'both' | 'net';
 
 // Top-level app mode: the original schematic view, or the physical layout view.
 export type AppMode = 'schematic' | 'layout';
-export type LayoutDepth = 0 | 1 | 2 | 'all';
+// Hierarchy depth shown on the layout canvas: any level 0..maxDepth, or all.
+export type LayoutDepth = number | 'all';
 
 // How each instance block arranges its pins. 'classic' is the stacked
 // IN/OUT/PWR/GND section list. 'beta' (the default) draws a schematic-symbol
@@ -56,6 +57,14 @@ interface ViewerState {
   // Bumped to ask the layout canvas to frame the current selection (used by the
   // zone dropdown and the sprawl-insights panel, not by plain canvas clicks).
   layoutFocusRequest: number;
+  // Net whose extent is previewed on the canvas (inspector chip hover).
+  netPreview: string | null;
+  // Opt-in: outline ALL nets touching the selected block (off by default —
+  // a block can touch dozens of nets and the boxes overwhelm the canvas).
+  showNetExtents: boolean;
+  // Focus mode: selecting a block hides everything off its branch instead of
+  // just dimming it, and shows the full subtree regardless of the depth cap.
+  focusMode: boolean;
 
   // actions
   loadDesign: (design: Design) => void;
@@ -77,6 +86,9 @@ interface ViewerState {
   setLayoutDepth: (depth: LayoutDepth) => void;
   toggleLayer: (name: string) => void;
   selectAndFocus: (sel: SelectionType) => void;
+  setNetPreview: (name: string | null) => void;
+  toggleNetExtents: () => void;
+  toggleFocusMode: () => void;
   getCell: () => Cell | undefined;
 }
 
@@ -102,6 +114,9 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   layoutDepth: 1,
   layerVisibility: {},
   layoutFocusRequest: 0,
+  netPreview: null,
+  showNetExtents: false,
+  focusMode: true,
 
   loadDesign: (design) => {
     set({
@@ -168,7 +183,9 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
 
   setFocusNet: (net) => set({ focusNet: net }),
 
-  setSelection: (sel) => set({ selection: sel }),
+  // Selection changes always drop any hover preview (the chip that set it is
+  // about to unmount, so its mouse-leave may never fire).
+  setSelection: (sel) => set({ selection: sel, netPreview: null }),
 
   setParsing: (parsing) => set({ parsing }),
 
@@ -187,7 +204,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
     const model = correlate(design, data);
     const layerVisibility: Record<string, boolean> = {};
     for (const l of model.layers) layerVisibility[l] = true;
-    set({ layoutData: data, layoutModel: model, layerVisibility, selection: null });
+    set({ layoutData: data, layoutModel: model, layerVisibility, selection: null, netPreview: null });
   },
 
   setLayoutDepth: (layoutDepth) => set({ layoutDepth }),
@@ -197,7 +214,11 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
 
   // Select something AND request the canvas frame it (intentional navigation).
   selectAndFocus: (sel) =>
-    set(s => ({ selection: sel, layoutFocusRequest: s.layoutFocusRequest + 1 })),
+    set(s => ({ selection: sel, netPreview: null, layoutFocusRequest: s.layoutFocusRequest + 1 })),
+
+  setNetPreview: (name) => set({ netPreview: name }),
+  toggleNetExtents: () => set(s => ({ showNetExtents: !s.showNetExtents })),
+  toggleFocusMode: () => set(s => ({ focusMode: !s.focusMode })),
 
   getCell: () => {
     const { design, currentCell } = get();
