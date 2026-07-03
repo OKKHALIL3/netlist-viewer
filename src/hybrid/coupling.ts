@@ -24,9 +24,10 @@ export function couplingFor(
     const nb = model.blocks.get(cand);
     if (!nb?.dspfNets) continue;
     for (const p of pairs) {
+      if (!includeSupply && (isSupplyNet(p.aIdx) || isSupplyNet(p.bIdx))) continue;
       const hit =
-        (sel.dspfNets.has(p.aIdx) && nb.dspfNets.has(p.bIdx) && (includeSupply || !isSupplyNet(p.bIdx))) ? [p.aIdx, p.bIdx] :
-        (sel.dspfNets.has(p.bIdx) && nb.dspfNets.has(p.aIdx) && (includeSupply || !isSupplyNet(p.aIdx))) ? [p.bIdx, p.aIdx] : null;
+        (sel.dspfNets.has(p.aIdx) && nb.dspfNets.has(p.bIdx)) ? [p.aIdx, p.bIdx] :
+        (sel.dspfNets.has(p.bIdx) && nb.dspfNets.has(p.aIdx)) ? [p.bIdx, p.aIdx] : null;
       if (!hit) continue;
       let e = out.get(cand);
       if (!e) { e = { block: cand, total: 0, pairs: [] }; out.set(cand, e); }

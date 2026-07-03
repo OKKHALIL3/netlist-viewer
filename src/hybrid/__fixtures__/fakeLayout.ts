@@ -35,3 +35,16 @@ export function fakeLayout(): { data: LayoutData; lm: LayoutModel } {
   } as unknown as LayoutModel;
   return { data, lm };
 }
+
+export function fakeLayoutWithSupply(): { data: LayoutData; lm: LayoutModel } {
+  // fakeLayout() plus a 'vss' net owned by xu1 only, coupled to 'mid' — regression
+  // fixture for supply exclusion when the SELECTED block's side of a pair (not the
+  // neighbor's) is the supply net, e.g. VSS touching every block via dspfNets.
+  const base = fakeLayout();
+  const vss = dnet('vss', 1, 0, [['mid:1', 3e-15]]);
+  const data: LayoutData = { ...base.data, nets: [...base.data.nets, vss] };
+  const lm = {
+    nets: [...base.lm.nets, { name: 'vss', instances: ['xu1'] }],
+  } as unknown as LayoutModel;
+  return { data, lm };
+}
