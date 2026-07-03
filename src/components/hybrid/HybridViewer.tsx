@@ -11,7 +11,7 @@ import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff } = useHybridStore();
+  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff, version } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
@@ -24,6 +24,8 @@ export function HybridViewer() {
   }, [clearOverlays]);
 
   const footer = useMemo(() => {
+    // Invalidate on version change when reclassify() mutates block categories
+    void version;
     if (!model) return { pins: 0, nets: 0, devices: 0 };
     const layout = computeSlots(model, rootPath, depth);
     let pins = 0, nets = 0, devices = 0;
@@ -33,7 +35,7 @@ export function HybridViewer() {
       pins += b.pins; nets += b.netCount; devices += b.devices;
     }
     return { pins, nets, devices };
-  }, [model, rootPath, depth, funcOff, supplyOff]);
+  }, [model, rootPath, depth, funcOff, supplyOff, version]);
 
   if (!model) return null;
   return (
