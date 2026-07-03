@@ -17,6 +17,7 @@ export function HybridControls() {
   const {
     model, rootPath, depth, setDepth,
     zoneColors, toggleZoneColors, sizeByContent, toggleSizeByContent,
+    weights, setWeights,
     funcOff, toggleFunc, supplyOff, toggleSupply,
   } = useHybridStore();
   if (!model) return null;
@@ -41,6 +42,20 @@ export function HybridControls() {
           Size by content (criticality)
         </label>
         <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Siblings are ordered most critical first.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
+          {(['dev', 'net', 'para', 'coup'] as const).map((label, i) => (
+            <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: T.muted }}>
+              {label}
+              <input type="number" step={0.05} min={0} max={1} value={weights[i]}
+                     onChange={e => {
+                       const w = [...weights] as [number, number, number, number];
+                       w[i] = +e.target.value;
+                       setWeights(w);
+                     }}
+                     style={{ width: 48, fontSize: 12 }} />
+            </label>
+          ))}
+        </div>
       </Panel>
 
       <Panel title="Functional map">

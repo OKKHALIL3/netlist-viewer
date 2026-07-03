@@ -38,6 +38,7 @@ interface HybridState {
   clearOverlays: () => void;
   toggleZoneColors: () => void;
   toggleSizeByContent: () => void;
+  setWeights: (w: [number, number, number, number]) => void;
   toggleFunc: (key: string) => void;
   toggleSupply: (name: string) => void;
   reclassify: () => void;
@@ -93,6 +94,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   clearOverlays: () => set({ ...CLEARED }),
   toggleZoneColors: () => set(s => ({ zoneColors: !s.zoneColors })),
   toggleSizeByContent: () => set(s => ({ sizeByContent: !s.sizeByContent })),
+  setWeights: (w) => set({ weights: w }),
   toggleFunc: (key) => set(s => {
     const n = new Set(s.funcOff);
     if (n.has(key)) n.delete(key); else n.add(key);

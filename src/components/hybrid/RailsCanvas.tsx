@@ -1,18 +1,24 @@
 import { useMemo } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeSlots } from '../../hybrid/slots';
+import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
 import { T } from './theme';
 
-const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34, BLOCK_W = 86;
+const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
 
 export function RailsCanvas() {
-  const { model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff, zoneColors } = useHybridStore();
+  const {
+    model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
+    zoneColors, sizeByContent, weights,
+  } = useHybridStore();
+  const scores = useMemo(() => (model ? criticalityScores(model, weights) : null), [model, weights]);
   const layout = useMemo(
-    () => (model ? computeSlots(model, rootPath, depth) : null),
-    [model, rootPath, depth],
+    () => (model && scores ? computeSlots(model, rootPath, depth, criticalityOrder(scores)) : null),
+    [model, scores, rootPath, depth],
   );
   if (!model || !layout) return null;
+  const blockW = (p: string) => (sizeByContent ? 60 + 44 * (scores!.get(p) ?? 0) : 86); // 60..104 clamp, uniform when off
 
   const rootDepth = model.blocks.get(rootPath)!.depth;
   const visible = [...layout.slot.keys()].map(p => model.blocks.get(p)!);
@@ -43,7 +49,7 @@ export function RailsCanvas() {
                        fill="none" stroke={T.edge} strokeWidth={1.2} />;
         })}
         {visible.map(b => {
-          const w = BLOCK_W, x = cx(b.path) - w / 2, y = railY(lvl(b)) - BLOCK_H;
+          const w = blockW(b.path), x = cx(b.path) - w / 2, y = railY(lvl(b)) - BLOCK_H;
           const isSel = selected === b.path;
           const maxChars = Math.floor((w - 14) / 6);
           const dim = !passesFilters(b, funcOff, supplyOff);
