@@ -7,11 +7,12 @@ import { HybridControls } from './HybridControls';
 import { RailsCanvas } from './RailsCanvas';
 import { BlockStatsCard } from './BlockStatsCard';
 import { PropagationPanel } from './PropagationPanel';
+import { CouplingPanel } from './CouplingPanel';
 import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff, version } = useHybridStore();
+  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff, version, coupling, selected } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
@@ -57,6 +58,7 @@ export function HybridViewer() {
         <RailsCanvas />
         <BlockStatsCard />
         <PropagationPanel />
+        {coupling.on && selected && <CouplingPanel />}
       </div>
       <div style={{ background: T.panel, borderTop: `1px solid ${T.border}`, padding: '8px 18px', display: 'flex', gap: 26, fontSize: 13, color: T.text }}>
         <span>Pins <b style={{ color: T.blue }}>({footer.pins})</b></span>

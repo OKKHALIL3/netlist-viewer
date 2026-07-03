@@ -21,6 +21,7 @@ export function HybridControls() {
     weights, setWeights,
     funcOff, toggleFunc, supplyOff, toggleSupply,
     pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers,
+    coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
   } = useHybridStore();
   const pinOptions = useMemo(
     () => (design && model
@@ -129,6 +130,30 @@ export function HybridControls() {
             {startPin && endPin && !pathResult && (
               <div style={{ marginTop: 8, fontSize: 12, color: '#F87171' }}>No signal path found (supplies excluded).</div>
             )}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Coupling">
+        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: model.hasLayout ? T.text : T.muted, cursor: model.hasLayout ? 'pointer' : 'default' }}>
+          <input type="checkbox" checked={coupling.on} disabled={!model.hasLayout} onChange={toggleCoupling} style={{ accentColor: T.blue }} />
+          Show coupling overlay
+        </label>
+        {!model.hasLayout && (
+          <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Load a DSPF to see coupling capacitance.</div>
+        )}
+        {coupling.on && (
+          <div style={{ marginTop: 8 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.muted }}>
+              Threshold (fF)
+              <input type="number" min={0} step={0.1} value={coupling.minC * 1e15}
+                     onChange={e => setCouplingMinC(+e.target.value * 1e-15)}
+                     style={{ width: 64, fontSize: 12 }} />
+            </label>
+            <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer', marginTop: 6 }}>
+              <input type="checkbox" checked={coupling.includeSupply} onChange={toggleCouplingSupply} style={{ accentColor: T.blue }} />
+              Include supply nets
+            </label>
           </div>
         )}
       </Panel>

@@ -48,6 +48,7 @@ interface HybridState {
   endPin: string;
   pathResult: PathResult | null;
   pathLayers: string[] | null;
+  coupling: { on: boolean; minC: number; includeSupply: boolean };
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
   drillDown: (path: string) => void;
@@ -63,6 +64,9 @@ interface HybridState {
   reclassify: () => void;
   togglePathMode: () => void;
   setPathPins: (startPin: string, endPin: string) => void;
+  toggleCoupling: () => void;
+  setCouplingMinC: (v: number) => void;
+  toggleCouplingSupply: () => void;
 }
 
 // Everything that must die on navigation (spec §5 + approved design decision).
@@ -93,6 +97,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   endPin: '',
   pathResult: null,
   pathLayers: null,
+  coupling: { on: false, minC: 1e-15, includeSupply: false },
 
   build: (design, layoutData, layoutModel) => {
     const model = buildHybridModel(design);
@@ -159,4 +164,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     const result = findPath(design, model, conductors, parse(startPin), parse(endPin));
     set({ pathResult: result, pathLayers: result ? layersFor(result, get().netLayers) : null });
   },
+  toggleCoupling: () => set(s => ({ coupling: { ...s.coupling, on: !s.coupling.on } })),
+  setCouplingMinC: (v) => set(s => ({ coupling: { ...s.coupling, minC: v } })),
+  toggleCouplingSupply: () => set(s => ({ coupling: { ...s.coupling, includeSupply: !s.coupling.includeSupply } })),
 }));

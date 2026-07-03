@@ -69,3 +69,14 @@ test('path pins run findPath; navigation clears result', () => {
   s().setPathPins('xu1:vdd', 'xu2:a');   // supply pin → explicit no-path
   assert.equal(s().pathResult, null);
 });
+
+test('coupling: defaults and toggles', () => {
+  s().build(tinyDesign(), null, null);
+  assert.deepEqual(s().coupling, { on: false, minC: 1e-15, includeSupply: false });
+  s().toggleCoupling();
+  assert.equal(s().coupling.on, true);
+  s().setCouplingMinC(2e-15);
+  assert.equal(s().coupling.minC, 2e-15);
+  s().toggleCouplingSupply();
+  assert.equal(s().coupling.includeSupply, true);
+});

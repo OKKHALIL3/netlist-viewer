@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
+import { useViewerStore } from '../../store/viewerStore';
 import { computeSlots } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
+import { couplingFor } from '../../hybrid/coupling';
 import { T } from './theme';
 
 const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
@@ -10,13 +12,18 @@ const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
 export function RailsCanvas() {
   const {
     model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
-    zoneColors, sizeByContent, weights, pathResult, startPin, endPin,
+    zoneColors, sizeByContent, weights, pathResult, startPin, endPin, coupling, couplingPairs,
   } = useHybridStore();
+  const { layoutData } = useViewerStore();
   const scores = useMemo(() => (model ? criticalityScores(model, weights) : null), [model, weights]);
   const layout = useMemo(
     () => (model && scores ? computeSlots(model, rootPath, depth, criticalityOrder(scores)) : null),
     [model, scores, rootPath, depth],
   );
+  const neighbors = useMemo(() => {
+    if (!coupling.on || !selected || !couplingPairs || !layoutData || !model || !layout) return [];
+    return couplingFor(model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
+  }, [coupling, selected, couplingPairs, layoutData, model, layout]);
   if (!model || !layout) return null;
   const blockW = (p: string) => (sizeByContent ? 60 + 44 * (scores!.get(p) ?? 0) : 86); // 60..104 clamp, uniform when off
 
@@ -93,6 +100,25 @@ export function RailsCanvas() {
             </g>
           );
         })}
+        {selected && neighbors.length > 0 && (() => {
+          const maxTotal = Math.max(...neighbors.map(n => n.total));
+          const sx = cx(selected), sy = railY(lvl(model.blocks.get(selected)!)) - BLOCK_H / 2;
+          return neighbors.map(n => {
+            const nb = model.blocks.get(n.block);
+            if (!nb) return null;
+            const nx = cx(n.block), ny = railY(lvl(nb)) - BLOCK_H / 2;
+            const mx = (sx + nx) / 2, my = (sy + ny) / 2;
+            return (
+              <g key={n.block}>
+                <line x1={sx} y1={sy} x2={nx} y2={ny} stroke={T.teal}
+                      strokeWidth={1 + 5 * (n.total / maxTotal)} opacity={0.7} />
+                <text x={mx} y={my} fontSize={8} fill={T.muted} textAnchor="middle">
+                  {`${(n.total * 1e15).toFixed(1)} fF`}
+                </text>
+              </g>
+            );
+          });
+        })()}
       </svg>
     </div>
   );
