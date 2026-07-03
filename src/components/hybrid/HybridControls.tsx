@@ -6,7 +6,7 @@ import { T } from './theme';
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ background: T.panel, borderRadius: 12, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.teal, marginBottom: 8 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 8 }}>
         {title}
       </div>
       {children}
@@ -115,20 +115,20 @@ export function HybridControls() {
                 <input list="hybrid-pins" value={i ? endPin : startPin}
                        onChange={e => setPathPins(i ? startPin : e.target.value, i ? e.target.value : endPin)}
                        placeholder="block/path:pin"
-                       style={{ width: '100%', fontSize: 12, padding: 4, borderRadius: 6, border: `1px solid ${T.border}`, background: '#0F1A2C', color: T.text }} />
+                       style={{ width: '100%', fontSize: 12, padding: 4, borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
               </div>
             ))}
             <datalist id="hybrid-pins">
               {pinOptions.map(o => <option key={o} value={o} />)}
             </datalist>
             {pathResult && (
-              <div style={{ marginTop: 10, background: '#0F1A2C', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
-                <div>Total net count <b style={{ color: T.teal }}>⟨{pathResult.netCount}⟩</b></div>
-                <div>Layers included <b style={{ color: T.teal }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
+              <div style={{ marginTop: 10, background: T.panel2, borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
+                <div>Total net count <b style={{ color: T.path }}>⟨{pathResult.netCount}⟩</b></div>
+                <div>Layers included <b style={{ color: T.path }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
               </div>
             )}
             {startPin && endPin && !pathResult && (
-              <div style={{ marginTop: 8, fontSize: 12, color: '#F87171' }}>No signal path found (supplies excluded).</div>
+              <div style={{ marginTop: 8, fontSize: 12, color: T.danger }}>No signal path found (supplies excluded).</div>
             )}
           </div>
         )}

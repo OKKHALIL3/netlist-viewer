@@ -59,7 +59,7 @@ export function RailsCanvas() {
           const maxChars = Math.floor((w - 14) / 6);
           const dim = !passesFilters(b, funcOff, supplyOff);
           const accent = zoneColors && b.category && b.category !== UNCLASSIFIED
-            ? T.groupColors[b.category.split(':')[0]] : '#5F6B7C';
+            ? T.groupColors[b.category.split(':')[0]] : T.unclass;
           return (
             <g key={b.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
@@ -67,10 +67,10 @@ export function RailsCanvas() {
               {b.children.length === 0 && <title>Leaf block</title>}
               {(trace?.blocks.has(b.path) || pathResult?.blocks.includes(b.path)) && (
                 <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={8}
-                      fill="none" stroke={T.teal} strokeWidth={2.5} />
+                      fill="none" stroke={T.conn} strokeWidth={2.5} />
               )}
               <rect x={x} y={y} width={w} height={BLOCK_H} rx={5} fill={T.card}
-                    stroke={isSel ? T.blue : accent} strokeWidth={isSel ? 2.6 : 1.6} />
+                    stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.6 : 1.6} />
               <rect x={x} y={y} width={7} height={BLOCK_H} rx={3} fill={accent} />
               <text x={x + w / 2} y={y + 14} fontSize={9.5} fontWeight={700} fill={T.text} textAnchor="middle">
                 {b.label.length > maxChars ? b.label.slice(0, maxChars - 1) + '…' : b.label}
@@ -86,7 +86,7 @@ export function RailsCanvas() {
             .map(p => [cx(p), railY(lvl(model.blocks.get(p)!)) - BLOCK_H / 2] as const);
           if (pts.length < 2) return null;
           return <path d={pts.map(([x, y], i) => `${i ? 'L' : 'M'} ${x} ${y}`).join(' ')}
-                       fill="none" stroke={T.teal} strokeWidth={2.6} strokeDasharray="7 5" strokeLinejoin="round" opacity={0.95} />;
+                       fill="none" stroke={T.path} strokeWidth={2.6} strokeDasharray="7 5" strokeLinejoin="round" opacity={0.95} />;
         })()}
         {pathResult && [startPin, endPin].map((pp, i) => {
           const bp = pp.slice(0, pp.lastIndexOf(':'));
@@ -94,7 +94,7 @@ export function RailsCanvas() {
           const x = cx(bp), y = railY(lvl(model.blocks.get(bp)!)) - BLOCK_H - 12;
           return (
             <g key={i}>
-              <path d={`M ${x} ${y - 6} L ${x + 6} ${y} L ${x} ${y + 6} L ${x - 6} ${y} Z`} fill={i ? T.blue : T.teal} />
+              <path d={`M ${x} ${y - 6} L ${x + 6} ${y} L ${x} ${y + 6} L ${x - 6} ${y} Z`} fill={i ? T.blue : T.path} />
               <text x={x + 10} y={y + 3} fontSize={9} fill={T.text}>{pp.slice(pp.lastIndexOf(':') + 1)}</text>
             </g>
           );
@@ -109,7 +109,7 @@ export function RailsCanvas() {
             const mx = (sx + nx) / 2, my = (sy + ny) / 2;
             return (
               <g key={n.block}>
-                <line x1={sx} y1={sy} x2={nx} y2={ny} stroke={T.teal}
+                <line x1={sx} y1={sy} x2={nx} y2={ny} stroke={T.coupling}
                       strokeWidth={1 + 5 * (n.total / maxTotal)} opacity={0.7} />
                 <text x={mx} y={my} fontSize={8} fill={T.muted} textAnchor="middle">
                   {`${(n.total * 1e15).toFixed(1)} fF`}

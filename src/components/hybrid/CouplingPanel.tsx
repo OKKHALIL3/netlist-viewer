@@ -27,7 +27,7 @@ export function CouplingPanel() {
           <div key={n.block} style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.text, fontWeight: 700 }}>
               <span>{model.blocks.get(n.block)?.label ?? n.block}</span>
-              <span style={{ color: T.teal }}>{(n.total * 1e15).toFixed(1)} fF</span>
+              <span style={{ color: T.coupling }}>{(n.total * 1e15).toFixed(1)} fF</span>
             </div>
             {n.pairs.map((p, i) => (
               <div key={i} style={{ fontSize: 11, color: T.muted, padding: '1px 0' }}>

@@ -22,13 +22,13 @@ export function BlockStatsCard() {
     ['Children', String(b.children.length)],
   ];
   const group = b.category && b.category !== UNCLASSIFIED ? b.category.split(':')[0] : null;
-  const badgeColor = group ? T.groupColors[group] : '#5F6B7C';
+  const badgeColor = group ? T.groupColors[group] : T.unclass;
   return (
     <div style={{ position: 'absolute', top: 14, right: 14, width: 240, background: T.panel, borderRadius: 12,
                   padding: '12px 16px', border: `1px solid ${T.border}`, boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ fontWeight: 700, color: T.text, fontSize: 14 }}>{b.label}</div>
-        <span style={{ fontSize: 10, fontWeight: 700, color: '#0B1220', background: badgeColor,
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.bg, background: badgeColor,
                        borderRadius: 4, padding: '1px 6px' }}>
           {b.category ?? UNCLASSIFIED}
         </span>

@@ -11,7 +11,7 @@ function Node({ path, depth }: { path: string; depth: number }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0 2px', paddingLeft: depth * 14,
                     cursor: 'pointer', color: isSel ? T.blue : T.text, fontSize: 12,
-                    background: isSel ? '#0F1A2C' : 'transparent' }}
+                    background: isSel ? T.accentSoft : 'transparent' }}
            title={b.children.length ? undefined : 'Leaf block'}
            onClick={() => select(isSel ? null : path)}
            onDoubleClick={() => b.children.length && drillDown(path)}>
@@ -22,7 +22,7 @@ function Node({ path, depth }: { path: string; depth: number }) {
         <span>{b.label}</span>
         <span style={{ color: T.muted, fontSize: 10 }}>{b.devices}</span>
         {trace?.blocks.has(path) && (
-          <span style={{ fontSize: 8, background: T.teal, color: '#0B1220', borderRadius: 3, padding: '0 4px', fontWeight: 700 }}>●</span>
+          <span style={{ fontSize: 8, background: T.conn, color: T.bg, borderRadius: 3, padding: '0 4px', fontWeight: 700 }}>●</span>
         )}
       </div>
       {open && b.children.map(c => <Node key={c} path={c} depth={depth + 1} />)}
@@ -35,7 +35,7 @@ export function HierTreePanel() {
   if (!model) return null;
   return (
     <div style={{ width: 220, overflowY: 'auto', borderRight: `1px solid ${T.border}`, padding: 8, background: T.panel }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.teal, marginBottom: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 6 }}>
         Hierarchy
       </div>
       <Node path="" depth={0} />
