@@ -6,7 +6,7 @@ import { correlate } from '../layout-viewer/correlate';
 export type ViewMode = 'inst' | 'both' | 'net';
 
 // Top-level app mode: the original schematic view, or the physical layout view.
-export type AppMode = 'schematic' | 'layout';
+export type AppMode = 'schematic' | 'layout' | 'hybrid';
 // Hierarchy depth shown on the layout canvas: any level 0..maxDepth, or all.
 export type LayoutDepth = number | 'all';
 

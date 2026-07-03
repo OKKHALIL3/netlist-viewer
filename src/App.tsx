@@ -8,6 +8,7 @@ import { PanelToggles } from './components/PanelToggles';
 import { DropZone } from './components/DropZone';
 import { SearchPalette } from './components/SearchPalette';
 import { LayoutView } from './components/layout/LayoutView';
+import { HybridViewer } from './components/hybrid/HybridViewer';
 
 export default function App() {
   const { design, warnings, currentCell, appMode } = useViewerStore();
@@ -22,6 +23,8 @@ export default function App() {
         <DropZone />
       ) : appMode === 'layout' ? (
         <LayoutView />
+      ) : appMode === 'hybrid' ? (
+        <HybridViewer />
       ) : (
         <div className={shellClass}>
           <HierarchyPanel />

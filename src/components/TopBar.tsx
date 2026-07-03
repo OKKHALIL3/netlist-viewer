@@ -112,7 +112,7 @@ export function TopBar() {
 
         {design && (
           <>
-            {/* App mode: schematic ⇄ layout */}
+            {/* App mode: schematic ⇄ layout ⇄ hybrid */}
             <div className="mode-btns">
               <button className={appMode === 'schematic' ? 'on' : ''} onClick={() => setAppMode('schematic')}>
                 Schematic
@@ -124,6 +124,14 @@ export function TopBar() {
                 onClick={() => setAppMode('layout')}
               >
                 Layout
+              </button>
+              <button
+                className={appMode === 'hybrid' ? 'on' : ''}
+                disabled={!layoutModel}
+                title={layoutModel ? 'Hybrid hierarchy viewer (CDL + DSPF)' : 'Load a DSPF first'}
+                onClick={() => setAppMode('hybrid')}
+              >
+                Hybrid
               </button>
             </div>
 
