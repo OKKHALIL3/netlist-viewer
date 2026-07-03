@@ -24,7 +24,9 @@ export default function App() {
       ) : appMode === 'layout' ? (
         <LayoutView />
       ) : appMode === 'hybrid' ? (
-        <HybridViewer />
+        <CanvasErrorBoundary resetKey={design.topCell}>
+          <HybridViewer />
+        </CanvasErrorBoundary>
       ) : (
         <div className={shellClass}>
           <HierarchyPanel />

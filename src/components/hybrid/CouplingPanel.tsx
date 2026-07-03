@@ -1,15 +1,13 @@
 // src/components/hybrid/CouplingPanel.tsx
 import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
-import { useViewerStore } from '../../store/viewerStore';
 import { couplingFor } from '../../hybrid/coupling';
 import { computeSlots } from '../../hybrid/slots';
 import { T } from './theme';
 import { Panel } from './HybridControls';
 
 export function CouplingPanel() {
-  const { design, model, selected, rootPath, depth, coupling, couplingPairs } = useHybridStore();
-  const { layoutData } = useViewerStore();
+  const { design, layoutData, model, selected, rootPath, depth, coupling, couplingPairs } = useHybridStore();
   const layout = useMemo(
     () => (model ? computeSlots(model, rootPath, depth) : null),
     [model, rootPath, depth],

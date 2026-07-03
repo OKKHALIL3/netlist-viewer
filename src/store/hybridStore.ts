@@ -7,7 +7,7 @@ import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
 import { findPath, type PinRef, type PathResult } from '../hybrid/path';
-import { normSegments } from '../layout-viewer/correlate';
+import { normSegments, normSeg } from '../layout-viewer/correlate';
 
 export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>): boolean {
   const catOk = b.category === null || b.category === UNCLASSIFIED || !funcOff.has(b.category);
@@ -15,12 +15,16 @@ export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: S
   return catOk && domOk;
 }
 
-function layersFor(r: PathResult, netLayers: Map<string, string[]> | null): string[] | null {
+export function layersFor(r: PathResult, netLayers: Map<string, string[]> | null): string[] | null {
   if (!netLayers) return null;                       // no DSPF → unavailable
   const out = new Set<string>();
   let any = false;
   for (const n of r.netNames) {
-    const ls = netLayers.get(n.toLowerCase());
+    // netLayers keys are built with normSegments (normSeg per '/'-segment) —
+    // apply the same normalization here or a mismatched-case/finger-suffix
+    // net name silently misses its layer tags.
+    const key = n.split('/').map(normSeg).join('/');
+    const ls = netLayers.get(key);
     if (ls) { any = true; for (const l of ls) out.add(l); }
   }
   return any ? [...out].sort() : null;               // no tags → unavailable, never guessed
@@ -28,6 +32,7 @@ function layersFor(r: PathResult, netLayers: Map<string, string[]> | null): stri
 
 interface HybridState {
   design: Design | null;
+  layoutData: LayoutData | null;
   model: HybridModel | null;
   conductors: Conductors | null;
   trace: TraceResult | null;
@@ -75,8 +80,16 @@ const CLEARED = {
   pathResult: null as PathResult | null, startPin: '', endPin: '',
 };
 
+// build() input identity — tracked outside reactive state (spec: "non-reactive
+// fields are fine") so a re-mount of HybridViewer with the same design/DSPF
+// references (every mode switch) is a no-op instead of wiping rootPath/crumbs.
+let lastBuildDesign: Design | null = null;
+let lastBuildLayoutData: LayoutData | null = null;
+let lastBuildLayoutModel: LayoutModel | null = null;
+
 export const useHybridStore = create<HybridState>((set, get) => ({
   design: null,
+  layoutData: null,
   model: null,
   conductors: null,
   trace: null,
@@ -100,6 +113,16 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   coupling: { on: false, minC: 1e-15, includeSupply: false },
 
   build: (design, layoutData, layoutModel) => {
+    // Every HybridViewer mount (i.e. every mode switch) calls build() with
+    // the SAME references when nothing changed — skip the full rebuild so
+    // navigation state (rootPath/crumbs/depth) survives a mode round-trip.
+    if (design === lastBuildDesign && layoutData === lastBuildLayoutData && layoutModel === lastBuildLayoutModel) {
+      return;
+    }
+    lastBuildDesign = design;
+    lastBuildLayoutData = layoutData;
+    lastBuildLayoutModel = layoutModel;
+
     const model = buildHybridModel(design);
     classifyModel(model, design, design.topCell);
     const conductors = buildConductors(design, model);
@@ -111,7 +134,10 @@ export const useHybridStore = create<HybridState>((set, get) => ({
       netLayers = new Map();
       for (const n of layoutModel.nets) netLayers.set(normSegments(n.name, seps).join('/'), n.layers);
     }
-    set({ design, model, conductors, couplingPairs, netLayers, rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED });
+    set({
+      design, layoutData, model, conductors, couplingPairs, netLayers,
+      rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED,
+    });
   },
 
   drillDown: (path) => {

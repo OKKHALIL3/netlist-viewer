@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
-import { useViewerStore } from '../../store/viewerStore';
 import { computeSlots } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
@@ -11,10 +10,9 @@ const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
 
 export function RailsCanvas() {
   const {
-    design, model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
+    design, layoutData, model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
     zoneColors, sizeByContent, weights, pathResult, startPin, endPin, coupling, couplingPairs,
   } = useHybridStore();
-  const { layoutData } = useViewerStore();
   const scores = useMemo(() => (model ? criticalityScores(model, weights) : null), [model, weights]);
   const layout = useMemo(
     () => (model && scores ? computeSlots(model, rootPath, depth, criticalityOrder(scores)) : null),
@@ -101,7 +99,7 @@ export function RailsCanvas() {
             </g>
           );
         })}
-        {selected && neighbors.length > 0 && (() => {
+        {selected && layout.slot.has(selected) && neighbors.length > 0 && (() => {
           const maxTotal = Math.max(...neighbors.map(n => n.total), Number.EPSILON);
           const sx = cx(selected), sy = railY(lvl(model.blocks.get(selected)!)) - BLOCK_H / 2;
           return neighbors.map(n => {

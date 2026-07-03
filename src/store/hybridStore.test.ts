@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tinyDesign } from '../hybrid/__fixtures__/tiny';
-import { useHybridStore, passesFilters } from './hybridStore';
+import { useHybridStore, passesFilters, layersFor } from './hybridStore';
+import type { PathResult } from '../hybrid/path';
 
 const s = () => useHybridStore.getState();
 
@@ -79,4 +80,31 @@ test('coupling: defaults and toggles', () => {
   assert.equal(s().coupling.minC, 2e-15);
   s().toggleCouplingSupply();
   assert.equal(s().coupling.includeSupply, true);
+});
+
+test('layersFor normalizes conductor net names the same way netLayers keys were built', () => {
+  // netLayers keys come from normSegments (normSeg per '/'-segment on the DSPF
+  // side): lowercase, finger suffixes stripped.
+  const netLayers = new Map([['xi1/net5', ['M2', 'M3']]]);
+  const pr = (netNames: string[]): PathResult => ({ blocks: [], conductors: [], netCount: netNames.length, netNames });
+  assert.deepEqual(layersFor(pr(['XI1/net5']), netLayers), ['M2', 'M3']);      // case mismatch
+  assert.deepEqual(layersFor(pr(['xi1/net5@2']), netLayers), ['M2', 'M3']);    // finger suffix
+  assert.equal(layersFor(pr(['xi1/net6']), netLayers), null);                 // genuinely absent → unavailable
+  assert.equal(layersFor(pr(['xi1/net5']), null), null);                      // no DSPF → unavailable
+});
+
+test('build is a no-op on identical design/layoutData/layoutModel references; a new design still resets', () => {
+  const design = tinyDesign();
+  s().build(design, null, null);
+  s().drillDown('xu1');
+  assert.equal(s().rootPath, 'xu1');
+  assert.deepEqual(s().crumbs, ['', 'xu1']);
+
+  s().build(design, null, null);           // same references — HybridViewer remount, e.g. a mode switch
+  assert.equal(s().rootPath, 'xu1');        // navigation preserved, not reset
+  assert.deepEqual(s().crumbs, ['', 'xu1']);
+
+  s().build(tinyDesign(), null, null);      // a genuinely new design object
+  assert.equal(s().rootPath, '');           // resets as before
+  assert.deepEqual(s().crumbs, ['']);
 });
