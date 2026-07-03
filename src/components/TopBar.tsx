@@ -127,8 +127,7 @@ export function TopBar() {
               </button>
               <button
                 className={appMode === 'hybrid' ? 'on' : ''}
-                disabled={!layoutModel}
-                title={layoutModel ? 'Hybrid hierarchy viewer (CDL + DSPF)' : 'Load a DSPF first'}
+                title="Hybrid hierarchy viewer (CDL + DSPF)"
                 onClick={() => setAppMode('hybrid')}
               >
                 Hybrid
