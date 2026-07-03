@@ -58,3 +58,14 @@ test('select runs trace; navigation clears it', () => {
   s().select(null);
   assert.equal(s().trace, null);
 });
+
+test('path pins run findPath; navigation clears result', () => {
+  s().build(tinyDesign(), null, null);
+  s().togglePathMode();
+  s().setPathPins('xu1/xs1:d', 'xu2:z');
+  assert.equal(s().pathResult!.netCount, 3);
+  s().setDepth(1);
+  assert.equal(s().pathResult, null);
+  s().setPathPins('xu1:vdd', 'xu2:a');   // supply pin → explicit no-path
+  assert.equal(s().pathResult, null);
+});

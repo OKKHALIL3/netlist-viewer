@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { TAXONOMY } from '../../hybrid/classify';
 import { T } from './theme';
@@ -15,11 +16,18 @@ export function Panel({ title, children }: { title: string; children: React.Reac
 
 export function HybridControls() {
   const {
-    model, rootPath, depth, setDepth,
+    design, model, rootPath, depth, setDepth,
     zoneColors, toggleZoneColors, sizeByContent, toggleSizeByContent,
     weights, setWeights,
     funcOff, toggleFunc, supplyOff, toggleSupply,
+    pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers,
   } = useHybridStore();
+  const pinOptions = useMemo(
+    () => (design && model
+      ? [...model.blocks.values()].flatMap(b => (design.cells.get(b.master)?.ports ?? []).map(p => `${b.path}:${p.name}`))
+      : []),
+    [design, model],
+  );
   if (!model) return null;
   const maxBelow = model.maxDepth - model.blocks.get(rootPath)!.depth;
   return (
@@ -91,6 +99,38 @@ export function HybridControls() {
             {d}
           </label>
         ))}
+      </Panel>
+
+      <Panel title="Path view">
+        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+          <input type="checkbox" checked={pathMode} onChange={togglePathMode} style={{ accentColor: T.blue }} />
+          Enable path propagation
+        </label>
+        {pathMode && (
+          <div style={{ marginTop: 6 }}>
+            {(['Start pin', 'End pin'] as const).map((label, i) => (
+              <div key={label}>
+                <div style={{ fontSize: 11, color: T.muted, margin: '6px 0 2px' }}>{label} ◈</div>
+                <input list="hybrid-pins" value={i ? endPin : startPin}
+                       onChange={e => setPathPins(i ? startPin : e.target.value, i ? e.target.value : endPin)}
+                       placeholder="block/path:pin"
+                       style={{ width: '100%', fontSize: 12, padding: 4, borderRadius: 6, border: `1px solid ${T.border}`, background: '#0F1A2C', color: T.text }} />
+              </div>
+            ))}
+            <datalist id="hybrid-pins">
+              {pinOptions.map(o => <option key={o} value={o} />)}
+            </datalist>
+            {pathResult && (
+              <div style={{ marginTop: 10, background: '#0F1A2C', borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
+                <div>Total net count <b style={{ color: T.teal }}>⟨{pathResult.netCount}⟩</b></div>
+                <div>Layers included <b style={{ color: T.teal }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
+              </div>
+            )}
+            {startPin && endPin && !pathResult && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#F87171' }}>No signal path found (supplies excluded).</div>
+            )}
+          </div>
+        )}
       </Panel>
     </div>
   );

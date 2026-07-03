@@ -10,7 +10,7 @@ const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
 export function RailsCanvas() {
   const {
     model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
-    zoneColors, sizeByContent, weights,
+    zoneColors, sizeByContent, weights, pathResult, startPin, endPin,
   } = useHybridStore();
   const scores = useMemo(() => (model ? criticalityScores(model, weights) : null), [model, weights]);
   const layout = useMemo(
@@ -59,7 +59,7 @@ export function RailsCanvas() {
             <g key={b.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) drillDown(b.path); }}>
-              {trace?.blocks.has(b.path) && (
+              {(trace?.blocks.has(b.path) || pathResult?.blocks.includes(b.path)) && (
                 <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={8}
                       fill="none" stroke={T.teal} strokeWidth={2.5} />
               )}
@@ -72,6 +72,24 @@ export function RailsCanvas() {
               <text x={x + w / 2} y={y + 26} fontSize={8} fill={T.muted} textAnchor="middle">
                 {b.devices} dev · {b.netCount} net
               </text>
+            </g>
+          );
+        })}
+        {pathResult && (() => {
+          const pts = pathResult.blocks.filter(p => layout.slot.has(p))
+            .map(p => [cx(p), railY(lvl(model.blocks.get(p)!)) - BLOCK_H / 2] as const);
+          if (pts.length < 2) return null;
+          return <path d={pts.map(([x, y], i) => `${i ? 'L' : 'M'} ${x} ${y}`).join(' ')}
+                       fill="none" stroke={T.teal} strokeWidth={2.6} strokeDasharray="7 5" strokeLinejoin="round" opacity={0.95} />;
+        })()}
+        {pathResult && [startPin, endPin].map((pp, i) => {
+          const bp = pp.slice(0, pp.lastIndexOf(':'));
+          if (!layout.slot.has(bp)) return null;
+          const x = cx(bp), y = railY(lvl(model.blocks.get(bp)!)) - BLOCK_H - 12;
+          return (
+            <g key={i}>
+              <path d={`M ${x} ${y - 6} L ${x + 6} ${y} L ${x} ${y + 6} L ${x - 6} ${y} Z`} fill={i ? T.blue : T.teal} />
+              <text x={x + 10} y={y + 3} fontSize={9} fill={T.text}>{pp.slice(pp.lastIndexOf(':') + 1)}</text>
             </g>
           );
         })}
