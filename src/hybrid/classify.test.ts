@@ -24,6 +24,21 @@ test('name rules classify reference-design cell names', () => {
   assert.equal(c.classify('totally_novel_cell', undefined), null);
 });
 
+test('word boundaries and rule precedence', () => {
+  const c = ruleClassifier();
+  // symmetric guards: a short token trailing another word must not match
+  assert.equal(c.classify('esd_clamp', undefined), 'A:PROT');           // 'amp' inside 'clamp' must not steal this
+  assert.equal(c.classify('logic_block', undefined), 'D:LOGIC');        // 'ck' inside 'block' must not steal this
+  // D:CLK reorder: ck/clk/div only win when nothing more specific matched earlier
+  assert.equal(c.classify('regfile_ck', undefined), 'D:MEM');
+  assert.equal(c.classify('jtag_ck_tap', undefined), 'D:IF');
+  assert.equal(c.classify('dff_ck_master', undefined), 'D:SEQ');
+  // 'clamp' isn't a recognized A:PROT token (esd/decap/term/dmy/dummy), so this is genuinely unclassified
+  assert.equal(c.classify('voltage_clamp', undefined), null);
+  // 'block' must not classify D:CLK via a bare 'ck' substring; no other rule matches 'pm_block' either
+  assert.equal(c.classify('pm_block', undefined), null);
+});
+
 test('classifyModel: overrides beat rules; unknown lands Unclassified', () => {
   const d = tinyDesign();
   const m = buildHybridModel(d);
