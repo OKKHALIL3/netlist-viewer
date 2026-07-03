@@ -4,9 +4,13 @@ import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import type { HybridModel } from '../hybrid/model';
 import { buildHybridModel } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
+import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
 
 interface HybridState {
+  design: Design | null;
   model: HybridModel | null;
+  conductors: Conductors | null;
+  trace: TraceResult | null;
   couplingPairs: NetPairCoupling[] | null;
   rootPath: string;
   crumbs: string[];
@@ -31,10 +35,13 @@ interface HybridState {
 }
 
 // Everything that must die on navigation (spec §5 + approved design decision).
-const CLEARED = { selected: null as string | null };
+const CLEARED = { selected: null as string | null, trace: null as TraceResult | null };
 
 export const useHybridStore = create<HybridState>((set, get) => ({
+  design: null,
   model: null,
+  conductors: null,
+  trace: null,
   couplingPairs: null,
   rootPath: '',
   crumbs: [''],
@@ -48,9 +55,10 @@ export const useHybridStore = create<HybridState>((set, get) => ({
 
   build: (design, layoutData, layoutModel) => {
     const model = buildHybridModel(design);
+    const conductors = buildConductors(design, model);
     let couplingPairs: NetPairCoupling[] | null = null;
     if (layoutData && layoutModel) couplingPairs = attachLayoutStats(model, layoutData, layoutModel);
-    set({ model, couplingPairs, rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED });
+    set({ design, model, conductors, couplingPairs, rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED });
   },
 
   drillDown: (path) => {
@@ -66,7 +74,11 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   },
 
   setDepth: (d) => set({ depth: Math.max(0, d), ...CLEARED }),
-  select: (path) => set({ selected: path }),
+  select: (path) => {
+    const { design, model, conductors } = get();
+    if (path === null || !design || !model || !conductors) { set({ selected: path, trace: null }); return; }
+    set({ selected: path, trace: traceConnectivity(design, model, conductors, path) });
+  },
   clearOverlays: () => set({ ...CLEARED }),
   toggleZoneColors: () => set(s => ({ zoneColors: !s.zoneColors })),
   toggleSizeByContent: () => set(s => ({ sizeByContent: !s.sizeByContent })),

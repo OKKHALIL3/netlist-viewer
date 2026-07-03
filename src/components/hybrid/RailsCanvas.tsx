@@ -6,7 +6,7 @@ import { T } from './theme';
 const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34, BLOCK_W = 86;
 
 export function RailsCanvas() {
-  const { model, rootPath, depth, selected, select, drillDown, clearOverlays } = useHybridStore();
+  const { model, rootPath, depth, selected, select, drillDown, clearOverlays, trace } = useHybridStore();
   const layout = useMemo(
     () => (model ? computeSlots(model, rootPath, depth) : null),
     [model, rootPath, depth],
@@ -49,6 +49,10 @@ export function RailsCanvas() {
             <g key={b.path} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) drillDown(b.path); }}>
+              {trace?.blocks.has(b.path) && (
+                <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={8}
+                      fill="none" stroke={T.teal} strokeWidth={2.5} />
+              )}
               <rect x={x} y={y} width={w} height={BLOCK_H} rx={5} fill={T.card}
                     stroke={isSel ? T.blue : T.border} strokeWidth={isSel ? 2.6 : 1.6} />
               <text x={x + w / 2} y={y + 14} fontSize={9.5} fontWeight={700} fill={T.text} textAnchor="middle">

@@ -3,7 +3,7 @@ import { useHybridStore } from '../../store/hybridStore';
 import { T } from './theme';
 
 function Node({ path, depth }: { path: string; depth: number }) {
-  const { model, selected, select, drillDown } = useHybridStore();
+  const { model, selected, select, drillDown, trace } = useHybridStore();
   const [open, setOpen] = useState(depth < 2);
   const b = model!.blocks.get(path)!;
   const isSel = selected === path;
@@ -20,6 +20,9 @@ function Node({ path, depth }: { path: string; depth: number }) {
         </span>
         <span>{b.label}</span>
         <span style={{ color: T.muted, fontSize: 10 }}>{b.devices}</span>
+        {trace?.blocks.has(path) && (
+          <span style={{ fontSize: 8, background: T.teal, color: '#0B1220', borderRadius: 3, padding: '0 4px', fontWeight: 700 }}>●</span>
+        )}
       </div>
       {open && b.children.map(c => <Node key={c} path={c} depth={depth + 1} />)}
     </div>

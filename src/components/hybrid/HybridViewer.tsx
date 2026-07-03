@@ -6,6 +6,7 @@ import { HierTreePanel } from './HierTreePanel';
 import { HybridControls } from './HybridControls';
 import { RailsCanvas } from './RailsCanvas';
 import { BlockStatsCard } from './BlockStatsCard';
+import { PropagationPanel } from './PropagationPanel';
 import { T } from './theme';
 
 export function HybridViewer() {
@@ -52,6 +53,7 @@ export function HybridViewer() {
         <HierTreePanel />
         <RailsCanvas />
         <BlockStatsCard />
+        <PropagationPanel />
       </div>
       <div style={{ background: T.panel, borderTop: `1px solid ${T.border}`, padding: '8px 18px', display: 'flex', gap: 26, fontSize: 13, color: T.text }}>
         <span>Pins <b style={{ color: T.blue }}>({footer.pins})</b></span>

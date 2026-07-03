@@ -36,3 +36,14 @@ test('filters are default-on via disabled-sets', () => {
   s().toggleFunc('D:LOGIC');
   assert.ok(!s().funcOff.has('D:LOGIC'));
 });
+
+test('select runs trace; navigation clears it', () => {
+  s().build(tinyDesign(), null, null);
+  s().select('xu1');
+  assert.ok(s().trace);
+  assert.ok(s().trace!.blocks.has('xu2'));
+  s().drillDown('xu1');
+  assert.equal(s().trace, null);
+  s().select(null);
+  assert.equal(s().trace, null);
+});
