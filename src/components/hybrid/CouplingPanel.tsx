@@ -8,16 +8,16 @@ import { T } from './theme';
 import { Panel } from './HybridControls';
 
 export function CouplingPanel() {
-  const { model, selected, rootPath, depth, coupling, couplingPairs } = useHybridStore();
+  const { design, model, selected, rootPath, depth, coupling, couplingPairs } = useHybridStore();
   const { layoutData } = useViewerStore();
   const layout = useMemo(
     () => (model ? computeSlots(model, rootPath, depth) : null),
     [model, rootPath, depth],
   );
   const neighbors = useMemo(() => {
-    if (!coupling.on || !selected || !couplingPairs || !layoutData || !model || !layout) return [];
-    return couplingFor(model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
-  }, [coupling, selected, couplingPairs, layoutData, model, layout]);
+    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !layout) return [];
+    return couplingFor(design, model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
+  }, [coupling, selected, couplingPairs, layoutData, design, model, layout]);
   if (!model || !coupling.on || selected === null) return null;
   return (
     <div style={{ position: 'absolute', top: 270, right: 14, width: 240, maxHeight: '50%', overflowY: 'auto' }}>

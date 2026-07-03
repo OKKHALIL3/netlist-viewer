@@ -1,7 +1,9 @@
+import type { Design, Net } from '../parser/types';
 import type { HybridModel } from './model';
 import type { LayoutData } from '../layout-viewer/model';
 import type { NetPairCoupling } from './layoutStats';
 import { nameNetKind } from '../parser/netKinds';
+import { normSeg, normSegments } from '../layout-viewer/correlate';
 
 export interface CouplingNeighbor {
   block: string; total: number;
@@ -10,14 +12,34 @@ export interface CouplingNeighbor {
 
 const related = (a: string, b: string) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/') || a === '' || b === '';
 
+// Resolve a flattened DSPF net name to the CDL Design's topology-refined
+// Net.kind for that scope. Name regexes alone miss rails like AVRH (no
+// vdd/vss substring) — see ARCHITECTURE.md §8 — so supply-ness must come
+// from here, not from the name.
+function cdlNetKind(design: Design, model: HybridModel, data: LayoutData, name: string): Net['kind'] | undefined {
+  const segs = normSegments(name, [data.divider, data.delimiter]);
+  const last = segs[segs.length - 1];
+  const cell = segs.length <= 1
+    ? design.cells.get(design.topCell)
+    : (() => {
+        const master = model.blocks.get(segs.slice(0, -1).join('/'))?.master;
+        return master ? design.cells.get(master) : undefined;
+      })();
+  return cell?.nets.find(n => normSeg(n.name) === last)?.kind;
+}
+
 export function couplingFor(
-  model: HybridModel, data: LayoutData, pairs: NetPairCoupling[],
+  design: Design, model: HybridModel, data: LayoutData, pairs: NetPairCoupling[],
   selected: string, candidates: string[], minC: number, includeSupply: boolean,
 ): CouplingNeighbor[] {
   const sel = model.blocks.get(selected);
   if (!sel?.dspfNets) return [];
-  const isSupplyNet = (i: number) =>
-    data.nets[i].isGround || nameNetKind(data.nets[i].name) !== 'signal';
+  const supplyIdx = new Set<number>();
+  data.nets.forEach((n, i) => {
+    const topoKind = n.name ? cdlNetKind(design, model, data, n.name) : undefined;
+    if (n.isGround || nameNetKind(n.name) !== 'signal' || (topoKind && topoKind !== 'signal')) supplyIdx.add(i);
+  });
+  const isSupplyNet = (i: number) => supplyIdx.has(i);
   const out = new Map<string, CouplingNeighbor>();
   for (const cand of candidates) {
     if (related(selected, cand)) continue;

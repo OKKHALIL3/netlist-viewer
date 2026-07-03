@@ -11,7 +11,7 @@ const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
 
 export function RailsCanvas() {
   const {
-    model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
+    design, model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff,
     zoneColors, sizeByContent, weights, pathResult, startPin, endPin, coupling, couplingPairs,
   } = useHybridStore();
   const { layoutData } = useViewerStore();
@@ -21,9 +21,9 @@ export function RailsCanvas() {
     [model, scores, rootPath, depth],
   );
   const neighbors = useMemo(() => {
-    if (!coupling.on || !selected || !couplingPairs || !layoutData || !model || !layout) return [];
-    return couplingFor(model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
-  }, [coupling, selected, couplingPairs, layoutData, model, layout]);
+    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !layout) return [];
+    return couplingFor(design, model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
+  }, [coupling, selected, couplingPairs, layoutData, design, model, layout]);
   if (!model || !layout) return null;
   const blockW = (p: string) => (sizeByContent ? 60 + 44 * (scores!.get(p) ?? 0) : 86); // 60..104 clamp, uniform when off
 
