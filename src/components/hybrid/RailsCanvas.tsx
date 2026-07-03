@@ -66,6 +66,7 @@ export function RailsCanvas() {
             <g key={b.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) drillDown(b.path); }}>
+              {b.children.length === 0 && <title>Leaf block</title>}
               {(trace?.blocks.has(b.path) || pathResult?.blocks.includes(b.path)) && (
                 <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={8}
                       fill="none" stroke={T.teal} strokeWidth={2.5} />
@@ -101,7 +102,7 @@ export function RailsCanvas() {
           );
         })}
         {selected && neighbors.length > 0 && (() => {
-          const maxTotal = Math.max(...neighbors.map(n => n.total));
+          const maxTotal = Math.max(...neighbors.map(n => n.total), Number.EPSILON);
           const sx = cx(selected), sy = railY(lvl(model.blocks.get(selected)!)) - BLOCK_H / 2;
           return neighbors.map(n => {
             const nb = model.blocks.get(n.block);

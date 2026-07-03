@@ -12,6 +12,7 @@ function Node({ path, depth }: { path: string; depth: number }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 0 2px', paddingLeft: depth * 14,
                     cursor: 'pointer', color: isSel ? T.blue : T.text, fontSize: 12,
                     background: isSel ? '#0F1A2C' : 'transparent' }}
+           title={b.children.length ? undefined : 'Leaf block'}
            onClick={() => select(isSel ? null : path)}
            onDoubleClick={() => b.children.length && drillDown(path)}>
         <span style={{ width: 12, color: T.muted, userSelect: 'none' }}
