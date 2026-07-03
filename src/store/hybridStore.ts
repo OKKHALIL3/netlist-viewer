@@ -3,9 +3,11 @@ import type { Design } from '../parser/types';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import type { HybridModel } from '../hybrid/model';
 import { buildHybridModel } from '../hybrid/model';
+import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 
 interface HybridState {
   model: HybridModel | null;
+  couplingPairs: NetPairCoupling[] | null;
   rootPath: string;
   crumbs: string[];
   depth: number;
@@ -33,6 +35,7 @@ const CLEARED = { selected: null as string | null };
 
 export const useHybridStore = create<HybridState>((set, get) => ({
   model: null,
+  couplingPairs: null,
   rootPath: '',
   crumbs: [''],
   depth: 3,
@@ -43,9 +46,11 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   supplyOff: new Set<string>(),
   selected: null,
 
-  build: (design) => {
+  build: (design, layoutData, layoutModel) => {
     const model = buildHybridModel(design);
-    set({ model, rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED });
+    let couplingPairs: NetPairCoupling[] | null = null;
+    if (layoutData && layoutModel) couplingPairs = attachLayoutStats(model, layoutData, layoutModel);
+    set({ model, couplingPairs, rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED });
   },
 
   drillDown: (path) => {
