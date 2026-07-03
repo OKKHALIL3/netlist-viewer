@@ -5,6 +5,7 @@ import type { HybridModel } from '../hybrid/model';
 import { buildHybridModel } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
+import { classifyModel } from '../hybrid/classify';
 
 interface HybridState {
   design: Design | null;
@@ -55,6 +56,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
 
   build: (design, layoutData, layoutModel) => {
     const model = buildHybridModel(design);
+    classifyModel(model, design, design.topCell);
     const conductors = buildConductors(design, model);
     let couplingPairs: NetPairCoupling[] | null = null;
     if (layoutData && layoutModel) couplingPairs = attachLayoutStats(model, layoutData, layoutModel);
