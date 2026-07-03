@@ -1,11 +1,17 @@
 import { create } from 'zustand';
 import type { Design } from '../parser/types';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
-import type { HybridModel } from '../hybrid/model';
+import type { HybridModel, HybridBlock } from '../hybrid/model';
 import { buildHybridModel } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
-import { classifyModel } from '../hybrid/classify';
+import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
+
+export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>): boolean {
+  const catOk = b.category === null || b.category === UNCLASSIFIED || !funcOff.has(b.category);
+  const domOk = b.domains.length === 0 || b.domains.some(d => !supplyOff.has(d));
+  return catOk && domOk;
+}
 
 interface HybridState {
   design: Design | null;
@@ -22,6 +28,7 @@ interface HybridState {
   funcOff: Set<string>;
   supplyOff: Set<string>;
   selected: string | null;
+  version: number;
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
   drillDown: (path: string) => void;
@@ -33,6 +40,7 @@ interface HybridState {
   toggleSizeByContent: () => void;
   toggleFunc: (key: string) => void;
   toggleSupply: (name: string) => void;
+  reclassify: () => void;
 }
 
 // Everything that must die on navigation (spec §5 + approved design decision).
@@ -53,6 +61,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   funcOff: new Set<string>(),
   supplyOff: new Set<string>(),
   selected: null,
+  version: 0,
 
   build: (design, layoutData, layoutModel) => {
     const model = buildHybridModel(design);
@@ -94,4 +103,10 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     if (n.has(name)) n.delete(name); else n.add(name);
     return { supplyOff: n };
   }),
+  reclassify: () => {
+    const { design, model } = get();
+    if (!design || !model) return;
+    classifyModel(model, design, design.topCell);
+    set(s => ({ version: s.version + 1 }));
+  },
 }));

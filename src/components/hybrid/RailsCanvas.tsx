@@ -1,12 +1,13 @@
 import { useMemo } from 'react';
-import { useHybridStore } from '../../store/hybridStore';
+import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeSlots } from '../../hybrid/slots';
+import { UNCLASSIFIED } from '../../hybrid/classify';
 import { T } from './theme';
 
 const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34, BLOCK_W = 86;
 
 export function RailsCanvas() {
-  const { model, rootPath, depth, selected, select, drillDown, clearOverlays, trace } = useHybridStore();
+  const { model, rootPath, depth, selected, select, drillDown, clearOverlays, trace, funcOff, supplyOff, zoneColors } = useHybridStore();
   const layout = useMemo(
     () => (model ? computeSlots(model, rootPath, depth) : null),
     [model, rootPath, depth],
@@ -45,8 +46,11 @@ export function RailsCanvas() {
           const w = BLOCK_W, x = cx(b.path) - w / 2, y = railY(lvl(b)) - BLOCK_H;
           const isSel = selected === b.path;
           const maxChars = Math.floor((w - 14) / 6);
+          const dim = !passesFilters(b, funcOff, supplyOff);
+          const accent = zoneColors && b.category && b.category !== UNCLASSIFIED
+            ? T.groupColors[b.category.split(':')[0]] : '#5F6B7C';
           return (
-            <g key={b.path} style={{ cursor: 'pointer' }}
+            <g key={b.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) drillDown(b.path); }}>
               {trace?.blocks.has(b.path) && (
@@ -54,7 +58,8 @@ export function RailsCanvas() {
                       fill="none" stroke={T.teal} strokeWidth={2.5} />
               )}
               <rect x={x} y={y} width={w} height={BLOCK_H} rx={5} fill={T.card}
-                    stroke={isSel ? T.blue : T.border} strokeWidth={isSel ? 2.6 : 1.6} />
+                    stroke={isSel ? T.blue : accent} strokeWidth={isSel ? 2.6 : 1.6} />
+              <rect x={x} y={y} width={7} height={BLOCK_H} rx={3} fill={accent} />
               <text x={x + w / 2} y={y + 14} fontSize={9.5} fontWeight={700} fill={T.text} textAnchor="middle">
                 {b.label.length > maxChars ? b.label.slice(0, maxChars - 1) + '…' : b.label}
               </text>

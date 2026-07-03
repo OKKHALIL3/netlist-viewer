@@ -1,4 +1,5 @@
 import { useHybridStore } from '../../store/hybridStore';
+import { TAXONOMY } from '../../hybrid/classify';
 import { T } from './theme';
 
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
@@ -13,7 +14,11 @@ export function Panel({ title, children }: { title: string; children: React.Reac
 }
 
 export function HybridControls() {
-  const { model, rootPath, depth, setDepth } = useHybridStore();
+  const {
+    model, rootPath, depth, setDepth,
+    zoneColors, toggleZoneColors, sizeByContent, toggleSizeByContent,
+    funcOff, toggleFunc, supplyOff, toggleSupply,
+  } = useHybridStore();
   if (!model) return null;
   const maxBelow = model.maxDepth - model.blocks.get(rootPath)!.depth;
   return (
@@ -24,6 +29,53 @@ export function HybridControls() {
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted }}>
           <span>Top only</span><span>All levels</span>
         </div>
+      </Panel>
+
+      <Panel title="Display">
+        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+          <input type="checkbox" checked={zoneColors} onChange={toggleZoneColors} style={{ accentColor: T.blue }} />
+          Zone colors
+        </label>
+        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+          <input type="checkbox" checked={sizeByContent} onChange={toggleSizeByContent} style={{ accentColor: T.blue }} />
+          Size by content (criticality)
+        </label>
+        <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Siblings are ordered most critical first.</div>
+      </Panel>
+
+      <Panel title="Functional map">
+        {(Object.keys(TAXONOMY) as Array<keyof typeof TAXONOMY>).map(g => {
+          const keys = TAXONOMY[g].map(c => `${g}:${c}`);
+          const allOn = keys.every(k => !funcOff.has(k));
+          return (
+            <div key={g} style={{ marginBottom: 6 }}>
+              <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, fontWeight: 700, cursor: 'pointer' }}>
+                <input type="checkbox" checked={allOn}
+                       onChange={() => keys.forEach(k => (allOn === !funcOff.has(k)) && toggleFunc(k))}
+                       style={{ accentColor: T.blue }} />
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: T.groupColors[g], alignSelf: 'center' }} />
+                {g}
+              </label>
+              <div style={{ marginLeft: 22, borderLeft: `2px solid ${T.border}`, paddingLeft: 8 }}>
+                {keys.map(k => (
+                  <label key={k} style={{ display: 'flex', gap: 7, fontSize: 12, color: T.text, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!funcOff.has(k)} onChange={() => toggleFunc(k)} style={{ accentColor: T.blue }} />
+                    {k.split(':')[1]}
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </Panel>
+
+      <Panel title="Supply domain map">
+        {model.supplyDomains.map(d => (
+          <label key={d} style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!supplyOff.has(d)} onChange={() => toggleSupply(d)} style={{ accentColor: T.blue }} />
+            {d}
+          </label>
+        ))}
       </Panel>
     </div>
   );

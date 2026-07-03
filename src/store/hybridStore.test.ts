@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tinyDesign } from '../hybrid/__fixtures__/tiny';
-import { useHybridStore } from './hybridStore';
+import { useHybridStore, passesFilters } from './hybridStore';
 
 const s = () => useHybridStore.getState();
 
@@ -26,6 +26,17 @@ test('drillDown pushes crumb; navigation clears selection', () => {
   s().select('xu2');
   s().setDepth(2);
   assert.equal(s().selected, null);
+});
+
+test('passesFilters: unclassified and domain-less blocks always pass', () => {
+  s().build(tinyDesign(), null, null);
+  const m = s().model!;
+  const xs1 = m.blocks.get('xu1/xs1')!;   // Unclassified
+  assert.ok(passesFilters(xs1, new Set(['A:AMP']), new Set()));
+  const xu1 = m.blocks.get('xu1')!;       // A:AMP, domains vdd+vss
+  assert.ok(!passesFilters(xu1, new Set(['A:AMP']), new Set()));
+  assert.ok(!passesFilters(xu1, new Set(), new Set(['vdd', 'vss'])));
+  assert.ok(passesFilters(xu1, new Set(), new Set(['vdd'])));   // one live domain is enough
 });
 
 test('filters are default-on via disabled-sets', () => {

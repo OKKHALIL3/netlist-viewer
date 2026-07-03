@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
-import { useHybridStore } from '../../store/hybridStore';
+import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeSlots } from '../../hybrid/slots';
 import { HierTreePanel } from './HierTreePanel';
 import { HybridControls } from './HybridControls';
@@ -11,7 +11,7 @@ import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays } = useHybridStore();
+  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
@@ -29,10 +29,11 @@ export function HybridViewer() {
     let pins = 0, nets = 0, devices = 0;
     for (const p of layout.slot.keys()) {
       const b = model.blocks.get(p)!;
+      if (!passesFilters(b, funcOff, supplyOff)) continue;
       pins += b.pins; nets += b.netCount; devices += b.devices;
     }
     return { pins, nets, devices };
-  }, [model, rootPath, depth]);
+  }, [model, rootPath, depth, funcOff, supplyOff]);
 
   if (!model) return null;
   return (
