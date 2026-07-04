@@ -38,8 +38,12 @@ export function RailsCanvas() {
     i === 0 ? model.blocks.get(rootPath)!.label : `${model.levelNetCounts[rootDepth + i] ?? 0} net ±`;
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', position: 'relative', background: T.bg }}>
-      <svg width={svgW} height={svgH} style={{ display: 'block', minWidth: '100%' }}
+    // Same canvas surface as the layout viewer (.layout-canvas-wrap): a faint
+    // 24px dot grid so the two "canvas" homes read as siblings.
+    <div style={{ flex: 1, overflow: 'auto', position: 'relative',
+                  background: 'radial-gradient(circle at 1px 1px, #1a2029 1px, transparent 0)',
+                  backgroundSize: '24px 24px', backgroundColor: '#0a0d12' }}>
+      <svg width={svgW} height={svgH} style={{ display: 'block', minWidth: '100%', fontFamily: T.mono }}
            onClick={() => clearOverlays()}>
         {Array.from({ length: railCount }, (_, i) => (
           <g key={i}>

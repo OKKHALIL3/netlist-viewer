@@ -41,12 +41,14 @@ export function HybridViewer() {
   if (!model) return null;
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.bg }}>
-      <div style={{ padding: '6px 14px', display: 'flex', gap: 6, fontSize: 12, color: T.muted, borderBottom: `1px solid ${T.border}` }}>
+      {/* Same .breadcrumb/.crumb-item/.crumb-sep language as the schematic
+          top-bar trail (Space Mono, dim → accent on hover, current in text). */}
+      <div className="breadcrumb"
+           style={{ flex: 'none', justifyContent: 'flex-start', padding: '6px 14px', borderBottom: `1px solid ${T.border}` }}>
         {crumbs.map((c, i) => (
-          <span key={c || 'root'}>
-            {i > 0 && <span style={{ margin: '0 4px' }}>/</span>}
-            <span style={{ cursor: 'pointer', color: i === crumbs.length - 1 ? T.text : T.blue }}
-                  onClick={() => goToCrumb(i)}>
+          <span key={c || 'root'} style={{ display: 'flex', alignItems: 'center' }}>
+            {i > 0 && <span className="crumb-sep">/</span>}
+            <span className={`crumb-item${i === crumbs.length - 1 ? ' cur' : ''}`} onClick={() => goToCrumb(i)}>
               {model.blocks.get(c)?.label ?? c}
             </span>
           </span>
@@ -60,11 +62,11 @@ export function HybridViewer() {
         <PropagationPanel />
         {coupling.on && selected && <CouplingPanel />}
       </div>
-      <div style={{ background: T.panel, borderTop: `1px solid ${T.border}`, padding: '8px 18px', display: 'flex', gap: 26, fontSize: 13, color: T.text }}>
-        <span>Pins <b style={{ color: T.blue }}>({footer.pins})</b></span>
-        <span>Nets <b style={{ color: T.blue }}>({footer.nets})</b></span>
-        <span>Devices <b style={{ color: T.blue }}>({footer.devices})</b></span>
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: T.muted }}>
+      <div style={{ background: T.panel, borderTop: `1px solid ${T.border}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 26, fontSize: 12.5, color: T.text }}>
+        <span>Pins <b style={{ fontFamily: T.mono, color: T.blue }}>({footer.pins})</b></span>
+        <span>Nets <b style={{ fontFamily: T.mono, color: T.blue }}>({footer.nets})</b></span>
+        <span>Devices <b style={{ fontFamily: T.mono, color: T.blue }}>({footer.devices})</b></span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, color: T.faint, fontFamily: T.mono }}>
           Pins not rendered on blocks · supplies excluded from propagation
         </span>
       </div>

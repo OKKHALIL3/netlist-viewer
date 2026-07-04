@@ -24,4 +24,8 @@ export const T = {
   // Functional zones drawn from the app's own device hues: analog=green
   // (--pin-i/--m), digital=blue (--accent), mixed=orange (--pin-o).
   groupColors: { A: '#5fd0a0', D: '#4f9dff', AMS: '#ff9d5c' } as Record<string, string>,
+  // App-wide type roles: Sora for UI labels (body default), Space Mono for
+  // every technical identifier and value — same split as the other viewers.
+  mono: "'Space Mono', monospace",
+  radius: 10, // --radius
 };

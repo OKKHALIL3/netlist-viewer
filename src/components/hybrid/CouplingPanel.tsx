@@ -25,12 +25,13 @@ export function CouplingPanel() {
         )}
         {neighbors.map(n => (
           <div key={n.block} style={{ marginBottom: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: T.text, fontWeight: 700 }}>
-              <span>{model.blocks.get(n.block)?.label ?? n.block}</span>
-              <span style={{ color: T.coupling }}>{(n.total * 1e15).toFixed(1)} fF</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: T.mono, fontSize: 11.5, color: T.text, fontWeight: 700 }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.blocks.get(n.block)?.label ?? n.block}</span>
+              <span style={{ flexShrink: 0, color: T.coupling }}>{(n.total * 1e15).toFixed(1)} fF</span>
             </div>
             {n.pairs.map((p, i) => (
-              <div key={i} style={{ fontSize: 11, color: T.muted, padding: '1px 0' }}>
+              <div key={i} style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, padding: '1px 0',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {p.netA} ↔ {p.netB} · {(p.cap * 1e15).toFixed(1)} fF
               </div>
             ))}

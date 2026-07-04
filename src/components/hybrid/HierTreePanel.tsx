@@ -10,17 +10,17 @@ function Node({ path, depth }: { path: string; depth: number }) {
   const name = depth === 0 ? 'top' : b.label; // root row: instance-style "top" + cell pill, like Amr's navigator
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '2px 4px 2px 0', paddingLeft: depth * 14,
-                    cursor: 'pointer', color: isSel ? T.blue : T.text, fontSize: 12,
-                    background: isSel ? T.accentSoft : 'transparent' }}
+      {/* Same row classes as the schematic hierarchy tree (.tree-row/.tree-chev/
+          .tree-id/.tree-master) so hover, selection, and type treatment match. */}
+      <div className={`tree-row${isSel ? ' active' : ''}`}
+           style={{ paddingLeft: 8 + depth * 14 }}
            title={`${name} (${b.master})${b.members ? ` — array of ${b.members.length}` : b.children.length ? '' : ' — leaf block'}`}
            onClick={() => select(isSel ? null : path)}
            onDoubleClick={() => b.children.length && drillDown(path)}>
-        <span style={{ width: 12, flexShrink: 0, color: T.muted, userSelect: 'none' }}
-              onClick={e => { e.stopPropagation(); setOpen(!open); }}>
+        <span className="tree-chev" onClick={e => { e.stopPropagation(); setOpen(!open); }}>
           {b.children.length ? (open ? '▾' : '▸') : ''}
         </span>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span className="tree-id" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
         {b.members && (
           <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, background: T.accent, color: T.bg, borderRadius: 6, padding: '0 4px', lineHeight: '11px' }}>
             ×{b.members.length}
@@ -29,13 +29,8 @@ function Node({ path, depth }: { path: string; depth: number }) {
         {trace?.blocks.has(path) && (
           <span style={{ flexShrink: 0, fontSize: 8, background: T.conn, color: T.bg, borderRadius: 3, padding: '0 4px', fontWeight: 700 }}>●</span>
         )}
-        {/* cell (master) name in a rounded pill, right-aligned — the navigator
-            convention from Amr's reference (and the schematic tree's master chip) */}
-        <span style={{ marginLeft: 'auto', flexShrink: 1, minWidth: 0, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis',
-                       whiteSpace: 'nowrap', color: T.muted, fontSize: 10, fontFamily: "'Space Mono', monospace",
-                       background: T.panel2, border: `1px solid ${T.border}`, borderRadius: 8, padding: '1px 7px' }}>
-          {b.master}
-        </span>
+        {/* cell (master) name pill — Amr's navigator convention */}
+        <span className="tree-master">{b.master}</span>
       </div>
       {open && b.children.map(c => <Node key={c} path={c} depth={depth + 1} />)}
     </div>
@@ -46,8 +41,9 @@ export function HierTreePanel() {
   const model = useHybridStore(s => s.model);
   if (!model) return null;
   return (
-    <div style={{ width: 220, overflowY: 'auto', borderRight: `1px solid ${T.border}`, padding: 8, background: T.panel }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 6 }}>
+    <div style={{ width: 232, overflowY: 'auto', borderRight: `1px solid ${T.border}`, padding: '10px 8px', background: T.panel }}>
+      {/* .panel-head h3 convention: 11px uppercase, 1.3px tracking, dim, 600 */}
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '1.3px', textTransform: 'uppercase', color: T.muted, margin: '0 0 8px 8px' }}>
         Hierarchy
       </div>
       <Node path="" depth={0} />

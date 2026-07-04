@@ -12,14 +12,14 @@ export function PropagationPanel() {
   return (
     <div style={{ position: 'absolute', bottom: 14, right: 14, width: 260, maxHeight: '50%', overflowY: 'auto' }}>
       <Panel title={`Connected to ${model.blocks.get(selected)?.label}`}>
-        <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
+        <div style={{ fontFamily: T.mono, fontSize: 10.5, color: T.muted, marginBottom: 6 }}>
           {pl(trace.nets.length, 'net')} · {pl(trace.blocks.size, 'block')} · {pl(trace.levelsCrossed, 'level')}
         </div>
         {levels.map(lvl => (
           <div key={lvl} style={{ marginBottom: 6 }}>
-            <div style={{ fontSize: 10, color: T.muted, textTransform: 'uppercase' }}>Level {lvl}</div>
+            <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.8px', color: T.faint, textTransform: 'uppercase' }}>Level {lvl}</div>
             {trace.byLevel.get(lvl)!.map(p => (
-              <div key={p} style={{ fontSize: 12, color: T.text, padding: '1px 0' }}>{model.blocks.get(p)?.label ?? p}</div>
+              <div key={p} style={{ fontFamily: T.mono, fontSize: 11.5, color: T.text, padding: '1px 0' }}>{model.blocks.get(p)?.label ?? p}</div>
             ))}
           </div>
         ))}

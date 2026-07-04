@@ -6,8 +6,9 @@ import { T } from './theme';
 
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: T.panel, borderRadius: 12, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: T.muted, marginBottom: 8 }}>
+    <div style={{ background: T.panel, borderRadius: T.radius, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.border}` }}>
+      {/* .sub-h convention: 10px uppercase, 1px tracking, faint, 600 */}
+      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: T.faint, marginBottom: 8 }}>
         {title}
       </div>
       {children}
@@ -75,7 +76,7 @@ export function HybridControls() {
 
       <Panel title="Supply domain map">
         {model.supplyDomains.map(d => (
-          <label key={d} style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
+          <label key={d} style={{ display: 'flex', gap: 7, fontSize: 12, color: T.text, cursor: 'pointer', fontFamily: T.mono }}>
             <input type="checkbox" checked={!supplyOff.has(d)} onChange={() => toggleSupply(d)} style={{ accentColor: T.blue }} />
             {d}
           </label>
@@ -95,7 +96,7 @@ export function HybridControls() {
                 <input list="hybrid-pins" value={i ? endPin : startPin}
                        onChange={e => setPathPins(i ? startPin : e.target.value, i ? e.target.value : endPin)}
                        placeholder="block/path:pin"
-                       style={{ width: '100%', fontSize: 12, padding: 4, borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
+                       style={{ width: '100%', fontSize: 12, fontFamily: T.mono, padding: '5px 6px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
               </div>
             ))}
             <datalist id="hybrid-pins">
@@ -103,8 +104,8 @@ export function HybridControls() {
             </datalist>
             {pathResult && (
               <div style={{ marginTop: 10, background: T.panel2, borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
-                <div>Total net count <b style={{ color: T.path }}>⟨{pathResult.netCount}⟩</b></div>
-                <div>Layers included <b style={{ color: T.path }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
+                <div>Total net count <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathResult.netCount}⟩</b></div>
+                <div>Layers included <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
               </div>
             )}
             {startPin && endPin && !pathResult && (
@@ -128,7 +129,7 @@ export function HybridControls() {
               Threshold (fF)
               <input type="number" min={0} step={0.1} value={coupling.minC * 1e15}
                      onChange={e => setCouplingMinC(+e.target.value * 1e-15)}
-                     style={{ width: 64, fontSize: 12 }} />
+                     style={{ width: 64, fontSize: 12, fontFamily: T.mono, padding: '3px 5px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
             </label>
             <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer', marginTop: 6 }}>
               <input type="checkbox" checked={coupling.includeSupply} onChange={toggleCouplingSupply} style={{ accentColor: T.blue }} />
