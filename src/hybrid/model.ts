@@ -1,5 +1,6 @@
 import type { Design, Cell } from '../parser/types';
 import { normSeg } from '../layout-viewer/correlate';
+import { parseBusSuffix, busLabel } from '../layout/busGrouping';
 
 export interface HybridBlock {
   path: string; label: string; master: string; depth: number;
@@ -10,6 +11,15 @@ export interface HybridBlock {
   category: string | null;
   parasiticR: number | null; parasiticC: number | null; couplingC: number | null;
   dspfNets: Set<number> | null;
+  // Array collapse (same navigator convention as the schematic viewer):
+  // an ARRAY GROUP block stands in for indexed same-master siblings
+  // (X<0>..X<N>) — `members` lists their real paths, lowest index first
+  // (members[0] is the representative whose subtree the group displays).
+  // Each member carries `groupOf` back to its group. Real blocks stay in
+  // the map untouched: conductors/DSPF correlation keep working on real
+  // instance paths, and displayPath() maps them onto the collapsed view.
+  members?: string[];
+  groupOf?: string;
 }
 
 export interface HybridModel {
@@ -91,10 +101,116 @@ export function buildHybridModel(design: Design): HybridModel {
   };
   walk(design.topCell, '', 1, new Set());
 
-  return {
+  const model: HybridModel = {
     blocks, root: '', maxDepth,
     levelNetCounts: Array.from(levelNetCounts, v => v ?? 0),
     supplyDomains: [...supplyDomains],
     hasLayout: false,
   };
+  groupArrays(model);
+  return model;
+}
+
+// ---- Array collapse -----------------------------------------------------
+
+// Fold indexed same-master siblings (X<0>..X<N>, ≥2, sparse runs included —
+// fill families arrive with gaps) into one ARRAY GROUP block per parent,
+// mirroring the schematic viewer's bus folding. Group stats are summed over
+// members so footer totals are unchanged by collapsing; the group's children
+// are the representative member's (drill in = see one element's structure).
+// Deepest parents first, so a group copies its representative's children
+// AFTER those children were themselves grouped (nested arrays).
+function groupArrays(model: HybridModel): void {
+  const parents = [...model.blocks.values()].sort((a, b) => b.depth - a.depth);
+  for (const parent of parents) {
+    if (parent.children.length < 2) continue;
+
+    type Entry = { path: string; index: number; label: string };
+    type Run = { base: string; brackets: '<>' | '[]'; master: string; entries: Entry[] };
+    const runs = new Map<string, Run>();
+    const keyOf = (path: string): string | null => {
+      const parsed = parseBusSuffix(path.split('/').pop()!);
+      return parsed ? `${parsed.base}|${parsed.brackets}|${model.blocks.get(path)!.master}` : null;
+    };
+    for (const cp of parent.children) {
+      const key = keyOf(cp);
+      if (key === null) continue;
+      const seg = parseBusSuffix(cp.split('/').pop()!)!;
+      const child = model.blocks.get(cp)!;
+      let run = runs.get(key);
+      if (!run) { run = { base: seg.base, brackets: seg.brackets, master: child.master, entries: [] }; runs.set(key, run); }
+      run.entries.push({ path: cp, index: seg.index, label: child.label });
+    }
+
+    const emitted = new Set<string>();
+    const failed = new Set<string>();
+    const next: string[] = [];
+    for (const cp of parent.children) {
+      const key = keyOf(cp);
+      const run = key !== null ? runs.get(key)! : undefined;
+      if (!run || run.entries.length < 2 || failed.has(key!)) { next.push(cp); continue; }
+      if (emitted.has(key!)) continue;
+      const gpath = makeGroup(model, parent, run);
+      if (gpath === null) { failed.add(key!); next.push(cp); continue; }
+      emitted.add(key!);
+      next.push(gpath);
+    }
+    parent.children = next;
+  }
+}
+
+function makeGroup(
+  model: HybridModel, parent: HybridBlock,
+  run: { base: string; brackets: '<>' | '[]'; master: string; entries: Array<{ path: string; index: number; label: string }> },
+): string | null {
+  const sorted = [...run.entries].sort((a, b) => a.index - b.index);
+  const gseg = busLabel(run.base, run.brackets, sorted.map(e => e.index));
+  const gpath = parent.path ? `${parent.path}/${gseg}` : gseg;
+  if (model.blocks.has(gpath)) return null; // freak name collision — leave ungrouped
+
+  const members = sorted.map(e => e.path);
+  const rep = model.blocks.get(members[0])!;
+  // Label keeps the instance ids' original case; path indices are authoritative
+  // (labels may carry finger suffixes that normSeg stripped from the path).
+  const labelParse = parseBusSuffix(sorted[0].label);
+  const label = labelParse
+    ? busLabel(labelParse.base, labelParse.brackets, sorted.map(e => e.index))
+    : gseg;
+
+  const g: HybridBlock = {
+    path: gpath, label, master: run.master, depth: rep.depth, parent: parent.path,
+    children: [...rep.children],
+    devices: 0, pins: 0,
+    pinRoles: { signal: 0, supply: 0, control: 0 },
+    netCount: 0, domains: rep.domains,
+    category: null, parasiticR: null, parasiticC: null, couplingC: null, dspfNets: null,
+    members,
+  };
+  for (const p of members) {
+    const m = model.blocks.get(p)!;
+    m.groupOf = gpath;
+    g.devices += m.devices; g.pins += m.pins; g.netCount += m.netCount;
+    g.pinRoles.signal += m.pinRoles.signal; g.pinRoles.supply += m.pinRoles.supply; g.pinRoles.control += m.pinRoles.control;
+  }
+  model.blocks.set(gpath, g);
+  return gpath;
+}
+
+// Map a REAL instance path onto the collapsed display tree: a path ending on
+// an array member displays as its group; a path THROUGH a member displays as
+// the same position under the representative's subtree (structural twin).
+// Paths already on the display tree map to themselves.
+export function displayPath(model: HybridModel, path: string): string {
+  if (!path) return path;
+  const segs = path.split('/');
+  let cur = '';
+  for (let i = 0; i < segs.length; i++) {
+    cur = cur ? `${cur}/${segs[i]}` : segs[i];
+    const g = model.blocks.get(cur)?.groupOf;
+    if (!g) continue;
+    if (i === segs.length - 1) return g;
+    const rep = model.blocks.get(g)!.members![0];
+    if (rep !== cur) cur = rep;
+  }
+  return cur;
 }

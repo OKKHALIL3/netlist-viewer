@@ -14,6 +14,7 @@ export function BlockStatsCard() {
   const b = model.blocks.get(selected);
   if (!b) return null;
   const rows: Array<[string, string]> = [
+    ...(b.members ? [['Array size', `${b.members.length} instances`] as [string, string]] : []),
     ['Devices', String(b.devices)],
     ['Parasitic R', b.parasiticR === null ? '—' : String(b.parasiticR)],
     ['Parasitic C', b.parasiticC === null ? '—' : String(b.parasiticC)],
@@ -28,6 +29,11 @@ export function BlockStatsCard() {
                   padding: '12px 16px', border: `1px solid ${T.border}`, boxShadow: '0 6px 20px rgba(0,0,0,0.45)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{ fontWeight: 700, color: T.text, fontSize: 14 }}>{b.label}</div>
+        {b.members && (
+          <span style={{ fontSize: 10, fontWeight: 700, color: T.bg, background: T.accent, borderRadius: 6, padding: '1px 6px' }}>
+            ×{b.members.length}
+          </span>
+        )}
         <span style={{ fontSize: 10, fontWeight: 700, color: T.bg, background: badgeColor,
                        borderRadius: 4, padding: '1px 6px' }}>
           {b.category ?? UNCLASSIFIED}

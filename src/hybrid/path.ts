@@ -1,5 +1,6 @@
 import type { Design } from '../parser/types';
 import type { HybridModel } from './model';
+import { displayPath } from './model';
 import type { Conductors } from './connectivity';
 import { normSeg } from '../layout-viewer/correlate';
 
@@ -8,11 +9,14 @@ export interface PathResult { blocks: string[]; conductors: number[]; netCount: 
 
 export function pinConductor(design: Design, model: HybridModel, cond: Conductors, pin: PinRef): number | null {
   if (pin.block === '') return cond.idOf.get(`|${pin.pin}`) ?? null; // top-cell pin: port name = top-scope net
-  const block = model.blocks.get(pin.block);
+  // An ARRAY GROUP pin resolves through the representative member — a path is
+  // traced through one element of the array.
+  const real = model.blocks.get(pin.block)?.members?.[0] ?? pin.block;
+  const block = model.blocks.get(real);
   if (!block || block.parent === null) return null;
   const parentCell = design.cells.get(model.blocks.get(block.parent)!.master);
   if (!parentCell) return null;
-  const seg = pin.block.split('/').pop()!;
+  const seg = real.split('/').pop()!;
   for (const inst of parentCell.instances) {
     if ((normSeg(inst.id) || inst.id.toLowerCase()) !== seg) continue;
     const net = inst.conn[pin.pin];
@@ -68,14 +72,22 @@ export function findPath(design: Design, model: HybridModel, cond: Conductors, s
 
   // reconstruct
   const conductors: number[] = [];
-  const blocks: string[] = [];
+  const raw: string[] = [];
   let node: Node | null = { kind: 'c', id: e };
   while (node) {
     if (node.kind === 'c') conductors.unshift(node.id as number);
-    else blocks.unshift(node.id as string);
+    else raw.unshift(node.id as string);
     node = prev.get(node.kind === 'c' ? ck(node.id as number) : bk(node.id as string)) ?? null;
   }
-  // endpoint blocks (unless a pin is the top cell itself)
+  // BFS runs on real instance paths; collapse array members onto their groups
+  // for display (keep-first order, dedup — a hop through two elements of the
+  // same array is one visit of the collapsed block).
+  const blocks: string[] = [];
+  for (const bp of raw) {
+    const dp = displayPath(model, bp);
+    if (!blocks.includes(dp)) blocks.push(dp);
+  }
+  // endpoint blocks (unless a pin is the top cell itself) — already display paths
   if (start.block && blocks[0] !== start.block) blocks.unshift(start.block);
   if (end.block && blocks[blocks.length - 1] !== end.block) blocks.push(end.block);
 

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { TAXONOMY } from '../../hybrid/classify';
+import { displayPath } from '../../hybrid/model';
 import { T } from './theme';
 
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
@@ -25,7 +26,11 @@ export function HybridControls() {
   } = useHybridStore();
   const pinOptions = useMemo(
     () => (design && model
-      ? [...model.blocks.values()].flatMap(b => (design.cells.get(b.master)?.ports ?? []).map(p => `${b.path}:${p.name}`))
+      ? [...model.blocks.values()]
+          // display-reachable blocks only: array members (and non-representative
+          // subtrees) would flood the list with duplicate pins
+          .filter(b => displayPath(model, b.path) === b.path)
+          .flatMap(b => (design.cells.get(b.master)?.ports ?? []).map(p => `${b.path}:${p.name}`))
       : []),
     [design, model],
   );

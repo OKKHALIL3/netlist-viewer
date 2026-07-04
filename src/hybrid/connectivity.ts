@@ -1,5 +1,6 @@
 import type { Design } from '../parser/types';
 import type { HybridModel } from './model';
+import { displayPath } from './model';
 import { normSeg } from '../layout-viewer/correlate';
 
 export interface ScopedNet { scope: string; net: string }
@@ -24,8 +25,10 @@ export function buildConductors(design: Design, model: HybridModel): Conductors 
   const scopedByRaw: ScopedNet[] = [];
   const pinBlocks: Array<Set<string>> = [];         // per uf node
 
-  // register every SIGNAL net of every block scope
+  // register every SIGNAL net of every block scope. Array groups are display
+  // stand-ins, not scopes — conductors live on real instance paths only.
   for (const b of model.blocks.values()) {
+    if (b.members) continue;
     const cell = design.cells.get(b.master);
     if (!cell) continue;
     for (const net of cell.nets) {
@@ -41,6 +44,7 @@ export function buildConductors(design: Design, model: HybridModel): Conductors 
 
   // union across boundaries + collect pin blocks
   for (const b of model.blocks.values()) {
+    if (b.members) continue;
     const cell = design.cells.get(b.master);
     if (!cell) continue;
     for (const inst of cell.instances) {
@@ -82,22 +86,26 @@ export function traceConnectivity(design: Design, model: HybridModel, cond: Cond
   const result: TraceResult = { blocks: new Set(), nets: [], byLevel: new Map(), levelsCrossed: 0 };
   if (!block || block.parent === null) return result;
 
-  // seed conductors: parent-scope nets on the block's pins
+  // seed conductors: parent-scope nets on the block's pins. An ARRAY GROUP
+  // seeds from every member — "what does this array connect to" is the union
+  // over its elements' pins.
   const parent = model.blocks.get(block.parent)!;
   const parentCell = design.cells.get(parent.master);
   if (!parentCell) return result;
-  const lastSeg = blockPath.split('/').pop()!;
+  const segs = new Set((block.members ?? [blockPath]).map(p => p.split('/').pop()!));
   const seeds = new Set<number>();
   for (const inst of parentCell.instances) {
-    if ((normSeg(inst.id) || inst.id.toLowerCase()) !== lastSeg) continue; // all finger-collapsed twins
+    if (!segs.has(normSeg(inst.id) || inst.id.toLowerCase())) continue; // all finger-collapsed twins
     for (const net of Object.values(inst.conn)) {
       const id = cond.idOf.get(`${block.parent}|${net}`);
       if (id !== undefined) seeds.add(id);
     }
   }
 
+  // exclude the selected chain in DISPLAY terms — conductors carry real
+  // instance paths, so ancestors must be display-mapped before the check.
   const ancestors = new Set<string>();
-  for (let p: string | null = blockPath; p !== null; p = model.blocks.get(p)!.parent) ancestors.add(p);
+  for (let p: string | null = blockPath; p !== null; p = model.blocks.get(p)!.parent) ancestors.add(displayPath(model, p));
 
   const seenNet = new Set<string>();
   for (const id of seeds) {
@@ -106,8 +114,9 @@ export function traceConnectivity(design: Design, model: HybridModel, cond: Cond
       if (!seenNet.has(k)) { seenNet.add(k); result.nets.push(sn); }
     }
     for (const bp of cond.blocksOf.get(id) ?? []) {
-      if (ancestors.has(bp)) continue;
-      result.blocks.add(bp);
+      const dp = displayPath(model, bp);      // collapse array members onto their group
+      if (ancestors.has(dp)) continue;
+      result.blocks.add(dp);
     }
   }
   for (const bp of result.blocks) {

@@ -29,6 +29,10 @@ export function attachLayoutStats(model: HybridModel, data: LayoutData, lm: Layo
       const blk = model.blocks.get(p);
       if (!blk) break;
       blk.dspfNets!.add(netIdx);
+      // Array groups sit beside (not on) the real parent chain — feed them as
+      // the chain passes their members so a group's parasitics/coupling are
+      // the union over all elements.
+      if (blk.groupOf) model.blocks.get(blk.groupOf)!.dspfNets!.add(netIdx);
       p = blk.parent;
     }
   };

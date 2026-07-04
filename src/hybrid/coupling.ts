@@ -12,6 +12,16 @@ export interface CouplingNeighbor {
 
 const related = (a: string, b: string) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/') || a === '' || b === '';
 
+// Display-path relatedness: an ARRAY GROUP stands for all of its members, so
+// "self coupling" between a group and anything inside ANY member (e.g. the
+// group vs its own displayed representative subtree) must be excluded.
+export function relatedDisplay(model: HybridModel, a: string, b: string): boolean {
+  const ra = model.blocks.get(a)?.members ?? [a];
+  const rb = model.blocks.get(b)?.members ?? [b];
+  for (const x of ra) for (const y of rb) if (related(x, y)) return true;
+  return false;
+}
+
 // Resolve a flattened DSPF net name to the CDL Design's topology-refined
 // Net.kind for that scope. Name regexes alone miss rails like AVRH (no
 // vdd/vss substring) — see ARCHITECTURE.md §8 — so supply-ness must come
@@ -42,7 +52,7 @@ export function couplingFor(
   const isSupplyNet = (i: number) => supplyIdx.has(i);
   const out = new Map<string, CouplingNeighbor>();
   for (const cand of candidates) {
-    if (related(selected, cand)) continue;
+    if (relatedDisplay(model, selected, cand)) continue;
     const nb = model.blocks.get(cand);
     if (!nb?.dspfNets) continue;
     for (const p of pairs) {

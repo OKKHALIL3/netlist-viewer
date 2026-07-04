@@ -5,7 +5,7 @@ type PrimSpec = [id: string, kind: 'M' | 'R' | 'C', model: string, terms: Array<
 
 const SUPPLY: Record<string, Net['kind']> = { vdd: 'power', vss: 'ground' };
 
-function cell(name: string, ports: string[], instances: InstSpec[], primitives: PrimSpec[]): Cell {
+export function cell(name: string, ports: string[], instances: InstSpec[], primitives: PrimSpec[]): Cell {
   const nets = new Map<string, Net>();
   const net = (n: string): Net => {
     let e = nets.get(n);

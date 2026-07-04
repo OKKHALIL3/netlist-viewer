@@ -4,6 +4,7 @@ import { computeSlots } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
 import { couplingFor } from '../../hybrid/coupling';
+import { displayPath } from '../../hybrid/model';
 import { T } from './theme';
 
 const SLOT_W = 112, MARGIN_X = 70, LEVEL_H = 118, TOP_PAD = 46, BLOCK_H = 34;
@@ -46,8 +47,13 @@ export function RailsCanvas() {
             <text x={18} y={railY(i) - 42} fontSize={11} fill={T.muted} fontStyle="italic">{netLabel(i)}</text>
           </g>
         ))}
-        {visible.filter(b => b.parent !== null && layout.slot.has(b.parent)).map(b => {
-          const x1 = cx(b.parent!), y1 = railY(lvl(model.blocks.get(b.parent!)!));
+        {visible.map(b => {
+          // A group's displayed children keep their real parent pointer (the
+          // representative member) — resolve edges through the display map.
+          if (b.parent === null) return null;
+          const dp = displayPath(model, b.parent);
+          if (!layout.slot.has(dp)) return null;
+          const x1 = cx(dp), y1 = railY(lvl(model.blocks.get(dp)!));
           const x2 = cx(b.path), y2 = railY(lvl(b)) - BLOCK_H;
           const my = y1 + (y2 - y1) * 0.55;
           return <path key={b.path} d={`M ${x1} ${y1} V ${my} H ${x2} V ${y2}`}
@@ -64,7 +70,11 @@ export function RailsCanvas() {
             <g key={b.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : b.path); }}
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) drillDown(b.path); }}>
-              {b.children.length === 0 && <title>Leaf block</title>}
+              <title>
+                {`${b.label} (${b.master})`}
+                {b.members ? ` — array of ${b.members.length}` : ''}
+                {b.children.length === 0 ? ' — leaf block' : ''}
+              </title>
               {(trace?.blocks.has(b.path) || pathResult?.blocks.includes(b.path)) && (
                 <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={8}
                       fill="none" stroke={T.conn} strokeWidth={2.5} />
@@ -78,6 +88,18 @@ export function RailsCanvas() {
               <text x={x + w / 2} y={y + 26} fontSize={8} fill={T.muted} textAnchor="middle">
                 {b.devices} dev · {b.netCount} net
               </text>
+              {b.members && (() => {
+                // "×N" collapsed-array chip, same language as the schematic's
+                // array badge (accent pill, dark text, top-right corner).
+                const t = `×${b.members.length}`;
+                const bw = t.length * 5.5 + 8;
+                return (
+                  <g>
+                    <rect x={x + w - bw / 2 - 4} y={y - 7} width={bw} height={13} rx={6.5} fill={T.accent} />
+                    <text x={x + w - 4} y={y + 3} fontSize={8.5} fontWeight={700} fill={T.bg} textAnchor="middle">{t}</text>
+                  </g>
+                );
+              })()}
             </g>
           );
         })}
