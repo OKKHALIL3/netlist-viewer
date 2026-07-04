@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tinyDesign } from '../hybrid/__fixtures__/tiny';
+import { arrayedDesign } from '../hybrid/__fixtures__/arrayed';
 import { useHybridStore, passesFilters, layersFor } from './hybridStore';
 import type { PathResult } from '../hybrid/path';
 
@@ -104,6 +105,60 @@ test('drillDown never duplicates crumbs: current root is a no-op, ancestors jump
   s().drillDown('');                       // drill "down" to an ancestor → jump back, not append
   assert.deepEqual(s().crumbs, ['']);
   assert.equal(s().rootPath, '');
+});
+
+test('drillDown on a deep block builds the FULL ancestor trail', () => {
+  s().build(tinyDesign(), null, null);
+  s().drillDown('xu1/xs1');                // tree shows the whole design — deep double-click
+  assert.deepEqual(s().crumbs, ['', 'xu1', 'xu1/xs1']); // no skipped levels
+  assert.equal(s().rootPath, 'xu1/xs1');
+});
+
+test('path pins resolve display-cased input and expose display-mapped ends', () => {
+  s().build(tinyDesign(), null, null);
+  s().togglePathMode();
+  s().setPathPins('XU1/XS1:D', 'XU2:Z');   // typed as displayed — not normalized
+  assert.equal(s().pathResult!.netCount, 3);
+  assert.deepEqual(s().pathEnds, [{ block: 'xu1/xs1', pin: 'd' }, { block: 'xu2', pin: 'z' }]);
+  s().setPathPins('XU1/XS1:D', 'XU2:');    // partial second pin — no error state, no result
+  assert.equal(s().pathResult, null);
+  assert.equal(s().pathPinsValid, false);
+  s().togglePathMode();
+});
+
+test('path through an array member surfaces its group at the endpoints', () => {
+  s().build(arrayedDesign(), null, null);
+  s().togglePathMode();
+  s().setPathPins('XA<1>:a', 'XT:t');      // start pin typed on a NON-representative member
+  assert.ok(s().pathResult);
+  assert.equal(s().pathResult!.blocks[0], 'xa<2:0>'); // member never leaks into the display list
+  assert.equal(s().pathEnds![0].block, 'xa<2:0>');
+  s().togglePathMode();
+});
+
+test('jumpTo builds the full crumb trail, selects, and traces (search jump)', () => {
+  s().build(tinyDesign(), null, null);
+  s().jumpTo(['XU1', 'XS2']);
+  assert.equal(s().rootPath, 'xu1');
+  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  assert.equal(s().selected, 'xu1/xs2');
+  assert.ok(s().trace);
+  s().jumpTo(['XU2']);                       // top-level target → root view
+  assert.deepEqual(s().crumbs, ['']);
+  assert.equal(s().selected, 'xu2');
+  s().jumpTo(['XU1', 'NOPE']);               // unknown path → no-op, state kept
+  assert.equal(s().selected, 'xu2');
+});
+
+test('jumpTo lands on the array group when the target is a member', () => {
+  s().build(arrayedDesign(), null, null);
+  s().jumpTo(['XA<1>', 'XB<0>']);            // deep inside a non-representative member
+  assert.equal(s().selected, 'xa<0>/xb<1:0>'); // structural twin under the representative
+  assert.deepEqual(s().crumbs, ['', 'xa<2:0>']);
+  assert.equal(s().rootPath, 'xa<2:0>');
+  s().jumpTo(['XA<2>']);                     // the member itself → its group
+  assert.equal(s().selected, 'xa<2:0>');
+  assert.deepEqual(s().crumbs, ['']);
 });
 
 test('build is a no-op on identical design/layoutData/layoutModel references; a new design still resets', () => {

@@ -1,15 +1,25 @@
 import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { TAXONOMY } from '../../hybrid/classify';
-import { displayPath } from '../../hybrid/model';
+import { displayPath, subtreeDepth } from '../../hybrid/model';
 import { T } from './theme';
 
-export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+// `subject` renders verbatim in mono next to the uppercase title — instance
+// ids are case-significant and must never be uppercased by styling.
+export function Panel({ title, subject, children }: { title: string; subject?: string; children: React.ReactNode }) {
   return (
     <div style={{ background: T.panel, borderRadius: T.radius, padding: '12px 14px', marginBottom: 12, border: `1px solid ${T.border}` }}>
       {/* .sub-h convention: 10px uppercase, 1px tracking, faint, 600 */}
-      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '1px', textTransform: 'uppercase', color: T.faint, marginBottom: 8 }}>
-        {title}
+      <div title={subject ? `${title} ${subject}` : undefined}
+           style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, fontSize: 10, fontWeight: 600,
+                    letterSpacing: '1px', textTransform: 'uppercase', color: T.faint, marginBottom: 8 }}>
+        <span style={{ flexShrink: 0 }}>{title}</span>
+        {subject && (
+          <span style={{ textTransform: 'none', letterSpacing: 0, fontFamily: T.mono, fontSize: 10.5, color: T.muted,
+                         minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {subject}
+          </span>
+        )}
       </div>
       {children}
     </div>
@@ -20,25 +30,36 @@ export function HybridControls() {
   const {
     design, model, rootPath, depth, setDepth,
     funcOff, toggleFunc, supplyOff, toggleSupply,
-    pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers,
+    pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathPinsValid,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
   } = useHybridStore();
+  // Built only while Path view is on — on large designs this list is big, and
+  // capped so the datalist can't mount an unbounded number of DOM nodes.
+  const PIN_OPTION_CAP = 6000;
   const pinOptions = useMemo(
-    () => (design && model
-      ? [...model.blocks.values()]
-          // display-reachable blocks only: array members (and non-representative
-          // subtrees) would flood the list with duplicate pins
-          .filter(b => displayPath(model, b.path) === b.path)
-          .flatMap(b => (design.cells.get(b.master)?.ports ?? []).map(p => `${b.path}:${p.name}`))
-      : []),
-    [design, model],
+    () => {
+      if (!pathMode || !design || !model) return [];
+      const out: string[] = [];
+      for (const b of model.blocks.values()) {
+        // display-reachable blocks only: array members (and non-representative
+        // subtrees) would flood the list with duplicate pins
+        if (displayPath(model, b.path) !== b.path) continue;
+        for (const p of design.cells.get(b.master)?.ports ?? []) {
+          out.push(`${b.path}:${p.name}`);
+          if (out.length >= PIN_OPTION_CAP) return out;
+        }
+      }
+      return out;
+    },
+    [pathMode, design, model],
   );
   if (!model) return null;
-  const maxBelow = model.maxDepth - model.blocks.get(rootPath)!.depth;
+  const maxBelow = subtreeDepth(model, rootPath); // current subtree, not design-wide maxDepth
   return (
     <div style={{ width: 244, padding: 12, overflowY: 'auto', borderRight: `1px solid ${T.border}`, background: T.bg }}>
       <Panel title="Hier depth">
         <input type="range" min={0} max={Math.max(1, maxBelow)} value={Math.min(depth, maxBelow)}
+               disabled={maxBelow === 0}
                onChange={e => setDepth(+e.target.value)} style={{ width: '100%', accentColor: T.blue }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted }}>
           <span>Top only</span><span>All levels</span>
@@ -108,7 +129,7 @@ export function HybridControls() {
                 <div>Layers included <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
               </div>
             )}
-            {startPin && endPin && !pathResult && (
+            {pathPinsValid && !pathResult && (
               <div style={{ marginTop: 8, fontSize: 12, color: T.danger }}>No signal path found (supplies excluded).</div>
             )}
           </div>
@@ -127,7 +148,7 @@ export function HybridControls() {
           <div style={{ marginTop: 8 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.muted }}>
               Threshold (fF)
-              <input type="number" min={0} step={0.1} value={coupling.minC * 1e15}
+              <input type="number" min={0} step={0.1} value={+(coupling.minC * 1e15).toFixed(3)}
                      onChange={e => setCouplingMinC(+e.target.value * 1e-15)}
                      style={{ width: 64, fontSize: 12, fontFamily: T.mono, padding: '3px 5px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
             </label>

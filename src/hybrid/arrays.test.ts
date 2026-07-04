@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import { arrayedDesign } from './__fixtures__/arrayed';
 import { dnet } from './__fixtures__/fakeLayout';
-import { buildHybridModel, displayPath } from './model';
+import { cell } from './__fixtures__/tiny';
+import type { Design } from '../parser/types';
+import { buildHybridModel, displayPath, subtreeDepth } from './model';
 import { computeSlots } from './slots';
 import { buildConductors, traceConnectivity } from './connectivity';
 import { findPath } from './path';
 import { relatedDisplay } from './coupling';
 import { attachLayoutStats } from './layoutStats';
+import { criticalityScores } from './criticality';
 
 test('indexed same-master siblings fold into one array group', () => {
   const m = buildHybridModel(arrayedDesign());
@@ -100,6 +103,35 @@ test('relatedDisplay treats a group as all of its members', () => {
   assert.ok(relatedDisplay(m, 'xa<2:0>', 'xa<0>/xb<1:0>')); // group vs displayed rep subtree
   assert.ok(relatedDisplay(m, 'xs', 'xs'));
   assert.ok(!relatedDisplay(m, 'xa<2:0>', 'xs'));
+});
+
+test('group label keeps original case even when instance ids carry finger suffixes', () => {
+  const cells = new Map();
+  cells.set('FTOP', cell('FTOP', ['vdd', 'vss'], [
+    ['XF<0>@1', 'FC', { p: 'vdd', q: 'vss' }],
+    ['XF<1>@1', 'FC', { p: 'vdd', q: 'vss' }],
+  ], []));
+  cells.set('FC', cell('FC', ['p', 'q'], [], [['M1', 'M', 'nch', [['d', 'p'], ['g', 'p'], ['s', 'q'], ['b', 'q']]]]));
+  const m = buildHybridModel({ cells, topCell: 'FTOP', warnings: [] } as Design);
+  const g = m.blocks.get('xf<1:0>')!;
+  assert.ok(g);
+  assert.equal(g.label, 'XF<1:0>'); // not the lowercase path fallback
+});
+
+test('criticality scores cover display blocks only (hidden groups excluded)', () => {
+  const m = buildHybridModel(arrayedDesign());
+  const scores = criticalityScores(m, [0.3, 0.2, 0.3, 0.2]);
+  assert.ok(scores.has('xa<2:0>'));
+  assert.ok(scores.has('xa<0>/xb<1:0>'));       // displayed nested group
+  assert.ok(!scores.has('xa<1>/xb<1:0>'));      // hidden twin under a non-rep member
+  assert.ok(!scores.has('xa<1>'));              // members aren't ranked either
+});
+
+test('subtreeDepth reflects the display subtree, not the design', () => {
+  const m = buildHybridModel(arrayedDesign());
+  assert.equal(subtreeDepth(m, ''), 2);
+  assert.equal(subtreeDepth(m, 'xa<2:0>'), 1);
+  assert.equal(subtreeDepth(m, 'xs'), 0);
 });
 
 test('layout stats reach array groups as the union over members', () => {

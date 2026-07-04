@@ -1,4 +1,5 @@
 import type { HybridModel } from './model';
+import { displayPath } from './model';
 
 const comps = (b: { devices: number; netCount: number; parasiticR: number | null; parasiticC: number | null; couplingC: number | null }): Array<number | null> => [
   b.devices,
@@ -8,15 +9,19 @@ const comps = (b: { devices: number; netCount: number; parasiticR: number | null
 ];
 
 export function criticalityScores(model: HybridModel, weights: [number, number, number, number]): Map<string, number> {
+  // Score DISPLAY blocks only: hidden array groups under non-representative
+  // members carry union'd DSPF stats that would otherwise own the level max
+  // and deflate every block the user can actually see.
+  const blocks = [...model.blocks.values()].filter(b => displayPath(model, b.path) === b.path);
   // per-level max per component
   const levelMax = new Map<number, number[]>();
-  for (const b of model.blocks.values()) {
+  for (const b of blocks) {
     const m = levelMax.get(b.depth) ?? [0, 0, 0, 0];
     comps(b).forEach((v, i) => { if (v !== null && v > m[i]) m[i] = v; });
     levelMax.set(b.depth, m);
   }
   const scores = new Map<string, number>();
-  for (const b of model.blocks.values()) {
+  for (const b of blocks) {
     const max = levelMax.get(b.depth)!;
     const c = comps(b);
     // live components: value present AND level max > 0

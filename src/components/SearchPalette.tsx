@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useViewerStore, type SelectionType, type BreadcrumbEntry } from '../store/viewerStore';
+import { useHybridStore } from '../store/hybridStore';
 import { buildSearchIndex, buildOccurrenceCounts, pathsToCell, type SearchResult } from '../search/searchIndex';
 import type { Design } from '../parser/types';
 
@@ -37,7 +38,8 @@ function fullLoc(path: BreadcrumbEntry[]): string {
 // Mounted only while open (see SearchPalette below), so its local state
 // starts fresh every time the palette is opened — no reset effect needed.
 function SearchModal({ design, onClose }: { design: Design; onClose: () => void }) {
-  const { goToPath, setFocusNet } = useViewerStore();
+  const { goToPath, setFocusNet, appMode } = useViewerStore();
+  const hybridJump = useHybridStore(s => s.jumpTo);
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -95,6 +97,18 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
 
   const select = (occ: OccRow) => {
     const { result, path } = occ;
+    // In hybrid mode, jump inside the hybrid viewer itself: instances (and
+    // pins on instances) land on that block; primitives/nets/cells land on
+    // the cell occurrence that contains them. Everything below the top entry
+    // of the occurrence path is an instance id.
+    if (appMode === 'hybrid') {
+      const labels = path.slice(1).map(p => p.label);
+      if (result.kind === 'instance') labels.push(result.id);
+      else if (result.kind === 'pin' && result.ownerKind !== 'primitive' && result.ownerId) labels.push(result.ownerId);
+      hybridJump(labels);
+      onClose();
+      return;
+    }
     // A pin result jumps to the specific instance/primitive that owns it
     // (so two matches of the same pin name, e.g. on X9 and X10, land on
     // distinct targets) and focuses its net so the matched pin row is

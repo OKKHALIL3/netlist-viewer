@@ -2,11 +2,11 @@ import { create } from 'zustand';
 import type { Design } from '../parser/types';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import type { HybridModel, HybridBlock } from '../hybrid/model';
-import { buildHybridModel } from '../hybrid/model';
+import { buildHybridModel, displayPath } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
-import { findPath, type PinRef, type PathResult } from '../hybrid/path';
+import { findPath, resolvePinRef, type PinRef, type PathResult } from '../hybrid/path';
 import { normSegments, normSeg } from '../layout-viewer/correlate';
 
 export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>): boolean {
@@ -53,11 +53,17 @@ interface HybridState {
   endPin: string;
   pathResult: PathResult | null;
   pathLayers: string[] | null;
+  pathPinsValid: boolean;
+  // resolved endpoints in DISPLAY terms (for the canvas markers) — the raw
+  // input strings may differ in case or name an array member
+  pathEnds: [PinRef, PinRef] | null;
   coupling: { on: boolean; minC: number; includeSupply: boolean };
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
   drillDown: (path: string) => void;
   goToCrumb: (i: number) => void;
+  jumpTo: (labels: string[]) => void;
+  jumpToPath: (path: string) => void;
   setDepth: (d: number) => void;
   select: (path: string | null) => void;
   clearOverlays: () => void;
@@ -78,6 +84,7 @@ interface HybridState {
 const CLEARED = {
   selected: null as string | null, trace: null as TraceResult | null,
   pathResult: null as PathResult | null, startPin: '', endPin: '',
+  pathPinsValid: false, pathEnds: null as [PinRef, PinRef] | null,
 };
 
 // build() input identity — tracked outside reactive state (spec: "non-reactive
@@ -86,6 +93,19 @@ const CLEARED = {
 let lastBuildDesign: Design | null = null;
 let lastBuildLayoutData: LayoutData | null = null;
 let lastBuildLayoutModel: LayoutModel | null = null;
+
+// Full breadcrumb trail (root … path) in display terms — the crumb bar is a
+// LOCATION, so every intermediate ancestor must be present and clickable.
+function trailTo(model: HybridModel, path: string): string[] {
+  const trail: string[] = [path];
+  for (let p: string | null = model.blocks.get(path)?.parent ?? null; p !== null; ) {
+    const d = displayPath(model, p);              // members surface as their group
+    if (trail[0] !== d) trail.unshift(d);
+    p = model.blocks.get(d)?.parent ?? null;
+  }
+  if (trail[0] !== '') trail.unshift('');
+  return trail;
+}
 
 export const useHybridStore = create<HybridState>((set, get) => ({
   design: null,
@@ -110,6 +130,8 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   endPin: '',
   pathResult: null,
   pathLayers: null,
+  pathPinsValid: false,
+  pathEnds: null,
   coupling: { on: false, minC: 1e-15, includeSupply: false },
 
   build: (design, layoutData, layoutModel) => {
@@ -119,9 +141,6 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     if (design === lastBuildDesign && layoutData === lastBuildLayoutData && layoutModel === lastBuildLayoutModel) {
       return;
     }
-    lastBuildDesign = design;
-    lastBuildLayoutData = layoutData;
-    lastBuildLayoutModel = layoutModel;
 
     const model = buildHybridModel(design);
     classifyModel(model, design, design.topCell);
@@ -134,6 +153,12 @@ export const useHybridStore = create<HybridState>((set, get) => ({
       netLayers = new Map();
       for (const n of layoutModel.nets) netLayers.set(normSegments(n.name, seps).join('/'), n.layers);
     }
+    // Latch input identity only AFTER a successful build — latching first
+    // would turn one mid-build exception into a permanently blank viewer
+    // (every remount would hit the early return above).
+    lastBuildDesign = design;
+    lastBuildLayoutData = layoutData;
+    lastBuildLayoutModel = layoutModel;
     set({
       design, layoutData, model, conductors, couplingPairs, netLayers,
       rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED,
@@ -141,17 +166,46 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   },
 
   drillDown: (path) => {
-    const { model, crumbs, rootPath } = get();
+    const { model, rootPath } = get();
     if (!model?.blocks.has(path) || path === rootPath) return; // re-drilling the root must not duplicate the crumb
-    const i = crumbs.indexOf(path);
-    if (i >= 0) { set({ rootPath: path, crumbs: crumbs.slice(0, i + 1), ...CLEARED }); return; } // ancestor → jump back
-    set({ rootPath: path, crumbs: [...crumbs, path], ...CLEARED });
+    // Full ancestor trail, not an appended shortcut: a deep double-click (tree
+    // shows the whole design) must leave every intermediate level clickable.
+    set({ rootPath: path, crumbs: trailTo(model, path), ...CLEARED });
   },
 
   goToCrumb: (i) => {
     const { crumbs } = get();
     if (i < 0 || i >= crumbs.length) return;
     set({ rootPath: crumbs[i], crumbs: crumbs.slice(0, i + 1), ...CLEARED });
+  },
+
+  // Design-wide search jump (breadcrumb rule: build the full trail, don't
+  // descend): labels are raw instance ids from the top cell down to the
+  // target. Delegates to jumpToPath after normalization.
+  jumpTo: (labels) => {
+    const { model } = get();
+    if (!model) return;
+    const real = labels.map(l => normSeg(l) || l.toLowerCase()).filter(Boolean).join('/');
+    get().jumpToPath(displayPath(model, real));
+  },
+
+  // Jump to a display path: re-root at its parent, rebuild the full crumb
+  // trail, select it, and run the connectivity trace.
+  jumpToPath: (path) => {
+    const { design, model, conductors, depth } = get();
+    if (!design || !model || !conductors) return;
+    const block = model.blocks.get(path);
+    if (!block) return; // not in the model (unresolved master etc.) — no-op
+    const crumbs = trailTo(model, path);
+    crumbs.pop(); // trail up to the PARENT — the target itself stays a selected block on the rails
+    if (crumbs.length === 0) crumbs.push('');
+    set({
+      rootPath: crumbs[crumbs.length - 1], crumbs,
+      depth: Math.max(depth, 1),                 // target must be on a visible rail
+      ...CLEARED,
+      selected: path,
+      trace: traceConnectivity(design, model, conductors, path),
+    });
   },
 
   setDepth: (d) => set({ depth: Math.max(0, d), ...CLEARED }),
@@ -180,17 +234,34 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     classifyModel(model, design, design.topCell);
     set(s => ({ version: s.version + 1 }));
   },
-  togglePathMode: () => set(s => ({ pathMode: !s.pathMode, selected: null, trace: null, pathResult: null, startPin: '', endPin: '' })),
+  togglePathMode: () => set(s => ({ pathMode: !s.pathMode, ...CLEARED })),
   setPathPins: (startPin, endPin) => {
     const { design, model, conductors } = get();
     set({ startPin, endPin });
-    if (!design || !model || !conductors || !startPin || !endPin) { set({ pathResult: null, pathLayers: null }); return; }
+    if (!design || !model || !conductors || !startPin || !endPin) { set({ pathResult: null, pathLayers: null, pathPinsValid: false }); return; }
     const parse = (s2: string): PinRef => {
       const i = s2.lastIndexOf(':');
       return { block: s2.slice(0, i), pin: s2.slice(i + 1) };
     };
-    const result = findPath(design, model, conductors, parse(startPin), parse(endPin));
-    set({ pathResult: result, pathLayers: result ? layersFor(result, get().netLayers) : null });
+    // Resolve typed refs (display case → canonical paths/ports) and run the
+    // BFS only once both name real pins — partial input while typing must
+    // neither burn a graph search per keystroke nor flash the "no path" error.
+    const a = resolvePinRef(design, model, parse(startPin));
+    const b = resolvePinRef(design, model, parse(endPin));
+    if (!a || !b) {
+      set({ pathResult: null, pathLayers: null, pathPinsValid: false, pathEnds: null });
+      return;
+    }
+    const result = findPath(design, model, conductors, a, b);
+    set({
+      pathResult: result,
+      pathLayers: result ? layersFor(result, get().netLayers) : null,
+      pathPinsValid: true,
+      pathEnds: [
+        { block: displayPath(model, a.block), pin: a.pin },
+        { block: displayPath(model, b.block), pin: b.pin },
+      ],
+    });
   },
   toggleCoupling: () => set(s => ({ coupling: { ...s.coupling, on: !s.coupling.on } })),
   setCouplingMinC: (v) => set(s => ({ coupling: { ...s.coupling, minC: v } })),

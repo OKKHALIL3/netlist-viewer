@@ -170,9 +170,11 @@ function makeGroup(
 
   const members = sorted.map(e => e.path);
   const rep = model.blocks.get(members[0])!;
-  // Label keeps the instance ids' original case; path indices are authoritative
-  // (labels may carry finger suffixes that normSeg stripped from the path).
-  const labelParse = parseBusSuffix(sorted[0].label);
+  // Label keeps the instance ids' original case; path indices are authoritative.
+  // Strip finger suffixes (X<0>@2) the way normSeg does — but case-preserving —
+  // or the suffix blocks the bus parse and the label falls back to lowercase.
+  const cleanLabel = sorted[0].label.replace(/<@[^>]*>/g, '').replace(/@\d+$/, '').trim();
+  const labelParse = parseBusSuffix(cleanLabel);
   const label = labelParse
     ? busLabel(labelParse.base, labelParse.brackets, sorted.map(e => e.index))
     : gseg;
@@ -194,6 +196,25 @@ function makeGroup(
   }
   model.blocks.set(gpath, g);
   return gpath;
+}
+
+// Depth of the DISPLAY subtree under rootPath (0 = leaf root). The design-wide
+// maxDepth overstates a shallow macro inside a deep design — rails and the
+// depth slider must size to the actual subtree.
+export function subtreeDepth(model: HybridModel, rootPath: string): number {
+  const root = model.blocks.get(rootPath);
+  if (!root) return 0;
+  let max = 0;
+  const stack = [root];
+  while (stack.length) {
+    const b = stack.pop()!;
+    if (b.depth - root.depth > max) max = b.depth - root.depth;
+    for (const c of b.children) {
+      const cb = model.blocks.get(c);
+      if (cb) stack.push(cb);
+    }
+  }
+  return max;
 }
 
 // Map a REAL instance path onto the collapsed display tree: a path ending on

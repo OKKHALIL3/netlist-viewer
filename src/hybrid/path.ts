@@ -7,6 +7,22 @@ import { normSeg } from '../layout-viewer/correlate';
 export interface PinRef { block: string; pin: string }
 export interface PathResult { blocks: string[]; conductors: number[]; netCount: number; netNames: string[] }
 
+// Resolve a TYPED "block:pin" ref to canonical form, or null if it names no
+// real pin. Users type paths as displayed (original case, e.g. "XU1/XS2"),
+// but model paths are normSeg'd; port names resolve case-insensitively when
+// the exact case misses. Doubles as the validity gate that tells "still
+// typing" apart from "valid pins but genuinely no path" (no BFS on partials).
+export function resolvePinRef(design: Design, model: HybridModel, pin: PinRef): PinRef | null {
+  const block = pin.block === '' ? '' : pin.block.split('/').map(s => normSeg(s) || s.toLowerCase()).join('/');
+  const cellName = block === '' ? design.topCell : model.blocks.get(block)?.master;
+  if (!cellName) return null;
+  const cell = design.cells.get(cellName);
+  if (!cell) return null;
+  const exact = cell.ports.find(p => p.name === pin.pin);
+  const port = exact ?? cell.ports.find(p => p.name.toLowerCase() === pin.pin.toLowerCase());
+  return port ? { block, pin: port.name } : null;
+}
+
 export function pinConductor(design: Design, model: HybridModel, cond: Conductors, pin: PinRef): number | null {
   if (pin.block === '') return cond.idOf.get(`|${pin.pin}`) ?? null; // top-cell pin: port name = top-scope net
   // An ARRAY GROUP pin resolves through the representative member — a path is
@@ -87,9 +103,12 @@ export function findPath(design: Design, model: HybridModel, cond: Conductors, s
     const dp = displayPath(model, bp);
     if (!blocks.includes(dp)) blocks.push(dp);
   }
-  // endpoint blocks (unless a pin is the top cell itself) — already display paths
-  if (start.block && blocks[0] !== start.block) blocks.unshift(start.block);
-  if (end.block && blocks[blocks.length - 1] !== end.block) blocks.push(end.block);
+  // endpoint blocks (unless a pin is the top cell itself) — display-mapped too:
+  // a typed ref may name a real array member, which must surface as its group
+  const sb = start.block && displayPath(model, start.block);
+  const eb = end.block && displayPath(model, end.block);
+  if (sb && blocks[0] !== sb) blocks.unshift(sb);
+  if (eb && blocks[blocks.length - 1] !== eb) blocks.push(eb);
 
   const netNames = conductors.map(id => {
     const m0 = cond.members.get(id)?.[0];

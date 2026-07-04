@@ -19,7 +19,10 @@ export function HybridViewer() {
   }, [design, layoutData, layoutModel, build]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') clearOverlays(); };
+    const onKey = (e: KeyboardEvent) => {
+      // Escape closes the search palette first — don't also wipe the selection.
+      if (e.key === 'Escape' && !useViewerStore.getState().searchOpen) clearOverlays();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [clearOverlays]);
@@ -48,8 +51,10 @@ export function HybridViewer() {
         {crumbs.map((c, i) => (
           <span key={c || 'root'} style={{ display: 'flex', alignItems: 'center' }}>
             {i > 0 && <span className="crumb-sep">/</span>}
-            <span className={`crumb-item${i === crumbs.length - 1 ? ' cur' : ''}`} onClick={() => goToCrumb(i)}>
-              {model.blocks.get(c)?.label ?? c}
+            <span className={`crumb-item${i === crumbs.length - 1 ? ' cur' : ''}`}
+                  title={i === 0 ? model.blocks.get('')?.label : undefined}
+                  onClick={i === crumbs.length - 1 ? undefined : () => goToCrumb(i)}>
+              {i === 0 ? 'top' : (model.blocks.get(c)?.label ?? c)}
             </span>
           </span>
         ))}
@@ -58,9 +63,16 @@ export function HybridViewer() {
         <HybridControls />
         <HierTreePanel />
         <RailsCanvas />
-        <BlockStatsCard />
-        <PropagationPanel />
-        {coupling.on && selected && <CouplingPanel />}
+        {/* Right overlay rail: stats, coupling, and propagation stack in one
+            bounded column — the two list cards shrink and scroll internally,
+            so the cards can never overlap (and the rail itself never needs a
+            scrollbar). pointer-events pass through the empty rail. */}
+        <div style={{ position: 'absolute', top: 14, right: 14, bottom: 14, width: 260,
+                      display: 'flex', flexDirection: 'column', gap: 12, pointerEvents: 'none' }}>
+          <BlockStatsCard />
+          {coupling.on && selected && <CouplingPanel />}
+          <PropagationPanel />
+        </div>
       </div>
       <div style={{ background: T.panel, borderTop: `1px solid ${T.border}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 26, fontSize: 12.5, color: T.text }}>
         <span>Pins <b style={{ fontFamily: T.mono, color: T.blue }}>({footer.pins})</b></span>

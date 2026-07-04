@@ -84,8 +84,9 @@ export function TopBar() {
         ACE
       </div>
 
-      {/* Breadcrumb (center) */}
-      {design && (
+      {/* Breadcrumb (center) — schematic navigation; the hybrid viewer draws
+          its own trail, so showing (and mutating) this one there is misleading */}
+      {design && appMode !== 'hybrid' && (
         <div className="breadcrumb">
           {breadcrumb.map((entry, i) => (
             <span key={i}>
@@ -134,13 +135,15 @@ export function TopBar() {
               </button>
             </div>
 
+            {/* Design-wide search — jumps in schematic AND hybrid mode */}
+            {(appMode === 'schematic' || appMode === 'hybrid') && (
+              <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
+                ⌕ Search <kbd>/</kbd>
+              </button>
+            )}
+
             {appMode === 'schematic' && (
               <>
-                {/* Design-wide search */}
-                <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
-                  ⌕ Search <kbd>/</kbd>
-                </button>
-
                 {/* Hide supply toggle */}
                 <div className="supply-toggle">
                   <span className="supply-label">Hide supply nets</span>
