@@ -18,8 +18,6 @@ export function Panel({ title, children }: { title: string; children: React.Reac
 export function HybridControls() {
   const {
     design, model, rootPath, depth, setDepth,
-    zoneColors, toggleZoneColors, sizeByContent, toggleSizeByContent,
-    weights, setWeights,
     funcOff, toggleFunc, supplyOff, toggleSupply,
     pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
@@ -46,32 +44,9 @@ export function HybridControls() {
         </div>
       </Panel>
 
-      <Panel title="Display">
-        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
-          <input type="checkbox" checked={zoneColors} onChange={toggleZoneColors} style={{ accentColor: T.blue }} />
-          Zone colors
-        </label>
-        <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, cursor: 'pointer' }}>
-          <input type="checkbox" checked={sizeByContent} onChange={toggleSizeByContent} style={{ accentColor: T.blue }} />
-          Size by content (criticality)
-        </label>
-        <div style={{ fontSize: 10, color: T.muted, marginTop: 4 }}>Siblings are ordered most critical first.</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 8 }}>
-          {(['dev', 'net', 'para', 'coup'] as const).map((label, i) => (
-            <label key={label} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: T.muted }}>
-              {label}
-              <input type="number" step={0.05} min={0} max={1} value={weights[i]}
-                     onChange={e => {
-                       const w = [...weights] as [number, number, number, number];
-                       w[i] = +e.target.value;
-                       setWeights(w);
-                     }}
-                     style={{ width: 48, fontSize: 12 }} />
-            </label>
-          ))}
-        </div>
-      </Panel>
-
+      {/* The "Display" tuning card (zone-color / criticality-sizing toggles +
+          weight inputs) was removed on Amr's review — zone colors and
+          criticality sizing/ordering stay on with default weights. */}
       <Panel title="Functional map">
         {(Object.keys(TAXONOMY) as Array<keyof typeof TAXONOMY>).map(g => {
           const keys = TAXONOMY[g].map(c => `${g}:${c}`);

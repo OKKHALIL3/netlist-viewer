@@ -141,8 +141,10 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   },
 
   drillDown: (path) => {
-    const { model, crumbs } = get();
-    if (!model?.blocks.has(path)) return;
+    const { model, crumbs, rootPath } = get();
+    if (!model?.blocks.has(path) || path === rootPath) return; // re-drilling the root must not duplicate the crumb
+    const i = crumbs.indexOf(path);
+    if (i >= 0) { set({ rootPath: path, crumbs: crumbs.slice(0, i + 1), ...CLEARED }); return; } // ancestor → jump back
     set({ rootPath: path, crumbs: [...crumbs, path], ...CLEARED });
   },
 

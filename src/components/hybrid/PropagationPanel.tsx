@@ -3,6 +3,8 @@ import { useHybridStore } from '../../store/hybridStore';
 import { T } from './theme';
 import { Panel } from './HybridControls';
 
+const pl = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 export function PropagationPanel() {
   const { model, trace, selected } = useHybridStore();
   if (!model || !trace || selected === null) return null;
@@ -11,7 +13,7 @@ export function PropagationPanel() {
     <div style={{ position: 'absolute', bottom: 14, right: 14, width: 260, maxHeight: '50%', overflowY: 'auto' }}>
       <Panel title={`Connected to ${model.blocks.get(selected)?.label}`}>
         <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
-          {trace.nets.length} nets · {trace.blocks.size} blocks · {trace.levelsCrossed} levels
+          {pl(trace.nets.length, 'net')} · {pl(trace.blocks.size, 'block')} · {pl(trace.levelsCrossed, 'level')}
         </div>
         {levels.map(lvl => (
           <div key={lvl} style={{ marginBottom: 6 }}>

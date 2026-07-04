@@ -93,6 +93,19 @@ test('layersFor normalizes conductor net names the same way netLayers keys were 
   assert.equal(layersFor(pr(['xi1/net5']), null), null);                      // no DSPF → unavailable
 });
 
+test('drillDown never duplicates crumbs: current root is a no-op, ancestors jump back', () => {
+  s().build(tinyDesign(), null, null);
+  s().drillDown('');                       // double-click the root row/card — Amr's repeated-crumb bug
+  assert.deepEqual(s().crumbs, ['']);
+  s().drillDown('xu1');
+  s().drillDown('xu1');                    // re-drill the current root — still a no-op
+  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  assert.equal(s().rootPath, 'xu1');
+  s().drillDown('');                       // drill "down" to an ancestor → jump back, not append
+  assert.deepEqual(s().crumbs, ['']);
+  assert.equal(s().rootPath, '');
+});
+
 test('build is a no-op on identical design/layoutData/layoutModel references; a new design still resets', () => {
   const design = tinyDesign();
   s().build(design, null, null);
