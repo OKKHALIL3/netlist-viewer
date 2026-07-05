@@ -198,25 +198,6 @@ function makeGroup(
   return gpath;
 }
 
-// Depth of the DISPLAY subtree under rootPath (0 = leaf root). The design-wide
-// maxDepth overstates a shallow macro inside a deep design — rails and the
-// depth slider must size to the actual subtree.
-export function subtreeDepth(model: HybridModel, rootPath: string): number {
-  const root = model.blocks.get(rootPath);
-  if (!root) return 0;
-  let max = 0;
-  const stack = [root];
-  while (stack.length) {
-    const b = stack.pop()!;
-    if (b.depth - root.depth > max) max = b.depth - root.depth;
-    for (const c of b.children) {
-      const cb = model.blocks.get(c);
-      if (cb) stack.push(cb);
-    }
-  }
-  return max;
-}
-
 // Map a REAL instance path onto the collapsed display tree: a path ending on
 // an array member displays as its group; a path THROUGH a member displays as
 // the same position under the representative's subtree (structural twin).

@@ -2,20 +2,20 @@
 import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { couplingFor } from '../../hybrid/coupling';
-import { computeSlots } from '../../hybrid/slots';
+import { visiblePaths } from '../../hybrid/slots';
 import { T } from './theme';
 import { Panel } from './HybridControls';
 
 export function CouplingPanel() {
-  const { design, layoutData, model, selected, rootPath, depth, coupling, couplingPairs } = useHybridStore();
-  const layout = useMemo(
-    () => (model ? computeSlots(model, rootPath, depth) : null),
-    [model, rootPath, depth],
+  const { design, layoutData, model, selected, openPath, coupling, couplingPairs } = useHybridStore();
+  const vis = useMemo(
+    () => (model ? visiblePaths(model, openPath) : null),
+    [model, openPath],
   );
   const neighbors = useMemo(() => {
-    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !layout) return [];
-    return couplingFor(design, model, layoutData, couplingPairs, selected, [...layout.slot.keys()], coupling.minC, coupling.includeSupply);
-  }, [coupling, selected, couplingPairs, layoutData, design, model, layout]);
+    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !vis) return [];
+    return couplingFor(design, model, layoutData, couplingPairs, selected, vis, coupling.minC, coupling.includeSupply);
+  }, [coupling, selected, couplingPairs, layoutData, design, model, vis]);
   if (!model || !coupling.on || selected === null) return null;
   return (
     // Sits in the right overlay rail (HybridViewer) — shrinks + scrolls internally.

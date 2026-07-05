@@ -1,33 +1,103 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import type { Design, Cell } from '../parser/types';
 import { tinyDesign } from '../hybrid/__fixtures__/tiny';
 import { arrayedDesign } from '../hybrid/__fixtures__/arrayed';
+import { cell } from '../hybrid/__fixtures__/tiny';
 import { useHybridStore, passesFilters, layersFor } from './hybridStore';
 import type { PathResult } from '../hybrid/path';
 
 const s = () => useHybridStore.getState();
 
-test('build populates model and resets navigation', () => {
+// two non-leaf siblings — branch-switch coverage that tiny (one non-leaf) can't give
+function twinDesign(): Design {
+  const cells = new Map<string, Cell>();
+  cells.set('T2', cell('T2', ['in', 'out', 'vdd', 'vss'], [
+    ['XA', 'AMP2', { a: 'in', z: 'mid', vdd: 'vdd', vss: 'vss' }],
+    ['XB', 'AMP2', { a: 'mid', z: 'out', vdd: 'vdd', vss: 'vss' }],
+  ], []));
+  cells.set('AMP2', cell('AMP2', ['a', 'z', 'vdd', 'vss'], [
+    ['XS1', 'STG2', { g: 'a', d: 'z', vdd: 'vdd', vss: 'vss' }],
+  ], []));
+  cells.set('STG2', cell('STG2', ['g', 'd', 'vdd', 'vss'], [
+    ['XM', 'UNIT2', { g: 'g', d: 'd', vdd: 'vdd', vss: 'vss' }],
+  ], []));
+  cells.set('UNIT2', cell('UNIT2', ['g', 'd', 'vdd', 'vss'], [], [
+    ['M1', 'M', 'nch', [['d', 'd'], ['g', 'g'], ['s', 'vss'], ['b', 'vss']]],
+  ]));
+  return { cells, topCell: 'T2', warnings: [] };
+}
+
+test('build populates model and resets navigation to the closed top box', () => {
   s().build(tinyDesign(), null, null);
   assert.ok(s().model);
-  assert.equal(s().rootPath, '');
-  assert.deepEqual(s().crumbs, ['']);
+  assert.deepEqual(s().openPath, []);
 });
 
-test('drillDown pushes crumb; navigation clears selection', () => {
+test('toggleOpen opens the level below, toggles closed, ignores leaves', () => {
+  s().build(tinyDesign(), null, null);
+  s().toggleOpen('');                        // Amr's bug 1: double-click the top block
+  assert.deepEqual(s().openPath, ['']);      // children now on rail 1, top box stays
+  s().toggleOpen('xu1');                     // Amr's bug 2: children open BELOW xu1
+  assert.deepEqual(s().openPath, ['', 'xu1']);
+  s().toggleOpen('xu1');                     // toggle shut
+  assert.deepEqual(s().openPath, ['']);
+  s().toggleOpen('xu1');
+  s().toggleOpen('xu2');                     // leaf — nothing underneath → no-op
+  assert.deepEqual(s().openPath, ['', 'xu1']);
+  s().toggleOpen('');                        // closing an open ancestor collapses its chain
+  assert.deepEqual(s().openPath, []);
+});
+
+test('toggleOpen on a closed sibling switches the branch at that level', () => {
+  s().build(twinDesign(), null, null);
+  s().toggleOpen('');
+  s().toggleOpen('xa');
+  assert.deepEqual(s().openPath, ['', 'xa']);
+  s().toggleOpen('xb');                      // double-click the sliver beside the open block
+  assert.deepEqual(s().openPath, ['', 'xb']); // branch switched, old branch collapsed
+});
+
+test('toggleOpen on a deep closed block opens the FULL ancestor trail', () => {
+  s().build(twinDesign(), null, null);
+  s().toggleOpen('xa/xs1');                  // straight from the closed top view
+  assert.deepEqual(s().openPath, ['', 'xa', 'xa/xs1']);
+});
+
+test('navigation clears selection and overlays', () => {
   s().build(tinyDesign(), null, null);
   s().select('xu1');
-  s().drillDown('xu1');
-  assert.equal(s().rootPath, 'xu1');
-  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  s().toggleOpen('xu1');
+  assert.deepEqual(s().openPath, ['', 'xu1']);
   assert.equal(s().selected, null);           // clear-on-navigation rule
   s().select('xu1/xs1');
   s().goToCrumb(0);
-  assert.equal(s().rootPath, '');
+  assert.deepEqual(s().openPath, ['']);
   assert.equal(s().selected, null);
-  s().select('xu2');
-  s().setDepth(2);
-  assert.equal(s().selected, null);
+});
+
+test('drillDown opens down to the block; a leaf opens to its parent', () => {
+  s().build(tinyDesign(), null, null);
+  s().drillDown('xu1');                      // tree-panel double-click
+  assert.deepEqual(s().openPath, ['', 'xu1']);
+  s().drillDown('xu1');                      // idempotent — no duplicate levels
+  assert.deepEqual(s().openPath, ['', 'xu1']);
+  s().drillDown('xu1/xs1');                  // leaf → parent chain, leaf visible on the frontier
+  assert.deepEqual(s().openPath, ['', 'xu1']);
+  s().drillDown('');                         // "drill" the root → just the first level open
+  assert.deepEqual(s().openPath, ['']);
+});
+
+test('goToCrumb collapses everything below the clicked level', () => {
+  s().build(twinDesign(), null, null);
+  s().drillDown('xa/xs1');
+  assert.deepEqual(s().openPath, ['', 'xa', 'xa/xs1']);
+  s().goToCrumb(1);
+  assert.deepEqual(s().openPath, ['', 'xa']);
+  s().goToCrumb(0);
+  assert.deepEqual(s().openPath, ['']);
+  s().goToCrumb(5);                          // out of range → no-op
+  assert.deepEqual(s().openPath, ['']);
 });
 
 test('passesFilters: unclassified and domain-less blocks always pass', () => {
@@ -55,7 +125,7 @@ test('select runs trace; navigation clears it', () => {
   s().select('xu1');
   assert.ok(s().trace);
   assert.ok(s().trace!.blocks.has('xu2'));
-  s().drillDown('xu1');
+  s().toggleOpen('xu1');
   assert.equal(s().trace, null);
   s().select(null);
   assert.equal(s().trace, null);
@@ -66,10 +136,11 @@ test('path pins run findPath; navigation clears result', () => {
   s().togglePathMode();
   s().setPathPins('xu1/xs1:d', 'xu2:z');
   assert.equal(s().pathResult!.netCount, 3);
-  s().setDepth(1);
+  s().toggleOpen('');
   assert.equal(s().pathResult, null);
   s().setPathPins('xu1:vdd', 'xu2:a');   // supply pin → explicit no-path
   assert.equal(s().pathResult, null);
+  s().togglePathMode();
 });
 
 test('coupling: defaults and toggles', () => {
@@ -94,26 +165,6 @@ test('layersFor normalizes conductor net names the same way netLayers keys were 
   assert.equal(layersFor(pr(['xi1/net5']), null), null);                      // no DSPF → unavailable
 });
 
-test('drillDown never duplicates crumbs: current root is a no-op, ancestors jump back', () => {
-  s().build(tinyDesign(), null, null);
-  s().drillDown('');                       // double-click the root row/card — Amr's repeated-crumb bug
-  assert.deepEqual(s().crumbs, ['']);
-  s().drillDown('xu1');
-  s().drillDown('xu1');                    // re-drill the current root — still a no-op
-  assert.deepEqual(s().crumbs, ['', 'xu1']);
-  assert.equal(s().rootPath, 'xu1');
-  s().drillDown('');                       // drill "down" to an ancestor → jump back, not append
-  assert.deepEqual(s().crumbs, ['']);
-  assert.equal(s().rootPath, '');
-});
-
-test('drillDown on a deep block builds the FULL ancestor trail', () => {
-  s().build(tinyDesign(), null, null);
-  s().drillDown('xu1/xs1');                // tree shows the whole design — deep double-click
-  assert.deepEqual(s().crumbs, ['', 'xu1', 'xu1/xs1']); // no skipped levels
-  assert.equal(s().rootPath, 'xu1/xs1');
-});
-
 test('path pins resolve display-cased input and expose display-mapped ends', () => {
   s().build(tinyDesign(), null, null);
   s().togglePathMode();
@@ -136,15 +187,14 @@ test('path through an array member surfaces its group at the endpoints', () => {
   s().togglePathMode();
 });
 
-test('jumpTo builds the full crumb trail, selects, and traces (search jump)', () => {
+test('jumpTo opens the trail to the parent, selects, and traces (search jump)', () => {
   s().build(tinyDesign(), null, null);
   s().jumpTo(['XU1', 'XS2']);
-  assert.equal(s().rootPath, 'xu1');
-  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  assert.deepEqual(s().openPath, ['', 'xu1']);   // target visible on xu1's rail
   assert.equal(s().selected, 'xu1/xs2');
   assert.ok(s().trace);
-  s().jumpTo(['XU2']);                       // top-level target → root view
-  assert.deepEqual(s().crumbs, ['']);
+  s().jumpTo(['XU2']);                       // top-level target → root open, target on rail 1
+  assert.deepEqual(s().openPath, ['']);
   assert.equal(s().selected, 'xu2');
   s().jumpTo(['XU1', 'NOPE']);               // unknown path → no-op, state kept
   assert.equal(s().selected, 'xu2');
@@ -154,25 +204,22 @@ test('jumpTo lands on the array group when the target is a member', () => {
   s().build(arrayedDesign(), null, null);
   s().jumpTo(['XA<1>', 'XB<0>']);            // deep inside a non-representative member
   assert.equal(s().selected, 'xa<0>/xb<1:0>'); // structural twin under the representative
-  assert.deepEqual(s().crumbs, ['', 'xa<2:0>']);
-  assert.equal(s().rootPath, 'xa<2:0>');
+  assert.deepEqual(s().openPath, ['', 'xa<2:0>']);
   s().jumpTo(['XA<2>']);                     // the member itself → its group
   assert.equal(s().selected, 'xa<2:0>');
-  assert.deepEqual(s().crumbs, ['']);
+  assert.deepEqual(s().openPath, ['']);
 });
 
 test('build is a no-op on identical design/layoutData/layoutModel references; a new design still resets', () => {
   const design = tinyDesign();
   s().build(design, null, null);
-  s().drillDown('xu1');
-  assert.equal(s().rootPath, 'xu1');
-  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  s().toggleOpen('');
+  s().toggleOpen('xu1');
+  assert.deepEqual(s().openPath, ['', 'xu1']);
 
   s().build(design, null, null);           // same references — HybridViewer remount, e.g. a mode switch
-  assert.equal(s().rootPath, 'xu1');        // navigation preserved, not reset
-  assert.deepEqual(s().crumbs, ['', 'xu1']);
+  assert.deepEqual(s().openPath, ['', 'xu1']); // navigation preserved, not reset
 
   s().build(tinyDesign(), null, null);      // a genuinely new design object
-  assert.equal(s().rootPath, '');           // resets as before
-  assert.deepEqual(s().crumbs, ['']);
+  assert.deepEqual(s().openPath, []);       // resets as before
 });

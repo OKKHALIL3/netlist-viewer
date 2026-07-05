@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { TAXONOMY } from '../../hybrid/classify';
-import { displayPath, subtreeDepth } from '../../hybrid/model';
+import { displayPath } from '../../hybrid/model';
 import { T } from './theme';
 
 // `subject` renders verbatim in mono next to the uppercase title — instance
@@ -28,7 +28,7 @@ export function Panel({ title, subject, children }: { title: string; subject?: s
 
 export function HybridControls() {
   const {
-    design, model, rootPath, depth, setDepth,
+    design, model,
     funcOff, toggleFunc, supplyOff, toggleSupply,
     pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathPinsValid,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
@@ -54,18 +54,11 @@ export function HybridControls() {
     [pathMode, design, model],
   );
   if (!model) return null;
-  const maxBelow = subtreeDepth(model, rootPath); // current subtree, not design-wide maxDepth
   return (
     <div style={{ width: 244, padding: 12, overflowY: 'auto', borderRight: `1px solid ${T.border}`, background: T.bg }}>
-      <Panel title="Hier depth">
-        <input type="range" min={0} max={Math.max(1, maxBelow)} value={Math.min(depth, maxBelow)}
-               disabled={maxBelow === 0}
-               onChange={e => setDepth(+e.target.value)} style={{ width: '100%', accentColor: T.blue }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted }}>
-          <span>Top only</span><span>All levels</span>
-        </div>
-      </Panel>
-
+      {/* The "Hier depth" expand-all slider was removed on Amr's round-3
+          review — depth now follows the open chain on the canvas itself
+          (double-click opens the level below; the rest stays collapsed). */}
       {/* The "Display" tuning card (zone-color / criticality-sizing toggles +
           weight inputs) was removed on Amr's review — zone colors and
           criticality sizing/ordering stay on with default weights. */}

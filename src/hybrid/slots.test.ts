@@ -1,42 +1,80 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tinyDesign } from './__fixtures__/tiny';
+import { arrayedDesign } from './__fixtures__/arrayed';
 import { buildHybridModel } from './model';
-import { computeSlots } from './slots';
+import { computeRails, visiblePaths, SLIVER_W } from './slots';
 
-test('leaf slots increment, parents center over children', () => {
+const W = 150, GAP = 10; // layout defaults
+
+test('closed root: a single full box on rail 0', () => {
   const m = buildHybridModel(tinyDesign());
-  const { slot, width } = computeSlots(m, '', 2);
-  // leaves in document order: xu1/xs1=0, xu1/xs2=1, xu2=2
-  assert.equal(slot.get('xu1/xs1'), 0);
-  assert.equal(slot.get('xu1/xs2'), 1);
-  assert.equal(slot.get('xu2'), 2);
-  assert.equal(slot.get('xu1'), 0.5);      // mean of children
-  assert.equal(slot.get(''), 1.25);        // mean(0.5, 2)
-  assert.equal(width, 3);
+  const l = computeRails(m, []);
+  assert.deepEqual(l.rails, [['']]);
+  assert.deepEqual(l.items.get(''), { path: '', x: 0, w: W, lvl: 0, sliver: false });
+  assert.equal(l.width, W);
 });
 
-test('depth cap turns inner nodes into leaves', () => {
+test('open root: children appear on the rail below, all full (frontier)', () => {
   const m = buildHybridModel(tinyDesign());
-  const { slot, width } = computeSlots(m, '', 1);
-  assert.equal(slot.get('xu1'), 0);
-  assert.equal(slot.get('xu2'), 1);
-  assert.equal(slot.has('xu1/xs1'), false);
-  assert.equal(width, 2);
+  const l = computeRails(m, ['']);
+  assert.deepEqual(l.rails, [[''], ['xu1', 'xu2']]);
+  assert.equal(l.width, 2 * W + GAP);
+  assert.equal(l.items.get('')!.x, (l.width - W) / 2);   // narrower rails center over the widest
+  assert.deepEqual(l.items.get('xu1'), { path: 'xu1', x: 0, w: W, lvl: 1, sliver: false });
+  assert.equal(l.items.get('xu2')!.x, W + GAP);
 });
 
-test('custom order reorders siblings inside parent span', () => {
+test('open path: the open child stays full, siblings collapse to slivers', () => {
+  const m = buildHybridModel(tinyDesign());
+  const l = computeRails(m, ['', 'xu1']);
+  assert.deepEqual(l.rails[2], ['xu1/xs1', 'xu1/xs2']);
+  const xu1 = l.items.get('xu1')!, xu2 = l.items.get('xu2')!;
+  assert.equal(xu1.sliver, false);
+  assert.equal(xu1.w, W);
+  assert.equal(xu2.sliver, true);
+  assert.equal(xu2.w, SLIVER_W);
+  const rail1W = W + GAP + SLIVER_W;
+  assert.equal(xu1.x, (l.width - rail1W) / 2);
+  assert.equal(xu2.x, xu1.x + W + GAP);
+  // the frontier rail (xu1's children) is the widest and spans the content width
+  assert.equal(l.width, 2 * W + GAP);
+  assert.equal(l.items.get('xu1/xs1')!.sliver, false);
+});
+
+test('stale chain entries are dropped: layout stops at the first invalid hop', () => {
+  const m = buildHybridModel(tinyDesign());
+  assert.equal(computeRails(m, ['', 'nope']).rails.length, 2);        // '' still open
+  assert.deepEqual(computeRails(m, ['xu1']).rails, [['']]);           // chain must start at root
+  assert.equal(computeRails(m, ['', 'xu1', 'xu2']).rails.length, 3);  // xu2 is not xu1's child
+});
+
+test('order callback sorts every rail, open or frontier', () => {
   const m = buildHybridModel(tinyDesign());
   const rev = (a: string, b: string) => b.localeCompare(a);
-  const { slot } = computeSlots(m, '', 2, rev);
-  assert.equal(slot.get('xu2'), 0);        // reversed: xu2 first
-  assert.equal(slot.get('xu1/xs2'), 1);
-  assert.equal(slot.get('xu1/xs1'), 2);
+  const l = computeRails(m, [''], rev);
+  assert.deepEqual(l.rails[1], ['xu2', 'xu1']);
 });
 
-test('re-rooting at a block lays out only its subtree', () => {
+test('fullW callback sizes full boxes; slivers stay fixed', () => {
   const m = buildHybridModel(tinyDesign());
-  const { slot, width } = computeSlots(m, 'xu1', 1);
-  assert.deepEqual([...slot.keys()].sort(), ['xu1', 'xu1/xs1', 'xu1/xs2']);
-  assert.equal(width, 2);
+  const l = computeRails(m, ['', 'xu1'], undefined, () => 100);
+  assert.equal(l.items.get('xu1')!.w, 100);
+  assert.equal(l.items.get('xu2')!.w, SLIVER_W);
+});
+
+test('visiblePaths matches the laid-out set', () => {
+  const m = buildHybridModel(tinyDesign());
+  for (const open of [[], [''], ['', 'xu1'], ['', 'nope']] as string[][]) {
+    const l = computeRails(m, open);
+    assert.deepEqual([...visiblePaths(m, open)].sort(), [...l.items.keys()].sort());
+  }
+});
+
+test('rails lay out array groups, never members', () => {
+  const m = buildHybridModel(arrayedDesign());
+  const l = computeRails(m, ['', 'xa<2:0>']);
+  assert.deepEqual(l.rails[1], ['xa<2:0>', 'xs', 'xt']);
+  assert.deepEqual(l.rails[2], ['xa<0>/xb<1:0>']);       // representative subtree
+  assert.ok(!l.items.has('xa<1>'));
 });

@@ -6,11 +6,10 @@ import { Panel } from './HybridControls';
 const pl = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function PropagationPanel() {
-  const { model, trace, selected, rootPath, jumpToPath } = useHybridStore();
+  const { model, trace, selected, jumpToPath } = useHybridStore();
   if (!model || !trace || selected === null) return null;
   const selBlock = model.blocks.get(selected);
   if (!selBlock || selBlock.parent === null) return null; // the top cell has no outside to connect to
-  const rootDepth = model.blocks.get(rootPath)?.depth ?? 0;
   const levels = [...trace.byLevel.keys()].sort((a, b) => a - b);
   return (
     // Sits in the right overlay rail (HybridViewer) — shrinks + scrolls internally.
@@ -24,9 +23,9 @@ export function PropagationPanel() {
         )}
         {levels.map(lvl => (
           <div key={lvl} style={{ marginBottom: 6 }}>
-            {/* levels shown relative to the current root, matching the rails */}
+            {/* absolute depth — the rails always start at the top cell now */}
             <div style={{ fontSize: 9.5, fontWeight: 600, letterSpacing: '0.8px', color: T.faint, textTransform: 'uppercase' }}>
-              Level {lvl - rootDepth >= 0 ? lvl - rootDepth : lvl}
+              Level {lvl}
             </div>
             {trace.byLevel.get(lvl)!.map(p => (
               <div key={p} title={p || model.blocks.get(p)?.label}

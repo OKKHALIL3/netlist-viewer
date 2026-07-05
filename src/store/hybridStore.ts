@@ -38,9 +38,12 @@ interface HybridState {
   trace: TraceResult | null;
   couplingPairs: NetPairCoupling[] | null;
   netLayers: Map<string, string[]> | null;
-  rootPath: string;
-  crumbs: string[];
-  depth: number;
+  // The open chain (Amr's round-3 navigation model): openPath[i] is the block
+  // whose children are expanded on rail i+1. [] = nothing open (top box only);
+  // non-empty chains always start at '' (the root). The breadcrumb IS this
+  // chain. Siblings of open blocks render as slivers; the frontier rail
+  // (children of the last entry) renders full.
+  openPath: string[];
   zoneColors: boolean;
   sizeByContent: boolean;
   weights: [number, number, number, number];
@@ -60,11 +63,11 @@ interface HybridState {
   coupling: { on: boolean; minC: number; includeSupply: boolean };
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
+  toggleOpen: (path: string) => void;
   drillDown: (path: string) => void;
   goToCrumb: (i: number) => void;
   jumpTo: (labels: string[]) => void;
   jumpToPath: (path: string) => void;
-  setDepth: (d: number) => void;
   select: (path: string | null) => void;
   clearOverlays: () => void;
   toggleZoneColors: () => void;
@@ -115,9 +118,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   trace: null,
   couplingPairs: null,
   netLayers: null,
-  rootPath: '',
-  crumbs: [''],
-  depth: 3,
+  openPath: [],
   zoneColors: true,
   sizeByContent: true,
   weights: [0.3, 0.2, 0.3, 0.2],
@@ -161,22 +162,40 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     lastBuildLayoutModel = layoutModel;
     set({
       design, layoutData, model, conductors, couplingPairs, netLayers,
-      rootPath: '', crumbs: [''], depth: Math.min(3, model.maxDepth), ...CLEARED,
+      openPath: [], ...CLEARED,
     });
   },
 
+  // Canvas double-click: open the block's children on the rail BELOW it (the
+  // block itself stays put), or close them if it is already open. Opening a
+  // sibling of an open block switches the branch at that level — the old
+  // branch's deeper rails collapse. Leaves have nothing to open → no-op.
+  toggleOpen: (path) => {
+    const { model, openPath } = get();
+    const block = model?.blocks.get(path);
+    if (!model || !block || block.children.length === 0) return;
+    const trail = trailTo(model, path);
+    const isOpen = trail.length <= openPath.length && trail.every((p, i) => openPath[i] === p);
+    set({ openPath: isOpen ? trail.slice(0, -1) : trail, ...CLEARED });
+  },
+
+  // Open the rails down to `path` (tree-panel double-click / programmatic
+  // "show me this block's contents"). Full ancestor trail, never a shortcut:
+  // every intermediate level gets its rail and crumb. A leaf opens to its
+  // parent instead — the leaf stays a visible block on the frontier rail.
   drillDown: (path) => {
-    const { model, rootPath } = get();
-    if (!model?.blocks.has(path) || path === rootPath) return; // re-drilling the root must not duplicate the crumb
-    // Full ancestor trail, not an appended shortcut: a deep double-click (tree
-    // shows the whole design) must leave every intermediate level clickable.
-    set({ rootPath: path, crumbs: trailTo(model, path), ...CLEARED });
+    const { model } = get();
+    const block = model?.blocks.get(path);
+    if (!model || !block) return;
+    const trail = trailTo(model, path);
+    if (block.children.length === 0) trail.pop();
+    set({ openPath: trail, ...CLEARED });
   },
 
   goToCrumb: (i) => {
-    const { crumbs } = get();
-    if (i < 0 || i >= crumbs.length) return;
-    set({ rootPath: crumbs[i], crumbs: crumbs.slice(0, i + 1), ...CLEARED });
+    const { openPath } = get();
+    if (i < 0 || i >= openPath.length) return;
+    set({ openPath: openPath.slice(0, i + 1), ...CLEARED });
   },
 
   // Design-wide search jump (breadcrumb rule: build the full trail, don't
@@ -189,26 +208,24 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     get().jumpToPath(displayPath(model, real));
   },
 
-  // Jump to a display path: re-root at its parent, rebuild the full crumb
-  // trail, select it, and run the connectivity trace.
+  // Jump to a display path: open the rails down to its PARENT (the target
+  // itself stays a selectable full block on the frontier rail), select it,
+  // and run the connectivity trace.
   jumpToPath: (path) => {
-    const { design, model, conductors, depth } = get();
+    const { design, model, conductors } = get();
     if (!design || !model || !conductors) return;
     const block = model.blocks.get(path);
     if (!block) return; // not in the model (unresolved master etc.) — no-op
-    const crumbs = trailTo(model, path);
-    crumbs.pop(); // trail up to the PARENT — the target itself stays a selected block on the rails
-    if (crumbs.length === 0) crumbs.push('');
+    const trail = trailTo(model, path);
+    trail.pop();
     set({
-      rootPath: crumbs[crumbs.length - 1], crumbs,
-      depth: Math.max(depth, 1),                 // target must be on a visible rail
+      openPath: trail,
       ...CLEARED,
       selected: path,
       trace: traceConnectivity(design, model, conductors, path),
     });
   },
 
-  setDepth: (d) => set({ depth: Math.max(0, d), ...CLEARED }),
   select: (path) => {
     const { design, model, conductors } = get();
     if (path === null || !design || !model || !conductors) { set({ selected: path, trace: null }); return; }

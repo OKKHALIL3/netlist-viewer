@@ -5,8 +5,7 @@ import { arrayedDesign } from './__fixtures__/arrayed';
 import { dnet } from './__fixtures__/fakeLayout';
 import { cell } from './__fixtures__/tiny';
 import type { Design } from '../parser/types';
-import { buildHybridModel, displayPath, subtreeDepth } from './model';
-import { computeSlots } from './slots';
+import { buildHybridModel, displayPath } from './model';
 import { buildConductors, traceConnectivity } from './connectivity';
 import { findPath } from './path';
 import { relatedDisplay } from './coupling';
@@ -53,16 +52,6 @@ test('displayPath maps members, member subtrees, and identities', () => {
   // a path THROUGH a member lands on the structural twin under the representative
   assert.equal(displayPath(m, 'xa<1>/xb<0>'), 'xa<0>/xb<1:0>');
   assert.equal(displayPath(m, 'xa<0>/xb<1>'), 'xa<0>/xb<1:0>');
-});
-
-test('slots lay out groups instead of members', () => {
-  const m = buildHybridModel(arrayedDesign());
-  const { slot } = computeSlots(m, '', 3);
-  assert.ok(slot.has('xa<2:0>'));
-  assert.ok(slot.has('xa<0>/xb<1:0>'));
-  assert.ok(slot.has('xs') && slot.has('xt'));
-  assert.ok(!slot.has('xa<1>'));
-  assert.ok(!slot.has('xa<0>/xb<0>'));
 });
 
 test('trace collapses hit members onto their group', () => {
@@ -125,13 +114,6 @@ test('criticality scores cover display blocks only (hidden groups excluded)', ()
   assert.ok(scores.has('xa<0>/xb<1:0>'));       // displayed nested group
   assert.ok(!scores.has('xa<1>/xb<1:0>'));      // hidden twin under a non-rep member
   assert.ok(!scores.has('xa<1>'));              // members aren't ranked either
-});
-
-test('subtreeDepth reflects the display subtree, not the design', () => {
-  const m = buildHybridModel(arrayedDesign());
-  assert.equal(subtreeDepth(m, ''), 2);
-  assert.equal(subtreeDepth(m, 'xa<2:0>'), 1);
-  assert.equal(subtreeDepth(m, 'xs'), 0);
 });
 
 test('layout stats reach array groups as the union over members', () => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
-import { computeSlots } from '../../hybrid/slots';
+import { visiblePaths } from '../../hybrid/slots';
 import { HierTreePanel } from './HierTreePanel';
 import { HybridControls } from './HybridControls';
 import { RailsCanvas } from './RailsCanvas';
@@ -12,7 +12,7 @@ import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, crumbs, goToCrumb, rootPath, depth, clearOverlays, funcOff, supplyOff, version, coupling, selected } = useHybridStore();
+  const { model, build, openPath, goToCrumb, clearOverlays, funcOff, supplyOff, version, coupling, selected } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
@@ -31,17 +31,19 @@ export function HybridViewer() {
     // Invalidate on version change when reclassify() mutates block categories
     void version;
     if (!model) return { pins: 0, nets: 0, devices: 0 };
-    const layout = computeSlots(model, rootPath, depth);
     let pins = 0, nets = 0, devices = 0;
-    for (const p of layout.slot.keys()) {
+    for (const p of visiblePaths(model, openPath)) {
       const b = model.blocks.get(p)!;
       if (!passesFilters(b, funcOff, supplyOff)) continue;
       pins += b.pins; nets += b.netCount; devices += b.devices;
     }
     return { pins, nets, devices };
-  }, [model, rootPath, depth, funcOff, supplyOff, version]);
+  }, [model, openPath, funcOff, supplyOff, version]);
 
   if (!model) return null;
+  // The crumb bar IS the open chain — clicking a crumb collapses everything
+  // below that level (the clicked level's children stay on canvas).
+  const crumbs = openPath.length ? openPath : [''];
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.bg }}>
       {/* Same .breadcrumb/.crumb-item/.crumb-sep language as the schematic
