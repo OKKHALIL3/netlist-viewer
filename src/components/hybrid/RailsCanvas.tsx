@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeRails } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
@@ -31,16 +31,23 @@ function visibleAncestor(model: HybridModel, visible: ReadonlySet<string>, path:
 
 export function RailsCanvas() {
   const {
-    design, layoutData, model, openPath, selected, select, toggleOpen, trace, funcOff, supplyOff,
-    zoneColors, sizeByContent, weights, pathResult, pathEnds, coupling, couplingPairs,
+    design, layoutData, model, openPath, selected, select, toggleOpen, toggleGroup, trace, funcOff, supplyOff,
+    zoneColors, sizeByContent, weights, pathResult, pathEnds, coupling, couplingPairs, version,
   } = useHybridStore();
-  const scores = useMemo(() => (model ? criticalityScores(model, weights) : null), [model, weights]);
+  // drag-to-pan bookkeeping (no re-renders — refs only)
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const pan = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null);
+  const scores = useMemo(() => {
+    void version; // reclassify()/toggleGroup() mutate the model in place
+    return model ? criticalityScores(model, weights) : null;
+  }, [model, weights, version]);
   const layout = useMemo(() => {
+    void version; // toggleGroup() swaps children arrays in place
     if (!model || !scores) return null;
     // 128..180 clamp (log-normalized score ∈ [0,1]); uniform when sizing is off
     const fullW = (p: string) => (sizeByContent ? 128 + 52 * (scores.get(p) ?? 0) : 150);
     return computeRails(model, openPath, criticalityOrder(scores), fullW);
-  }, [model, scores, openPath, sizeByContent]);
+  }, [model, scores, openPath, sizeByContent, version]);
   const visible = useMemo(() => new Set(layout ? [...layout.items.keys()] : []), [layout]);
   // Overlay targets hidden inside collapsed branches mark their deepest
   // visible ancestor with a dashed ring: "the connection continues in here".
@@ -94,10 +101,35 @@ export function RailsCanvas() {
     // 24px dot grid so the two "canvas" homes read as siblings. Content is
     // centered while it fits ('safe' keeps it scrollable-from-zero once it
     // outgrows the viewport). Background click = deselect only.
-    <div style={{ flex: 1, overflow: 'auto', position: 'relative',
+    // Drag anywhere to pan (scrollbars stay as fallback): a >4px move flags
+    // the gesture and the click that follows a drag is swallowed in capture
+    // phase so panning never selects/deselects blocks.
+    <div ref={wrapRef}
+         style={{ flex: 1, overflow: 'auto', position: 'relative', cursor: 'grab',
                   display: 'flex', justifyContent: 'safe center', alignItems: 'flex-start',
                   background: 'radial-gradient(circle at 1px 1px, #1a2029 1px, transparent 0)',
                   backgroundSize: '24px 24px', backgroundColor: '#0a0d12' }}
+         onPointerDown={e => {
+           const el = wrapRef.current;
+           if (e.button !== 0 || !el) return;
+           pan.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop, moved: false };
+         }}
+         onPointerMove={e => {
+           const p = pan.current, el = wrapRef.current;
+           if (!p || !el || e.buttons !== 1) return;
+           const dx = e.clientX - p.x, dy = e.clientY - p.y;
+           if (!p.moved && Math.abs(dx) + Math.abs(dy) > 4) {
+             p.moved = true;
+             el.setPointerCapture(e.pointerId);
+             el.style.cursor = 'grabbing';
+           }
+           if (p.moved) { el.scrollLeft = p.sl - dx; el.scrollTop = p.st - dy; }
+         }}
+         onPointerUp={() => { if (wrapRef.current) wrapRef.current.style.cursor = 'grab'; }}
+         onClickCapture={e => {
+           if (pan.current?.moved) { e.stopPropagation(); e.preventDefault(); }
+           pan.current = null;
+         }}
          onClick={() => select(null)}>
       {/* userSelect none: a double-click must open the block, not select its label text */}
       <svg width={svgW} height={svgH} style={{ display: 'block', flex: 'none', fontFamily: T.mono, userSelect: 'none' }}>
@@ -199,12 +231,32 @@ export function RailsCanvas() {
                 // "×N" collapsed-array chip, same language as the schematic's
                 // array badge (accent pill, dark text). Kept inside the card's
                 // right edge so it can't overlap the neighboring block.
+                // Clicking it pops the group open into its individual members.
                 const t = `×${fmtCount(b.members.length)}`;
                 const bw = t.length * 5.5 + 8;
                 return (
-                  <g>
+                  <g style={{ cursor: 'pointer' }}
+                     onClick={e => { e.stopPropagation(); toggleGroup(it.path); }}
+                     onDoubleClick={e => e.stopPropagation()}>
+                    <title>{`expand ${b.members.length} array elements`}</title>
                     <rect x={x + w - bw - 3} y={y - 7} width={bw} height={13} rx={6.5} fill={T.accent} />
                     <text x={x + w - bw / 2 - 3} y={y + 3} fontSize={8.5} fontWeight={700} fill={T.bg} textAnchor="middle">{t}</text>
+                  </g>
+                );
+              })()}
+              {b.groupOf && model.blocks.get(b.groupOf)?.expanded && (() => {
+                // Expanded array member: outline chip folds the family back
+                // into its ×N group.
+                const gb = model.blocks.get(b.groupOf)!;
+                const bw = 16;
+                return (
+                  <g style={{ cursor: 'pointer' }}
+                     onClick={e => { e.stopPropagation(); toggleGroup(b.groupOf!); }}
+                     onDoubleClick={e => e.stopPropagation()}>
+                    <title>{`collapse back to ${gb.label} (×${gb.members!.length})`}</title>
+                    <rect x={x + w - bw - 3} y={y - 7} width={bw} height={13} rx={6.5}
+                          fill={T.panel2} stroke={T.accent} strokeWidth={1.2} />
+                    <text x={x + w - bw / 2 - 3} y={y + 3} fontSize={9} fontWeight={700} fill={T.accent} textAnchor="middle">×</text>
                   </g>
                 );
               })()}

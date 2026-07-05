@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { Design } from '../parser/types';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import type { HybridModel, HybridBlock } from '../hybrid/model';
-import { buildHybridModel, displayPath } from '../hybrid/model';
+import { buildHybridModel, displayPath, setGroupExpanded } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
@@ -64,6 +64,7 @@ interface HybridState {
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
   toggleOpen: (path: string) => void;
+  toggleGroup: (gpath: string) => void;
   drillDown: (path: string) => void;
   goToCrumb: (i: number) => void;
   jumpTo: (labels: string[]) => void;
@@ -177,6 +178,26 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     const trail = trailTo(model, path);
     const isOpen = trail.length <= openPath.length && trail.every((p, i) => openPath[i] === p);
     set({ openPath: isOpen ? trail.slice(0, -1) : trail, ...CLEARED });
+  },
+
+  // ×N chip click: pop an array group open into its individual members, or
+  // fold them back. Structural swap in the model (setGroupExpanded) + version
+  // bump — layout, traces, search and stats all read the swapped tree. Any
+  // open level that named the group (or a member being folded away) no longer
+  // exists on its rail, so the open chain truncates there.
+  toggleGroup: (gpath) => {
+    const { model, openPath } = get();
+    const g = model?.blocks.get(gpath);
+    if (!model || !g?.members) return;
+    const expanding = !g.expanded;
+    if (!setGroupExpanded(model, gpath, expanding)) return;
+    const gone = (p: string) => (expanding ? p === gpath : g.members!.includes(p));
+    const cut = openPath.findIndex(gone);
+    set(s => ({
+      openPath: cut >= 0 ? openPath.slice(0, cut) : openPath,
+      ...CLEARED,
+      version: s.version + 1,
+    }));
   },
 
   // Open the rails down to `path` (tree-panel double-click / programmatic

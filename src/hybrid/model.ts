@@ -20,6 +20,9 @@ export interface HybridBlock {
   // instance paths, and displayPath() maps them onto the collapsed view.
   members?: string[];
   groupOf?: string;
+  // Group only: the user popped the ×N chip open — members are swapped into
+  // the display tree and displayPath stops folding them (see setGroupExpanded).
+  expanded?: boolean;
 }
 
 export interface HybridModel {
@@ -209,10 +212,41 @@ export function displayPath(model: HybridModel, path: string): string {
   for (let i = 0; i < segs.length; i++) {
     cur = cur ? `${cur}/${segs[i]}` : segs[i];
     const g = model.blocks.get(cur)?.groupOf;
-    if (!g) continue;
+    if (!g || model.blocks.get(g)?.expanded) continue; // expanded groups don't fold their members
     if (i === segs.length - 1) return g;
     const rep = model.blocks.get(g)!.members![0];
     if (rep !== cur) cur = rep;
   }
   return cur;
+}
+
+// Toggle an array group between its collapsed ×N stand-in and the individual
+// members (Amr: "when it says ×4 you can expand that if needed"). Structural:
+// the group/members swap places in the parent's children — and in the outer
+// group's display copy when the parent is a representative member — and
+// displayPath stops folding members of an expanded group, so traces, search,
+// coupling and criticality all follow automatically. Returns false on a no-op
+// (not a group, or already in the requested state).
+export function setGroupExpanded(model: HybridModel, gpath: string, expanded: boolean): boolean {
+  const g = model.blocks.get(gpath);
+  if (!g?.members || (g.expanded ?? false) === expanded) return false;
+  const swap = (list: string[], from: string[], to: string[]) => {
+    const i = list.indexOf(from[0]);
+    if (i >= 0) list.splice(i, from.length, ...to);
+  };
+  const holders: string[][] = [];
+  const parent = g.parent !== null ? model.blocks.get(g.parent) : undefined;
+  if (parent) {
+    holders.push(parent.children);
+    // a nested group under a REPRESENTATIVE member also sits in the outer
+    // group's display children (copied at build time) — keep both in sync
+    const outer = parent.groupOf ? model.blocks.get(parent.groupOf) : undefined;
+    if (outer?.members?.[0] === parent.path) holders.push(outer.children);
+  }
+  g.expanded = expanded;
+  for (const h of holders) {
+    if (expanded) swap(h, [gpath], g.members);
+    else swap(h, g.members, [gpath]);
+  }
+  return true;
 }

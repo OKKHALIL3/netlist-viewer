@@ -5,7 +5,7 @@ import { arrayedDesign } from './__fixtures__/arrayed';
 import { dnet } from './__fixtures__/fakeLayout';
 import { cell } from './__fixtures__/tiny';
 import type { Design } from '../parser/types';
-import { buildHybridModel, displayPath } from './model';
+import { buildHybridModel, displayPath, setGroupExpanded } from './model';
 import { buildConductors, traceConnectivity } from './connectivity';
 import { findPath } from './path';
 import { relatedDisplay } from './coupling';
@@ -52,6 +52,40 @@ test('displayPath maps members, member subtrees, and identities', () => {
   // a path THROUGH a member lands on the structural twin under the representative
   assert.equal(displayPath(m, 'xa<1>/xb<0>'), 'xa<0>/xb<1:0>');
   assert.equal(displayPath(m, 'xa<0>/xb<1>'), 'xa<0>/xb<1:0>');
+});
+
+test('setGroupExpanded swaps members into the parent; displayPath stops folding them', () => {
+  const m = buildHybridModel(arrayedDesign());
+  assert.ok(setGroupExpanded(m, 'xa<2:0>', true));
+  assert.deepEqual(m.blocks.get('')!.children, ['xa<0>', 'xa<1>', 'xa<2>', 'xs', 'xt']);
+  assert.equal(displayPath(m, 'xa<1>'), 'xa<1>');            // member displays as itself
+  assert.equal(displayPath(m, 'xa<1>/xb<0>'), 'xa<1>/xb<1:0>'); // its own nested group still folds
+  assert.ok(!setGroupExpanded(m, 'xa<2:0>', true));          // idempotent no-op
+  assert.ok(setGroupExpanded(m, 'xa<2:0>', false));
+  assert.deepEqual(m.blocks.get('')!.children, ['xa<2:0>', 'xs', 'xt']);
+  assert.equal(displayPath(m, 'xa<1>'), 'xa<2:0>');
+});
+
+test('expanding a nested group under the representative updates the outer display copy too', () => {
+  const m = buildHybridModel(arrayedDesign());
+  assert.ok(setGroupExpanded(m, 'xa<0>/xb<1:0>', true));
+  assert.deepEqual(m.blocks.get('xa<2:0>')!.children, ['xa<0>/xb<0>', 'xa<0>/xb<1>']);
+  assert.deepEqual(m.blocks.get('xa<0>')!.children, ['xa<0>/xb<0>', 'xa<0>/xb<1>']);
+  setGroupExpanded(m, 'xa<0>/xb<1:0>', false);
+  assert.deepEqual(m.blocks.get('xa<2:0>')!.children, ['xa<0>/xb<1:0>']);
+  assert.deepEqual(m.blocks.get('xa<0>')!.children, ['xa<0>/xb<1:0>']);
+});
+
+test('trace from an expanded member seeds from that member alone', () => {
+  const design = arrayedDesign();
+  const m = buildHybridModel(design);
+  const cond = buildConductors(design, m);
+  setGroupExpanded(m, 'xa<2:0>', true);
+  // xt rides bus<2>, driven only by xa<2> — expanded, the hit is the member itself
+  const t = traceConnectivity(design, m, cond, 'xt');
+  assert.ok(t.blocks.has('xa<2>'));
+  assert.ok(!t.blocks.has('xa<2:0>'));
+  assert.ok(!t.blocks.has('xa<1>')); // members not on bus<2> stay out
 });
 
 test('trace collapses hit members onto their group', () => {

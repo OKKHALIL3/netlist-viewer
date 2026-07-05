@@ -7,10 +7,13 @@ import { T } from './theme';
 import { Panel } from './HybridControls';
 
 export function CouplingPanel() {
-  const { design, layoutData, model, selected, openPath, coupling, couplingPairs } = useHybridStore();
+  const { design, layoutData, model, selected, openPath, coupling, couplingPairs, version } = useHybridStore();
   const vis = useMemo(
-    () => (model ? visiblePaths(model, openPath) : null),
-    [model, openPath],
+    () => {
+      void version; // toggleGroup() swaps children arrays in place
+      return model ? visiblePaths(model, openPath) : null;
+    },
+    [model, openPath, version],
   );
   const neighbors = useMemo(() => {
     if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !vis) return [];

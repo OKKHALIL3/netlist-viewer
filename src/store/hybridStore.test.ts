@@ -210,6 +210,21 @@ test('jumpTo lands on the array group when the target is a member', () => {
   assert.deepEqual(s().openPath, ['']);
 });
 
+test('toggleGroup expands the ×N group into members and folds them back', () => {
+  s().build(arrayedDesign(), null, null);
+  s().toggleOpen('');
+  const v0 = s().version;
+  s().toggleGroup('xa<2:0>');
+  assert.deepEqual(s().model!.blocks.get('')!.children, ['xa<0>', 'xa<1>', 'xa<2>', 'xs', 'xt']);
+  assert.ok(s().version > v0);              // canvas/panels re-derive from the swapped tree
+  assert.deepEqual(s().openPath, ['']);     // rail intact — the group itself wasn't open
+  s().toggleOpen('xa<1>');                  // members are real blocks: open one
+  assert.deepEqual(s().openPath, ['', 'xa<1>']);
+  s().toggleGroup('xa<2:0>');               // folding away the open member truncates the chain
+  assert.deepEqual(s().openPath, ['']);
+  assert.deepEqual(s().model!.blocks.get('')!.children, ['xa<2:0>', 'xs', 'xt']);
+});
+
 test('build is a no-op on identical design/layoutData/layoutModel references; a new design still resets', () => {
   const design = tinyDesign();
   s().build(design, null, null);
