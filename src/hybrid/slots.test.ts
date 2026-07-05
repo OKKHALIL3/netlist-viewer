@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { tinyDesign } from './__fixtures__/tiny';
 import { arrayedDesign } from './__fixtures__/arrayed';
 import { buildHybridModel } from './model';
-import { computeRails, visiblePaths, SLIVER_W } from './slots';
+import { computeRails, visiblePaths, SLIVER_W, CTX_W } from './slots';
 
 const W = 150, GAP = 10; // layout defaults
 
@@ -15,31 +15,32 @@ test('closed root: a single full box on rail 0', () => {
   assert.equal(l.width, W);
 });
 
-test('open root: children appear on the rail below, all full (frontier)', () => {
+test('open root: children appear on the rail below, all full (frontier); root compresses to context', () => {
   const m = buildHybridModel(tinyDesign());
   const l = computeRails(m, ['']);
   assert.deepEqual(l.rails, [[''], ['xu1', 'xu2']]);
   assert.equal(l.width, 2 * W + GAP);
-  assert.equal(l.items.get('')!.x, (l.width - W) / 2);   // narrower rails center over the widest
+  assert.deepEqual(l.items.get(''), { path: '', x: (l.width - CTX_W) / 2, w: CTX_W, lvl: 0, sliver: false });
   assert.deepEqual(l.items.get('xu1'), { path: 'xu1', x: 0, w: W, lvl: 1, sliver: false });
   assert.equal(l.items.get('xu2')!.x, W + GAP);
 });
 
-test('open path: the open child stays full, siblings collapse to slivers', () => {
+test('open path: the open ancestor compresses, siblings collapse to slivers, frontier stays full', () => {
   const m = buildHybridModel(tinyDesign());
   const l = computeRails(m, ['', 'xu1']);
   assert.deepEqual(l.rails[2], ['xu1/xs1', 'xu1/xs2']);
   const xu1 = l.items.get('xu1')!, xu2 = l.items.get('xu2')!;
   assert.equal(xu1.sliver, false);
-  assert.equal(xu1.w, W);
+  assert.equal(xu1.w, CTX_W);                            // context card, not full width
   assert.equal(xu2.sliver, true);
   assert.equal(xu2.w, SLIVER_W);
-  const rail1W = W + GAP + SLIVER_W;
+  const rail1W = CTX_W + GAP + SLIVER_W;
   assert.equal(xu1.x, (l.width - rail1W) / 2);
-  assert.equal(xu2.x, xu1.x + W + GAP);
+  assert.equal(xu2.x, xu1.x + CTX_W + GAP);
   // the frontier rail (xu1's children) is the widest and spans the content width
   assert.equal(l.width, 2 * W + GAP);
   assert.equal(l.items.get('xu1/xs1')!.sliver, false);
+  assert.equal(l.items.get('xu1/xs1')!.w, W);            // frontier keeps full size
 });
 
 test('stale chain entries are dropped: layout stops at the first invalid hop', () => {
@@ -56,10 +57,11 @@ test('order callback sorts every rail, open or frontier', () => {
   assert.deepEqual(l.rails[1], ['xu2', 'xu1']);
 });
 
-test('fullW callback sizes full boxes; slivers stay fixed', () => {
+test('fullW callback sizes FRONTIER boxes only; context and slivers stay fixed', () => {
   const m = buildHybridModel(tinyDesign());
   const l = computeRails(m, ['', 'xu1'], undefined, () => 100);
-  assert.equal(l.items.get('xu1')!.w, 100);
+  assert.equal(l.items.get('xu1/xs1')!.w, 100);          // frontier obeys fullW
+  assert.equal(l.items.get('xu1')!.w, CTX_W);            // open ancestor is compressed
   assert.equal(l.items.get('xu2')!.w, SLIVER_W);
 });
 

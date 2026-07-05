@@ -5,10 +5,16 @@ import type { HybridModel } from './model';
 // cell; double-clicking a block opens its children on the rail below it —
 // the block itself stays where it is. Only the chain of open blocks
 // (`openPath`) expands; siblings of an open block stay visible as thin
-// slivers "just to know what is beside you". The deepest (frontier) rail
-// shows all children full-size.
+// slivers "just to know what is beside you".
+//
+// Round 4 ("it should give you only its children, with everything else in
+// this hierarchy on the side, faded and compressed"): the deepest (frontier)
+// rail is the CONTENT — full-size, full-strength. Every rail above it is
+// CONTEXT — the open ancestor renders as a compressed card (CTX_W) and its
+// siblings as extra-thin slivers; the canvas fades them too.
 
-export const SLIVER_W = 18;
+export const SLIVER_W = 12;   // context sliver (siblings of open ancestors)
+export const CTX_W = 96;      // compressed open-ancestor card
 const FULL_W = 150, GAP = 10;
 
 export interface RailItem { path: string; x: number; w: number; lvl: number; sliver: boolean }
@@ -50,8 +56,10 @@ export function computeRails(
   }
 
   // rail lvl's open child is chain[lvl] (undefined on the frontier → all full)
+  const frontier = chain.length;
   const isSliver = (p: string, lvl: number) => lvl > 0 && chain[lvl] !== undefined && p !== chain[lvl];
-  const widthOf = (p: string, lvl: number) => (isSliver(p, lvl) ? SLIVER_W : fullW(p));
+  const widthOf = (p: string, lvl: number) =>
+    isSliver(p, lvl) ? SLIVER_W : lvl < frontier ? CTX_W : fullW(p);
   const railW = rails.map((rail, lvl) =>
     rail.reduce((a, p) => a + widthOf(p, lvl), 0) + GAP * Math.max(0, rail.length - 1));
   const width = Math.max(0, ...railW);

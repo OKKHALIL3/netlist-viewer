@@ -7,7 +7,12 @@ import { couplingFor } from '../../hybrid/coupling';
 import { displayPath, type HybridModel } from '../../hybrid/model';
 import { T } from './theme';
 
-const MARGIN_X = 70, LEVEL_H = 140, TOP_PAD = 46, BLOCK_H = 58;
+// Round-4 emphasis model ("only its children, everything else on the side,
+// faded and compressed"): the frontier rail is full-size and full-strength;
+// every ancestor rail renders as short compressed cards + extra-thin slivers,
+// faded, with tighter vertical rhythm — context, not content.
+const MARGIN_X = 70, TOP_PAD = 46, BLOCK_H = 58, CTX_H = 40, GAP_Y = 54;
+const CTX_CARD_OPACITY = 0.55, CTX_SLIVER_OPACITY = 0.32;
 
 // Counts on the block cards: keep them within the card at any magnitude.
 const fmtCount = (n: number) =>
@@ -88,11 +93,16 @@ export function RailsCanvas() {
   if (!model || !layout) return null;
 
   const railCount = layout.rails.length;
+  const frontier = layout.openPath.length;      // rails above this are context
   const svgW = MARGIN_X * 2 + Math.max(1, layout.width);
-  const svgH = TOP_PAD + railCount * LEVEL_H + 30;
+  // Top-anchored vertical rhythm: every rail above the frontier is a short
+  // context band, so ancestor levels stack tight and the frontier dominates.
+  const blockH = (lvl: number) => (lvl === frontier ? BLOCK_H : CTX_H);
+  const blockTop = (lvl: number) => TOP_PAD + 26 + lvl * (CTX_H + GAP_Y);
+  const railLine = (lvl: number) => blockTop(lvl) + blockH(lvl);
+  const svgH = blockTop(railCount - 1) + blockH(railCount - 1) + 46;
   const item = (p: string) => layout.items.get(p)!;
   const cx = (p: string) => MARGIN_X + item(p).x + item(p).w / 2;
-  const railY = (lvl: number) => TOP_PAD + lvl * LEVEL_H + 70;
   const openNodes = new Set(layout.openPath);
   const marks = new Set([...traceMarks, ...pathReps.filter(p => !pathOn.has(p))]);
 
@@ -146,20 +156,24 @@ export function RailsCanvas() {
       <svg ref={svgRef} width={svgW} height={svgH}
            style={{ display: 'block', flex: 'none', fontFamily: T.mono, userSelect: 'none', willChange: 'transform' }}>
         {Array.from({ length: railCount }, (_, i) => (
-          <g key={i}>
-            <line x1={16} y1={railY(i)} x2={svgW - 16} y2={railY(i)} stroke={T.rail} strokeWidth={1.4} />
-            <text x={18} y={railY(i) - BLOCK_H - 10} fontSize={11} fill={T.muted} fontStyle="italic">{netLabel(i)}</text>
+          <g key={i} opacity={i === frontier ? 1 : 0.55}>
+            <line x1={16} y1={railLine(i)} x2={svgW - 16} y2={railLine(i)} stroke={T.rail} strokeWidth={1.4} />
+            <text x={18} y={blockTop(i) - 10} fontSize={i === frontier ? 11 : 9.5} fill={T.muted} fontStyle="italic">
+              {netLabel(i)}
+            </text>
           </g>
         ))}
         {/* spine: each open block fans out to the full boxes on the rail
-            below it — slivers sit on the rail without edges */}
+            below it — slivers sit on the rail without edges. Context-to-
+            context edges fade with their rails; the fan into the frontier
+            stays full-strength. */}
         {layout.rails.map((rail, i) => {
           if (i === 0) return null;
-          const x1 = cx(layout.openPath[i - 1]), y1 = railY(i - 1);
+          const x1 = cx(layout.openPath[i - 1]), y1 = railLine(i - 1);
           return (
-            <g key={`edges-${i}`}>
+            <g key={`edges-${i}`} opacity={i === frontier ? 1 : 0.45}>
               {rail.filter(p => !item(p).sliver).map(p => {
-                const x2 = cx(p), y2 = railY(i) - BLOCK_H;
+                const x2 = cx(p), y2 = blockTop(i);
                 const my = y1 + (y2 - y1) * 0.55;
                 return <path key={p} d={`M ${x1} ${y1} V ${my} H ${x2} V ${y2}`}
                              fill="none" stroke={T.edge} strokeWidth={1.2} />;
@@ -168,12 +182,14 @@ export function RailsCanvas() {
           );
         })}
         {pathReps.length > 1 && (
-          <path d={pathReps.map((p, i) => `${i ? 'L' : 'M'} ${cx(p)} ${railY(item(p).lvl) - BLOCK_H / 2}`).join(' ')}
+          <path d={pathReps.map((p, i) => `${i ? 'L' : 'M'} ${cx(p)} ${blockTop(item(p).lvl) + blockH(item(p).lvl) / 2}`).join(' ')}
                 fill="none" stroke={T.path} strokeWidth={2.6} strokeDasharray="7 5" strokeLinejoin="round" opacity={0.95} />
         )}
         {[...layout.items.values()].map(it => {
           const b = model.blocks.get(it.path)!;
-          const x = MARGIN_X + it.x, y = railY(it.lvl) - BLOCK_H, w = it.w;
+          const h = blockH(it.lvl);
+          const x = MARGIN_X + it.x, y = blockTop(it.lvl), w = it.w;
+          const ctx = it.lvl < frontier;
           const isSel = selected === it.path;
           const isOpen = openNodes.has(it.path);
           const dim = !passesFilters(b, funcOff, supplyOff);
@@ -181,6 +197,10 @@ export function RailsCanvas() {
             ? T.groupColors[b.category.split(':')[0]] : T.unclass;
           const traced = trace?.blocks.has(it.path) || pathOn.has(it.path);
           const contains = !traced && marks.has(it.path);
+          // faded context, full-strength frontier; anything selected/traced
+          // pops back up so overlays stay readable in the faded zone
+          const base = ctx ? (it.sliver ? CTX_SLIVER_OPACITY : CTX_CARD_OPACITY) : 1;
+          const gOpacity = dim ? T.dim : isSel || traced || contains ? Math.max(base, 0.9) : base;
           const title =
             `${b.label} (${b.master})` +
             (b.members ? ` — array of ${b.members.length}` : '') +
@@ -189,40 +209,95 @@ export function RailsCanvas() {
             (contains ? ' — connected blocks inside' : '');
           if (it.sliver) {
             return (
-              <g key={it.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
+              <g key={it.path} opacity={gOpacity} style={{ cursor: 'pointer' }}
                  onClick={e => { e.stopPropagation(); select(isSel ? null : it.path); }}
                  onDoubleClick={e => { e.stopPropagation(); if (b.children.length) toggleOpen(it.path); else select(it.path); }}>
                 <title>{title}</title>
-                {traced && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={BLOCK_H + 5} rx={6}
+                {traced && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6}
                                  fill="none" stroke={T.conn} strokeWidth={2} />}
-                {contains && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={BLOCK_H + 5} rx={6}
+                {contains && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6}
                                    fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="4 3" />}
-                <rect x={x} y={y} width={w} height={BLOCK_H} rx={4} fill={T.card}
+                <rect x={x} y={y} width={w} height={h} rx={4} fill={T.card}
                       stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.2 : 1.2} />
-                <rect x={x} y={y} width={w} height={5} rx={2} fill={accent} />
-                <text transform={`rotate(90 ${x + w / 2} ${y + BLOCK_H / 2})`}
-                      x={x + w / 2} y={y + BLOCK_H / 2 + 3} fontSize={8} fill={T.muted} textAnchor="middle">
-                  {clip(b.label, 9)}
+                <rect x={x} y={y} width={w} height={4} rx={2} fill={accent} />
+                <text transform={`rotate(90 ${x + w / 2} ${y + h / 2})`}
+                      x={x + w / 2} y={y + h / 2 + 3} fontSize={7.5} fill={T.muted} textAnchor="middle">
+                  {clip(b.label, 6)}
                 </text>
+              </g>
+            );
+          }
+          if (ctx) {
+            // compressed open-ancestor card: names only, no stats/chevron —
+            // it is the breadcrumb on canvas, not the content
+            const labelChars = Math.floor((w - 18) / 5.8);
+            const masterChars = Math.floor((w - 18) / 4.9);
+            return (
+              <g key={it.path} opacity={gOpacity} style={{ cursor: 'pointer' }}
+                 onClick={e => { e.stopPropagation(); select(isSel ? null : it.path); }}
+                 onDoubleClick={e => { e.stopPropagation(); toggleOpen(it.path); }}>
+                <title>{title}</title>
+                {traced && <rect x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8}
+                                 fill="none" stroke={T.conn} strokeWidth={2.2} />}
+                {contains && <rect x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8}
+                                   fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="5 4" />}
+                <rect x={x} y={y} width={w} height={h} rx={6} fill={T.card}
+                      stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.4 : 1.8} />
+                <rect x={x} y={y} width={5} height={h} rx={2.5} fill={accent} />
+                <text x={x + w / 2 + 2} y={y + 16} fontSize={9.5} fontWeight={700} fill={T.text} textAnchor="middle">
+                  {clip(b.label, labelChars)}
+                </text>
+                <text x={x + w / 2 + 2} y={y + 30} fontSize={8} fill={T.muted} textAnchor="middle">
+                  {clip(b.master, masterChars)}
+                </text>
+                {b.members && (() => {
+                  const t = `×${fmtCount(b.members.length)}`;
+                  const bw = t.length * 5.5 + 8;
+                  return (
+                    <g style={{ cursor: 'pointer' }}
+                       onClick={e => { e.stopPropagation(); toggleGroup(it.path); }}
+                       onDoubleClick={e => e.stopPropagation()}>
+                      <title>{`expand ${b.members.length} array elements`}</title>
+                      <rect x={x + w - bw - 3} y={y - 7} width={bw} height={13} rx={6.5} fill={T.accent} />
+                      <text x={x + w - bw / 2 - 3} y={y + 3} fontSize={8.5} fontWeight={700} fill={T.bg} textAnchor="middle">{t}</text>
+                    </g>
+                  );
+                })()}
+                {b.groupOf && model.blocks.get(b.groupOf)?.expanded && (() => {
+                  // an OPEN member of an expanded array must keep its
+                  // fold-back affordance even as a compressed context card
+                  const gb = model.blocks.get(b.groupOf)!;
+                  const bw = 16;
+                  return (
+                    <g style={{ cursor: 'pointer' }}
+                       onClick={e => { e.stopPropagation(); toggleGroup(b.groupOf!); }}
+                       onDoubleClick={e => e.stopPropagation()}>
+                      <title>{`collapse back to ${gb.label} (×${gb.members!.length})`}</title>
+                      <rect x={x + w - bw - 3} y={y - 7} width={bw} height={13} rx={6.5}
+                            fill={T.panel2} stroke={T.accent} strokeWidth={1.2} />
+                      <text x={x + w - bw / 2 - 3} y={y + 3} fontSize={9} fontWeight={700} fill={T.accent} textAnchor="middle">×</text>
+                    </g>
+                  );
+                })()}
               </g>
             );
           }
           const labelChars = Math.floor((w - 22) / 6.7);
           const masterChars = Math.floor((w - 22) / 5.4);
           return (
-            <g key={it.path} opacity={dim ? T.dim : 1} style={{ cursor: 'pointer' }}
+            <g key={it.path} opacity={gOpacity} style={{ cursor: 'pointer' }}
                onClick={e => { e.stopPropagation(); select(isSel ? null : it.path); }}
                // leaves can't open — re-select so a double-click doesn't
                // click-toggle the selection away
                onDoubleClick={e => { e.stopPropagation(); if (b.children.length) toggleOpen(it.path); else select(it.path); }}>
               <title>{title}</title>
-              {traced && <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={10}
+              {traced && <rect x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10}
                                fill="none" stroke={T.conn} strokeWidth={2.5} />}
-              {contains && <rect x={x - 4} y={y - 4} width={w + 8} height={BLOCK_H + 8} rx={10}
+              {contains && <rect x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10}
                                  fill="none" stroke={T.conn} strokeWidth={1.8} strokeDasharray="5 4" />}
-              <rect x={x} y={y} width={w} height={BLOCK_H} rx={7} fill={T.card}
+              <rect x={x} y={y} width={w} height={h} rx={7} fill={T.card}
                     stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.6 : isOpen ? 2.2 : 1.5} />
-              <rect x={x} y={y} width={7} height={BLOCK_H} rx={3} fill={accent} />
+              <rect x={x} y={y} width={7} height={h} rx={3} fill={accent} />
               {/* instance name + master cell name IN the box (Amr round 3) */}
               <text x={x + w / 2 + 3} y={y + 17} fontSize={11} fontWeight={700} fill={T.text} textAnchor="middle">
                 {clip(b.label, labelChars)}
@@ -234,7 +309,7 @@ export function RailsCanvas() {
                 {fmtCount(b.devices)} dev · {fmtCount(b.netCount)} net
               </text>
               {b.children.length > 0 && (
-                <text x={x + w / 2 + 3} y={y + BLOCK_H - 3} fontSize={8}
+                <text x={x + w / 2 + 3} y={y + h - 3} fontSize={8}
                       fill={isOpen ? T.accent : T.faint} textAnchor="middle">
                   {isOpen ? '▾' : '▸'}
                 </text>
@@ -276,14 +351,14 @@ export function RailsCanvas() {
           );
         })}
         {railCount === 1 && (
-          <text x={cx('')} y={railY(0) + 24} fontSize={10.5} fill={T.faint} fontStyle="italic" textAnchor="middle">
+          <text x={cx('')} y={railLine(0) + 24} fontSize={10.5} fill={T.faint} fontStyle="italic" textAnchor="middle">
             double-click a block to open what is underneath it
           </text>
         )}
         {pathResult && (pathEnds ?? []).map((pe, i) => {
           const rp = visible.has(pe.block) ? pe.block : visibleAncestor(model, visible, pe.block);
           if (rp === undefined) return null;
-          const x = cx(rp), y = railY(item(rp).lvl) - BLOCK_H - 12;
+          const x = cx(rp), y = blockTop(item(rp).lvl) - 12;
           return (
             <g key={i}>
               <path d={`M ${x} ${y - 6} L ${x + 6} ${y} L ${x} ${y + 6} L ${x - 6} ${y} Z`} fill={i ? T.blue : T.path} />
@@ -293,10 +368,11 @@ export function RailsCanvas() {
         })}
         {selected && visible.has(selected) && neighbors.length > 0 && (() => {
           const maxTotal = Math.max(...neighbors.map(n => n.total), Number.EPSILON);
-          const sx = cx(selected), sy = railY(item(selected).lvl) - BLOCK_H / 2;
+          const mid = (p: string) => blockTop(item(p).lvl) + blockH(item(p).lvl) / 2;
+          const sx = cx(selected), sy = mid(selected);
           return neighbors.map(n => {
             if (!visible.has(n.block)) return null;
-            const nx = cx(n.block), ny = railY(item(n.block).lvl) - BLOCK_H / 2;
+            const nx = cx(n.block), ny = mid(n.block);
             // same-rail pairs bow below the rail so the line doesn't strike
             // through the block cards sitting between them
             const bow = sy === ny ? 30 + Math.min(46, Math.abs(sx - nx) * 0.05) : 0;
