@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeRails } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
@@ -34,9 +34,15 @@ export function RailsCanvas() {
     design, layoutData, model, openPath, selected, select, toggleOpen, toggleGroup, trace, funcOff, supplyOff,
     zoneColors, sizeByContent, weights, pathResult, pathEnds, coupling, couplingPairs, version,
   } = useHybridStore();
-  // drag-to-pan bookkeeping (no re-renders — refs only)
+  // Free transform-based panning (drag or wheel/trackpad — the canvas itself
+  // moves, no scrollbars). Refs + direct style writes: no re-renders per frame.
   const wrapRef = useRef<HTMLDivElement>(null);
-  const pan = useRef<{ x: number; y: number; sl: number; st: number; moved: boolean } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const panXY = useRef({ x: 0, y: 0 });
+  const drag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
+  const applyPan = () => {
+    if (svgRef.current) svgRef.current.style.transform = `translate(${panXY.current.x}px, ${panXY.current.y}px)`;
+  };
   const scores = useMemo(() => {
     void version; // reclassify()/toggleGroup() mutate the model in place
     return model ? criticalityScores(model, weights) : null;
@@ -78,6 +84,7 @@ export function RailsCanvas() {
     if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !layout) return [];
     return couplingFor(design, model, layoutData, couplingPairs, selected, [...layout.items.keys()], coupling.minC, coupling.includeSupply);
   }, [coupling, selected, couplingPairs, layoutData, design, model, layout]);
+  useEffect(() => { panXY.current = { x: 0, y: 0 }; applyPan(); }, [model]); // fresh design → home view
   if (!model || !layout) return null;
 
   const railCount = layout.rails.length;
@@ -98,41 +105,46 @@ export function RailsCanvas() {
 
   return (
     // Same canvas surface as the layout viewer (.layout-canvas-wrap): a faint
-    // 24px dot grid so the two "canvas" homes read as siblings. Content is
-    // centered while it fits ('safe' keeps it scrollable-from-zero once it
-    // outgrows the viewport). Background click = deselect only.
-    // Drag anywhere to pan (scrollbars stay as fallback): a >4px move flags
-    // the gesture and the click that follows a drag is swallowed in capture
-    // phase so panning never selects/deselects blocks.
+    // 24px dot grid so the two "canvas" homes read as siblings. The svg is a
+    // free canvas: drag anywhere (or wheel/trackpad-scroll) to PAN it via a
+    // transform — it always moves, whether or not content overflows, and no
+    // scrollbars are involved. A >6px move flags the gesture and the click
+    // that follows a drag is swallowed in capture phase so panning never
+    // selects/deselects blocks. Double-click empty canvas = re-home the view.
     <div ref={wrapRef}
-         style={{ flex: 1, overflow: 'auto', position: 'relative', cursor: 'grab',
+         style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: 'grab',
                   display: 'flex', justifyContent: 'safe center', alignItems: 'flex-start',
                   background: 'radial-gradient(circle at 1px 1px, #1a2029 1px, transparent 0)',
                   backgroundSize: '24px 24px', backgroundColor: '#0a0d12' }}
          onPointerDown={e => {
-           const el = wrapRef.current;
-           if (e.button !== 0 || !el) return;
-           pan.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop, moved: false };
+           if (e.button !== 0) return;
+           drag.current = { x: e.clientX, y: e.clientY, px: panXY.current.x, py: panXY.current.y, moved: false };
          }}
          onPointerMove={e => {
-           const p = pan.current, el = wrapRef.current;
-           if (!p || !el || e.buttons !== 1) return;
-           const dx = e.clientX - p.x, dy = e.clientY - p.y;
-           if (!p.moved && Math.abs(dx) + Math.abs(dy) > 4) {
-             p.moved = true;
+           const d = drag.current, el = wrapRef.current;
+           if (!d || !el || e.buttons !== 1) return;
+           const dx = e.clientX - d.x, dy = e.clientY - d.y;
+           if (!d.moved && Math.abs(dx) + Math.abs(dy) > 6) {
+             d.moved = true;
              el.setPointerCapture(e.pointerId);
              el.style.cursor = 'grabbing';
            }
-           if (p.moved) { el.scrollLeft = p.sl - dx; el.scrollTop = p.st - dy; }
+           if (d.moved) { panXY.current = { x: d.px + dx, y: d.py + dy }; applyPan(); }
          }}
          onPointerUp={() => { if (wrapRef.current) wrapRef.current.style.cursor = 'grab'; }}
-         onClickCapture={e => {
-           if (pan.current?.moved) { e.stopPropagation(); e.preventDefault(); }
-           pan.current = null;
+         onWheel={e => {
+           panXY.current = { x: panXY.current.x - e.deltaX, y: panXY.current.y - e.deltaY };
+           applyPan();
          }}
-         onClick={() => select(null)}>
+         onClickCapture={e => {
+           if (drag.current?.moved) { e.stopPropagation(); e.preventDefault(); }
+           drag.current = null;
+         }}
+         onClick={() => select(null)}
+         onDoubleClick={() => { panXY.current = { x: 0, y: 0 }; applyPan(); }}>
       {/* userSelect none: a double-click must open the block, not select its label text */}
-      <svg width={svgW} height={svgH} style={{ display: 'block', flex: 'none', fontFamily: T.mono, userSelect: 'none' }}>
+      <svg ref={svgRef} width={svgW} height={svgH}
+           style={{ display: 'block', flex: 'none', fontFamily: T.mono, userSelect: 'none', willChange: 'transform' }}>
         {Array.from({ length: railCount }, (_, i) => (
           <g key={i}>
             <line x1={16} y1={railY(i)} x2={svgW - 16} y2={railY(i)} stroke={T.rail} strokeWidth={1.4} />

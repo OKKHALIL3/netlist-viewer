@@ -3,7 +3,7 @@ import { useHybridStore } from '../../store/hybridStore';
 import { T } from './theme';
 
 function Node({ path, depth }: { path: string; depth: number }) {
-  const { model, selected, select, drillDown, trace } = useHybridStore();
+  const { model, selected, select, drillDown, toggleGroup, trace } = useHybridStore();
   const [open, setOpen] = useState(depth < 2);
   const b = model!.blocks.get(path)!;
   const isSel = selected === path;
@@ -22,8 +22,21 @@ function Node({ path, depth }: { path: string; depth: number }) {
         </span>
         <span className="tree-id" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
         {b.members && (
-          <span style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, background: T.accent, color: T.bg, borderRadius: 6, padding: '0 4px', lineHeight: '11px' }}>
+          // clickable, same as the canvas chip: pop the array open into members
+          <span title={`expand ${b.members.length} array elements`}
+                onClick={e => { e.stopPropagation(); toggleGroup(path); }}
+                onDoubleClick={e => e.stopPropagation()}
+                style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, background: T.accent, color: T.bg, borderRadius: 6, padding: '0 4px', lineHeight: '11px', cursor: 'pointer' }}>
             ×{b.members.length}
+          </span>
+        )}
+        {b.groupOf && model!.blocks.get(b.groupOf)?.expanded && (
+          // expanded array member: outline chip folds the family back
+          <span title={`collapse back to ${model!.blocks.get(b.groupOf)!.label} (×${model!.blocks.get(b.groupOf)!.members!.length})`}
+                onClick={e => { e.stopPropagation(); toggleGroup(b.groupOf!); }}
+                onDoubleClick={e => e.stopPropagation()}
+                style={{ flexShrink: 0, fontSize: 8, fontWeight: 700, color: T.accent, border: `1px solid ${T.accent}`, borderRadius: 6, padding: '0 4px', lineHeight: '9px', cursor: 'pointer' }}>
+            ×
           </span>
         )}
         {trace?.blocks.has(path) && (
