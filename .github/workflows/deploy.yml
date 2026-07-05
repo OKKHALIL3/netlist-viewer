@@ -1,21 +1,26 @@
 name: Deploy to GitHub Pages
 
+# Publishes the vite build to the gh-pages BRANCH (Pages source: "deploy from
+# a branch"). The official actions/deploy-pages@v4 route started failing
+# server-side on 2026-07-04 (deployment created → in_progress → failure with
+# an empty error, artifact fine, no incident on githubstatus) after a month of
+# green runs — the branch-publish path is the same channel the manual
+# `npm run deploy` (gh-pages -d dist) uses and has always worked.
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,16 +30,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish dist to gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          touch dist/.nojekyll
+          cd dist
+          git init -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "deploy ${GITHUB_SHA:0:7}"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
