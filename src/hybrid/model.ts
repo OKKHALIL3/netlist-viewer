@@ -66,7 +66,6 @@ function cellFacts(cell: Cell) {
 export function buildHybridModel(design: Design): HybridModel {
   const blocks = new Map<string, HybridBlock>();
   const memo = new Map<string, number>();
-  const supplyDomains = new Set<string>();
   const levelNetCounts: number[] = [];
   let maxDepth = 0;
 
@@ -74,7 +73,6 @@ export function buildHybridModel(design: Design): HybridModel {
     if (blocks.has(path)) return null; // finger-collapsed duplicate (same normSeg) — keep first
     const cell = design.cells.get(master);
     const facts = cell ? cellFacts(cell) : { roles: { signal: 0, supply: 0, control: 0 }, domains: [], netCount: 0, pins: 0 };
-    for (const d of facts.domains) supplyDomains.add(d);
     const b: HybridBlock = {
       path, label, master, depth, parent, children: [],
       devices: recursiveDevices(design, master, memo, new Set()),
@@ -107,7 +105,10 @@ export function buildHybridModel(design: Design): HybridModel {
   const model: HybridModel = {
     blocks, root: '', maxDepth,
     levelNetCounts: Array.from(levelNetCounts, v => v ?? 0),
-    supplyDomains: [...supplyDomains],
+    // Top cell's rails only (Amr): deeper cells contribute locally-voted rail
+    // names (topology classifier) that flood the supply domain map with
+    // block-local net names meaningless at design scope.
+    supplyDomains: [...blocks.get('')!.domains],
     hasLayout: false,
   };
   groupArrays(model);

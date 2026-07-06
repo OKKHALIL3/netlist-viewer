@@ -32,9 +32,14 @@ test('pin roles: supply from net kind, rest signal', () => {
   assert.deepEqual(amp.pinRoles, { signal: 2, supply: 2, control: 0 });
 });
 
-test('supply domains collected per block and design-wide', () => {
-  const m = buildHybridModel(tinyDesign());
+test('supply domains: per block local, map lists TOP-LEVEL rails only', () => {
+  const d = tinyDesign();
+  // Simulate a topology-classifier vote deep in the tree: a block-local net
+  // promoted to power. It must show on the block, NOT in the design map.
+  d.cells.get('STG')!.nets.find(n => n.name === 'd')!.kind = 'power';
+  const m = buildHybridModel(d);
   assert.deepEqual(m.blocks.get('xu2')!.domains.sort(), ['vdd', 'vss']);
+  assert.deepEqual(m.blocks.get('xu1/xs1')!.domains.sort(), ['d', 'vdd', 'vss']);
   assert.deepEqual(m.supplyDomains.sort(), ['vdd', 'vss']);
 });
 

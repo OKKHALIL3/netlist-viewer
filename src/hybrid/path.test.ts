@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { tinyDesign } from './__fixtures__/tiny';
 import { buildHybridModel } from './model';
 import { buildConductors } from './connectivity';
-import { findPath } from './path';
+import { findPath, resolvePinRef } from './path';
 
 const setup = () => {
   const d = tinyDesign();
@@ -35,4 +35,11 @@ test('top-level subckt pin is a valid endpoint', () => {
 test('supply pins have no conductor → explicit null', () => {
   const { d, m, c } = setup();
   assert.equal(findPath(d, m, c, { block: 'xu1', pin: 'vdd' }, { block: 'xu2', pin: 'a' }), null);
+});
+
+test('"top" (any case) aliases the root cell in pin refs', () => {
+  const { d, m } = setup();
+  assert.deepEqual(resolvePinRef(d, m, { block: 'top', pin: 'in' }), { block: '', pin: 'in' });
+  assert.deepEqual(resolvePinRef(d, m, { block: 'TOP', pin: 'IN' }), { block: '', pin: 'in' });
+  assert.equal(resolvePinRef(d, m, { block: 'top', pin: 'nope' }), null);
 });

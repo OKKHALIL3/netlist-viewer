@@ -1,8 +1,14 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
 import { TAXONOMY } from '../../hybrid/classify';
 import { displayPath } from '../../hybrid/model';
+import { normSeg } from '../../layout-viewer/correlate';
 import { T } from './theme';
+import { PinPicker, type InstanceOption } from './PinPicker';
+
+// Display names for the taxonomy groups (Amr) — category keys stay 'A:AMP'
+// style everywhere (store, overrides, zone colors).
+const GROUP_LABELS: Record<keyof typeof TAXONOMY, string> = { A: 'Analog', D: 'Digital', AMS: 'AMS' };
 
 // `subject` renders verbatim in mono next to the uppercase title — instance
 // ids are case-significant and must never be uppercased by styling.
@@ -33,26 +39,51 @@ export function HybridControls() {
     pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathPinsValid,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
   } = useHybridStore();
-  // Built only while Path view is on — on large designs this list is big, and
-  // capped so the datalist can't mount an unbounded number of DOM nodes.
-  const PIN_OPTION_CAP = 6000;
-  const pinOptions = useMemo(
+  // Functional-map groups start collapsed (Amr) — expansion is view state,
+  // not filter state, so it lives here rather than in the store.
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  // Stage-1 list for the pin pickers, built only while Path view is on and
+  // capped so the dropdown source can't grow unbounded on hpio-scale designs.
+  // Refs are original-case label paths (what the tree shows); labelPath walks
+  // the REAL parent chain so children of array representatives anchor on a
+  // typable real path (the group path itself has no blocks-map subtree).
+  const INSTANCE_CAP = 4000;
+  const instances = useMemo(
     () => {
       if (!pathMode || !design || !model) return [];
-      const out: string[] = [];
+      const memo = new Map<string, string>([['', '']]);
+      const labelPath = (p: string): string => {
+        const hit = memo.get(p);
+        if (hit !== undefined) return hit;
+        const b = model.blocks.get(p)!;
+        const pl = b.parent === null ? '' : labelPath(b.parent);
+        const lp = pl ? `${pl}/${b.label}` : b.label;
+        memo.set(p, lp);
+        return lp;
+      };
+      const out: InstanceOption[] = [{ ref: 'top', cell: design.topCell }];
       for (const b of model.blocks.values()) {
+        if (out.length >= INSTANCE_CAP) break;
         // display-reachable blocks only: array members (and non-representative
-        // subtrees) would flood the list with duplicate pins
-        if (displayPath(model, b.path) !== b.path) continue;
-        for (const p of design.cells.get(b.master)?.ports ?? []) {
-          out.push(`${b.path}:${p.name}`);
-          if (out.length >= PIN_OPTION_CAP) return out;
-        }
+        // subtrees) would flood the list with duplicate instances
+        if (b.path === '' || displayPath(model, b.path) !== b.path) continue;
+        out.push({ ref: labelPath(b.path), cell: b.master });
       }
       return out;
     },
     [pathMode, design, model],
   );
+  const pinsFor = (instRef: string): string[] | null => {
+    if (!design || !model) return null;
+    let cellName: string | undefined;
+    if (instRef === '' || instRef.toLowerCase() === 'top') cellName = design.topCell;
+    else {
+      const p = instRef.split('/').map(s => normSeg(s) || s.toLowerCase()).join('/');
+      cellName = model.blocks.get(p)?.master;
+    }
+    const cell = cellName ? design.cells.get(cellName) : undefined;
+    return cell ? cell.ports.map(p => p.name) : null;
+  };
   if (!model) return null;
   return (
     <div style={{ width: 244, padding: 12, overflowY: 'auto', borderRight: `1px solid ${T.border}`, background: T.bg }}>
@@ -66,23 +97,36 @@ export function HybridControls() {
         {(Object.keys(TAXONOMY) as Array<keyof typeof TAXONOMY>).map(g => {
           const keys = TAXONOMY[g].map(c => `${g}:${c}`);
           const allOn = keys.every(k => !funcOff.has(k));
+          const someOn = keys.some(k => !funcOff.has(k));
+          const open = openGroups.has(g);
           return (
             <div key={g} style={{ marginBottom: 6 }}>
-              <label style={{ display: 'flex', gap: 7, fontSize: 13, color: T.text, fontWeight: 700, cursor: 'pointer' }}>
+              {/* Collapsed by default (Amr): checkbox toggles the whole group;
+                  name/chevron expands the subcategory list. Indeterminate =
+                  partially off, so the collapsed row can't hide a mixed state. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <input type="checkbox" checked={allOn}
+                       ref={el => { if (el) el.indeterminate = someOn && !allOn; }}
                        onChange={() => keys.forEach(k => (allOn === !funcOff.has(k)) && toggleFunc(k))}
-                       style={{ accentColor: T.blue }} />
-                <span style={{ width: 10, height: 10, borderRadius: 3, background: T.groupColors[g], alignSelf: 'center' }} />
-                {g}
-              </label>
-              <div style={{ marginLeft: 22, borderLeft: `2px solid ${T.border}`, paddingLeft: 8 }}>
-                {keys.map(k => (
-                  <label key={k} style={{ display: 'flex', gap: 7, fontSize: 12, color: T.text, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={!funcOff.has(k)} onChange={() => toggleFunc(k)} style={{ accentColor: T.blue }} />
-                    {k.split(':')[1]}
-                  </label>
-                ))}
+                       style={{ accentColor: T.blue, cursor: 'pointer' }} />
+                <span style={{ width: 10, height: 10, borderRadius: 3, background: T.groupColors[g], flexShrink: 0 }} />
+                <span onClick={() => setOpenGroups(s => { const n = new Set(s); if (n.has(g)) n.delete(g); else n.add(g); return n; })}
+                      style={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                               fontSize: 13, color: T.text, fontWeight: 700, cursor: 'pointer', userSelect: 'none' }}>
+                  {GROUP_LABELS[g]}
+                  <span style={{ fontSize: 10, color: T.muted }}>{open ? '▾' : '▸'}</span>
+                </span>
               </div>
+              {open && (
+                <div style={{ marginLeft: 22, borderLeft: `2px solid ${T.border}`, paddingLeft: 8 }}>
+                  {keys.map(k => (
+                    <label key={k} style={{ display: 'flex', gap: 7, fontSize: 12, color: T.text, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!funcOff.has(k)} onChange={() => toggleFunc(k)} style={{ accentColor: T.blue }} />
+                      {k.split(':')[1]}
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -105,17 +149,10 @@ export function HybridControls() {
         {pathMode && (
           <div style={{ marginTop: 6 }}>
             {(['Start pin', 'End pin'] as const).map((label, i) => (
-              <div key={label}>
-                <div style={{ fontSize: 11, color: T.muted, margin: '6px 0 2px' }}>{label} ◈</div>
-                <input list="hybrid-pins" value={i ? endPin : startPin}
-                       onChange={e => setPathPins(i ? startPin : e.target.value, i ? e.target.value : endPin)}
-                       placeholder="block/path:pin"
-                       style={{ width: '100%', fontSize: 12, fontFamily: T.mono, padding: '5px 6px', borderRadius: 6, border: `1px solid ${T.border}`, background: T.panel2, color: T.text }} />
-              </div>
+              <PinPicker key={label} label={label} value={i ? endPin : startPin}
+                         onChange={v => setPathPins(i ? startPin : v, i ? v : endPin)}
+                         instances={instances} pinsFor={pinsFor} />
             ))}
-            <datalist id="hybrid-pins">
-              {pinOptions.map(o => <option key={o} value={o} />)}
-            </datalist>
             {pathResult && (
               <div style={{ marginTop: 10, background: T.panel2, borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
                 <div>Total net count <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathResult.netCount}⟩</b></div>

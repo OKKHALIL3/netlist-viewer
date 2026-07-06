@@ -13,7 +13,10 @@ export interface PathResult { blocks: string[]; conductors: number[]; netCount: 
 // the exact case misses. Doubles as the validity gate that tells "still
 // typing" apart from "valid pins but genuinely no path" (no BFS on partials).
 export function resolvePinRef(design: Design, model: HybridModel, pin: PinRef): PinRef | null {
-  const block = pin.block === '' ? '' : pin.block.split('/').map(s => normSeg(s) || s.toLowerCase()).join('/');
+  let block = pin.block === '' ? '' : pin.block.split('/').map(s => normSeg(s) || s.toLowerCase()).join('/');
+  // "top" is the picker's label for the root cell (same as the tree's root
+  // row) — honor it unless a real top-level instance is literally named top.
+  if (block === 'top' && !model.blocks.has(block)) block = '';
   const cellName = block === '' ? design.topCell : model.blocks.get(block)?.master;
   if (!cellName) return null;
   const cell = design.cells.get(cellName);
