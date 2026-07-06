@@ -123,7 +123,10 @@ export function buildHybridModel(design: Design): HybridModel {
 // members so footer totals are unchanged by collapsing; the group's children
 // are the representative member's (drill in = see one element's structure).
 // Deepest parents first, so a group copies its representative's children
-// AFTER those children were themselves grouped (nested arrays).
+// AFTER those children were themselves grouped (nested arrays). After the
+// bus runs, remaining same-master siblings fold into MASTER STACKS (Amr
+// round 6: "start stacking some cards underneath each other") — same
+// members/groupOf machinery, so traces/coupling/search follow for free.
 function groupArrays(model: HybridModel): void {
   const parents = [...model.blocks.values()].sort((a, b) => b.depth - a.depth);
   for (const parent of parents) {
@@ -160,7 +163,60 @@ function groupArrays(model: HybridModel): void {
       next.push(gpath);
     }
     parent.children = next;
+    stackChildren(model, parent);
   }
+}
+
+// Minimum same-master siblings before a stack forms — pairs stay individual
+// (two named instances usually ARE two different things; dozens are a family).
+const STACK_MIN = 3;
+
+// Fold same-master siblings the bus pass left behind (XI80/XI87/XI79 …) into
+// one MASTER STACK per (parent, master). One stack card stands in for the
+// whole family on the canvas; the ×N chip pops it open like an array group.
+function stackChildren(model: HybridModel, parent: HybridBlock): void {
+  if (parent.children.length < STACK_MIN) return;
+  const byMaster = new Map<string, string[]>();
+  for (const cp of parent.children) {
+    const c = model.blocks.get(cp)!;
+    if (c.members) continue; // array groups keep their bus identity
+    let list = byMaster.get(c.master);
+    if (!list) byMaster.set(c.master, (list = []));
+    list.push(cp);
+  }
+  const stackOf = new Map<string, string>();   // member path → its stack path
+  const anchors = new Map<string, string>();   // first member → stack path
+  for (const [master, members] of byMaster) {
+    if (members.length < STACK_MIN) continue;
+    // '#' cannot appear in a normSeg'd real instance path, so the synthetic
+    // segment can never collide with a real sibling.
+    const seg = `#${(normSeg(master) || 'stack').replace(/\//g, '_')}`;
+    const gpath = parent.path ? `${parent.path}/${seg}` : seg;
+    if (model.blocks.has(gpath)) continue;
+    const labels = members.map(p => model.blocks.get(p)!.label);
+    const prefix = commonPrefix(labels);
+    emitGroup(model, parent, gpath, prefix.length >= 2 ? `${prefix}…` : master, master, members);
+    anchors.set(members[0], gpath);
+    for (const m of members) stackOf.set(m, gpath);
+  }
+  if (anchors.size === 0) return;
+  const next: string[] = [];
+  for (const cp of parent.children) {
+    const g = stackOf.get(cp);
+    if (!g) next.push(cp);
+    else if (anchors.get(cp) === g) next.push(g); // the stack takes the first member's slot
+  }
+  parent.children = next;
+}
+
+function commonPrefix(labels: string[]): string {
+  let p = labels[0] ?? '';
+  for (const l of labels) {
+    let i = 0;
+    while (i < p.length && i < l.length && p[i] === l[i]) i++;
+    p = p.slice(0, i);
+  }
+  return p;
 }
 
 function makeGroup(
@@ -173,7 +229,6 @@ function makeGroup(
   if (model.blocks.has(gpath)) return null; // freak name collision — leave ungrouped
 
   const members = sorted.map(e => e.path);
-  const rep = model.blocks.get(members[0])!;
   // Label keeps the instance ids' original case; path indices are authoritative.
   // Strip finger suffixes (X<0>@2) the way normSeg does — but case-preserving —
   // or the suffix blocks the bus parse and the label falls back to lowercase.
@@ -183,8 +238,20 @@ function makeGroup(
     ? busLabel(labelParse.base, labelParse.brackets, sorted.map(e => e.index))
     : gseg;
 
+  emitGroup(model, parent, gpath, label, run.master, members);
+  return gpath;
+}
+
+// Shared group materialization for array groups and master stacks: summed
+// stats (footer totals unchanged by collapsing), representative's children,
+// members marked with groupOf.
+function emitGroup(
+  model: HybridModel, parent: HybridBlock,
+  gpath: string, label: string, master: string, members: string[],
+): HybridBlock {
+  const rep = model.blocks.get(members[0])!;
   const g: HybridBlock = {
-    path: gpath, label, master: run.master, depth: rep.depth, parent: parent.path,
+    path: gpath, label, master, depth: rep.depth, parent: parent.path,
     children: [...rep.children],
     devices: 0, pins: 0,
     pinRoles: { signal: 0, supply: 0, control: 0 },
@@ -199,7 +266,7 @@ function makeGroup(
     g.pinRoles.signal += m.pinRoles.signal; g.pinRoles.supply += m.pinRoles.supply; g.pinRoles.control += m.pinRoles.control;
   }
   model.blocks.set(gpath, g);
-  return gpath;
+  return g;
 }
 
 // Map a REAL instance path onto the collapsed display tree: a path ending on

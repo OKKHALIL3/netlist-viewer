@@ -38,18 +38,28 @@ function cdlNetKind(design: Design, model: HybridModel, data: LayoutData, name: 
   return cell?.nets.find(n => normSeg(n.name) === last)?.kind;
 }
 
-export function couplingFor(
-  design: Design, model: HybridModel, data: LayoutData, pairs: NetPairCoupling[],
-  selected: string, candidates: string[], minC: number, includeSupply: boolean,
-): CouplingNeighbor[] {
-  const sel = model.blocks.get(selected);
-  if (!sel?.dspfNets) return [];
+// DSPF net indices that are supply (ground flag, name pattern, or the CDL's
+// topology-refined kind). Depends only on the loaded design + DSPF — build it
+// once and cache; on hpio-scale extractions the per-net CDL lookups dominate
+// couplingFor's cost when recomputed per selection.
+export function buildSupplyIndex(design: Design, model: HybridModel, data: LayoutData): Set<number> {
   const supplyIdx = new Set<number>();
   data.nets.forEach((n, i) => {
     const topoKind = n.name ? cdlNetKind(design, model, data, n.name) : undefined;
     if (n.isGround || nameNetKind(n.name) !== 'signal' || (topoKind && topoKind !== 'signal')) supplyIdx.add(i);
   });
-  const isSupplyNet = (i: number) => supplyIdx.has(i);
+  return supplyIdx;
+}
+
+export function couplingFor(
+  design: Design, model: HybridModel, data: LayoutData, pairs: NetPairCoupling[],
+  selected: string, candidates: string[], minC: number, includeSupply: boolean,
+  supplyIdx?: Set<number>,
+): CouplingNeighbor[] {
+  const sel = model.blocks.get(selected);
+  if (!sel?.dspfNets) return [];
+  const supply = supplyIdx ?? buildSupplyIndex(design, model, data);
+  const isSupplyNet = (i: number) => supply.has(i);
   const out = new Map<string, CouplingNeighbor>();
   for (const cand of candidates) {
     if (relatedDisplay(model, selected, cand)) continue;

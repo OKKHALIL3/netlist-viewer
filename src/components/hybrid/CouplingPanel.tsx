@@ -1,33 +1,25 @@
 // src/components/hybrid/CouplingPanel.tsx
-import { useMemo } from 'react';
 import { useHybridStore } from '../../store/hybridStore';
-import { couplingFor } from '../../hybrid/coupling';
-import { visiblePaths } from '../../hybrid/slots';
 import { T } from './theme';
 import { Panel } from './HybridControls';
 
 export function CouplingPanel() {
-  const { design, layoutData, model, selected, openPath, coupling, couplingPairs, version } = useHybridStore();
-  const vis = useMemo(
-    () => {
-      void version; // toggleGroup() swaps children arrays in place
-      return model ? visiblePaths(model, openPath) : null;
-    },
-    [model, openPath, version],
-  );
-  const neighbors = useMemo(() => {
-    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model || !vis) return [];
-    return couplingFor(design, model, layoutData, couplingPairs, selected, vis, coupling.minC, coupling.includeSupply);
-  }, [coupling, selected, couplingPairs, layoutData, design, model, vis]);
+  // Neighbors are computed off the render path in the store (refreshCoupling)
+  // so a heavy DSPF shows "computing…" instead of a frozen click.
+  const { model, selected, coupling, couplingBusy, couplingNeighbors } = useHybridStore();
   if (!model || !coupling.on || selected === null) return null;
+  const neighbors = couplingNeighbors ?? [];
   return (
     // Sits in the right overlay rail (HybridViewer) — shrinks + scrolls internally.
     <div style={{ flex: '0 1 auto', minHeight: 96, pointerEvents: 'auto', overflowY: 'auto' }}>
       <Panel title="Coupling" subject={model.blocks.get(selected)?.label}>
-        {neighbors.length === 0 && (
+        {couplingBusy && (
+          <div style={{ fontSize: 11, color: T.muted, fontStyle: 'italic' }}>Computing coupling…</div>
+        )}
+        {!couplingBusy && neighbors.length === 0 && (
           <div style={{ fontSize: 11, color: T.muted }}>No coupling above threshold.</div>
         )}
-        {neighbors.map(n => (
+        {!couplingBusy && neighbors.map(n => (
           <div key={n.block} style={{ marginBottom: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontFamily: T.mono, fontSize: 11.5, color: T.text, fontWeight: 700 }}>
               <span title={n.block} style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{model.blocks.get(n.block)?.label ?? n.block}</span>

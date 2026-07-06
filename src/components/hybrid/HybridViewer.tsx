@@ -12,11 +12,17 @@ import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, openPath, goToCrumb, clearOverlays, funcOff, supplyOff, version, coupling, selected } = useHybridStore();
+  const { model, build, openPath, goToCrumb, clearOverlays, funcOff, supplyOff, version, coupling, selected, refreshCoupling } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
   }, [design, layoutData, layoutModel, build]);
+
+  // Coupling recomputes off the render path whenever its inputs move — the
+  // busy flag drives the "computing coupling…" indicators (canvas + panel).
+  useEffect(() => {
+    refreshCoupling();
+  }, [coupling.on, coupling.minC, coupling.includeSupply, selected, openPath, version, model, refreshCoupling]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

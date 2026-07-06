@@ -67,6 +67,9 @@ export function HybridControls() {
         // display-reachable blocks only: array members (and non-representative
         // subtrees) would flood the list with duplicate instances
         if (b.path === '' || displayPath(model, b.path) !== b.path) continue;
+        // master stacks have synthetic '#' paths and prefix labels — not a
+        // typable pin scope; expand the stack to path through one member
+        if (b.path.split('/').pop()!.startsWith('#')) continue;
         out.push({ ref: labelPath(b.path), cell: b.master });
       }
       return out;

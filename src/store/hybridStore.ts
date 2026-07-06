@@ -5,6 +5,8 @@ import type { HybridModel, HybridBlock } from '../hybrid/model';
 import { buildHybridModel, displayPath, setGroupExpanded } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
 import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
+import { couplingFor, buildSupplyIndex, type CouplingNeighbor } from '../hybrid/coupling';
+import { visiblePaths } from '../hybrid/slots';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
 import { findPath, resolvePinRef, type PinRef, type PathResult } from '../hybrid/path';
 import { normSegments, normSeg } from '../layout-viewer/correlate';
@@ -61,6 +63,11 @@ interface HybridState {
   // input strings may differ in case or name an array member
   pathEnds: [PinRef, PinRef] | null;
   coupling: { on: boolean; minC: number; includeSupply: boolean };
+  // couplingFor on a big DSPF takes visible time — it runs OFF the render
+  // path (refreshCoupling) so the canvas can show a "computing" indicator
+  // instead of freezing mid-click (Amr round 6 item 5).
+  couplingBusy: boolean;
+  couplingNeighbors: CouplingNeighbor[] | null;
 
   build: (design: Design, layoutData: LayoutData | null, layoutModel: LayoutModel | null) => void;
   toggleOpen: (path: string) => void;
@@ -82,6 +89,7 @@ interface HybridState {
   toggleCoupling: () => void;
   setCouplingMinC: (v: number) => void;
   toggleCouplingSupply: () => void;
+  refreshCoupling: () => void;
 }
 
 // Everything that must die on navigation (spec §5 + approved design decision).
@@ -89,7 +97,14 @@ const CLEARED = {
   selected: null as string | null, trace: null as TraceResult | null,
   pathResult: null as PathResult | null, startPin: '', endPin: '',
   pathPinsValid: false, pathEnds: null as [PinRef, PinRef] | null,
+  couplingBusy: false, couplingNeighbors: null as CouplingNeighbor[] | null,
 };
+
+// Cached across selections (invalidated by build()): the supply-net index
+// depends only on the design + DSPF. The token discards stale async coupling
+// results when the user clicks on before a computation lands.
+let supplyIdxCache: Set<number> | null = null;
+let couplingToken = 0;
 
 // build() input identity — tracked outside reactive state (spec: "non-reactive
 // fields are fine") so a re-mount of HybridViewer with the same design/DSPF
@@ -135,6 +150,8 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   pathPinsValid: false,
   pathEnds: null,
   coupling: { on: false, minC: 1e-15, includeSupply: false },
+  couplingBusy: false,
+  couplingNeighbors: null,
 
   build: (design, layoutData, layoutModel) => {
     // Every HybridViewer mount (i.e. every mode switch) calls build() with
@@ -161,6 +178,8 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     lastBuildDesign = design;
     lastBuildLayoutData = layoutData;
     lastBuildLayoutModel = layoutModel;
+    supplyIdxCache = null;
+    couplingToken++;
     set({
       design, layoutData, model, conductors, couplingPairs, netLayers,
       openPath: [], ...CLEARED,
@@ -304,4 +323,26 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   toggleCoupling: () => set(s => ({ coupling: { ...s.coupling, on: !s.coupling.on } })),
   setCouplingMinC: (v) => set(s => ({ coupling: { ...s.coupling, minC: v } })),
   toggleCouplingSupply: () => set(s => ({ coupling: { ...s.coupling, includeSupply: !s.coupling.includeSupply } })),
+
+  // Recompute coupling neighbors for the current selection, off the render
+  // path. The timeout is deliberate: it lets React paint the busy indicator
+  // before the synchronous pair scan runs (spinners can't spin mid-freeze).
+  refreshCoupling: () => {
+    const token = ++couplingToken;
+    const { design, layoutData, model, couplingPairs, coupling, selected, openPath } = get();
+    if (!coupling.on || !selected || !couplingPairs || !layoutData || !design || !model) {
+      set({ couplingNeighbors: null, couplingBusy: false });
+      return;
+    }
+    set({ couplingBusy: true });
+    setTimeout(() => {
+      if (token !== couplingToken) return;
+      if (!supplyIdxCache) supplyIdxCache = buildSupplyIndex(design, model, layoutData);
+      const neighbors = couplingFor(
+        design, model, layoutData, couplingPairs, selected,
+        visiblePaths(model, openPath), coupling.minC, coupling.includeSupply, supplyIdxCache,
+      );
+      if (token === couplingToken) set({ couplingNeighbors: neighbors, couplingBusy: false });
+    }, 30);
+  },
 }));

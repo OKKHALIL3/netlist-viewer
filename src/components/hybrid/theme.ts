@@ -9,7 +9,9 @@ export const T = {
   // Surfaces & neutrals — --bg / --panel / --panel-2 / --txt / --txt-dim / --line
   bg: '#0e1116', panel: '#151a21', panel2: '#1b212b', card: '#1b212b',
   text: '#dbe3ee', muted: '#7d8a9c', faint: '#566073', border: '#262e3a',
-  rail: '#2e3a4a', edge: '#262e3a',
+  // edge was --line (#262e3a) — invisible against the canvas at context
+  // opacity; Amr round 6 asked for clearly visible hierarchy lines.
+  rail: '#2e3a4a', edge: '#43546d',
   // Interactive accent — --accent / --accent-soft. `blue` is kept as the name
   // the components already use for accent-colored controls.
   accent: '#4f9dff', accentSoft: '#1d3756', blue: '#4f9dff',
