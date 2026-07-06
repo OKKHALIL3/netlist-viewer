@@ -18,7 +18,7 @@ interface Props {
   pinsFor: (instRef: string) => string[] | null;
 }
 
-// Guided two-stage combobox (Amr: "choose instance & then pin"): no ':' in
+// Guided two-stage combobox — choose the instance, then its pin: no ':' in
 // the value = choosing an instance; picking one appends ':' and the list
 // switches to that instance's pins. Free-typed refs stay valid — the store
 // validates through resolvePinRef either way.

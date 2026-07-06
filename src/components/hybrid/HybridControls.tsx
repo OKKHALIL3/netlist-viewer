@@ -6,7 +6,7 @@ import { normSeg } from '../../layout-viewer/correlate';
 import { T } from './theme';
 import { PinPicker, type InstanceOption } from './PinPicker';
 
-// Display names for the taxonomy groups (Amr) — category keys stay 'A:AMP'
+// Display names for the taxonomy groups — category keys stay 'A:AMP'
 // style everywhere (store, overrides, zone colors).
 const GROUP_LABELS: Record<keyof typeof TAXONOMY, string> = { A: 'Analog', D: 'Digital', AMS: 'AMS' };
 
@@ -39,7 +39,7 @@ export function HybridControls() {
     pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathPinsValid,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
   } = useHybridStore();
-  // Functional-map groups start collapsed (Amr) — expansion is view state,
+  // Functional-map groups start collapsed — expansion is view state,
   // not filter state, so it lives here rather than in the store.
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
   // Stage-1 list for the pin pickers, built only while Path view is on and
@@ -90,12 +90,12 @@ export function HybridControls() {
   if (!model) return null;
   return (
     <div style={{ width: 244, padding: 12, overflowY: 'auto', borderRight: `1px solid ${T.border}`, background: T.bg }}>
-      {/* The "Hier depth" expand-all slider was removed on Amr's round-3
-          review — depth now follows the open chain on the canvas itself
-          (double-click opens the level below; the rest stays collapsed). */}
+      {/* The "Hier depth" expand-all slider was removed — depth follows the
+          open chain on the canvas itself (double-click opens the level
+          below; the rest stays collapsed). */}
       {/* The "Display" tuning card (zone-color / criticality-sizing toggles +
-          weight inputs) was removed on Amr's review — zone colors and
-          criticality sizing/ordering stay on with default weights. */}
+          weight inputs) was removed — zone colors and criticality
+          sizing/ordering stay on with default weights. */}
       <Panel title="Functional map">
         {(Object.keys(TAXONOMY) as Array<keyof typeof TAXONOMY>).map(g => {
           const keys = TAXONOMY[g].map(c => `${g}:${c}`);
@@ -104,7 +104,7 @@ export function HybridControls() {
           const open = openGroups.has(g);
           return (
             <div key={g} style={{ marginBottom: 6 }}>
-              {/* Collapsed by default (Amr): checkbox toggles the whole group;
+              {/* Collapsed by default: checkbox toggles the whole group;
                   name/chevron expands the subcategory list. Indeterminate =
                   partially off, so the collapsed row can't hide a mixed state. */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>

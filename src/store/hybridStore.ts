@@ -40,7 +40,7 @@ interface HybridState {
   trace: TraceResult | null;
   couplingPairs: NetPairCoupling[] | null;
   netLayers: Map<string, string[]> | null;
-  // The open chain (Amr's round-3 navigation model): openPath[i] is the block
+  // The open chain (path-expansion navigation): openPath[i] is the block
   // whose children are expanded on rail i+1. [] = nothing open (top box only);
   // non-empty chains always start at '' (the root). The breadcrumb IS this
   // chain. Siblings of open blocks render as slivers; the frontier rail
@@ -65,7 +65,7 @@ interface HybridState {
   coupling: { on: boolean; minC: number; includeSupply: boolean };
   // couplingFor on a big DSPF takes visible time — it runs OFF the render
   // path (refreshCoupling) so the canvas can show a "computing" indicator
-  // instead of freezing mid-click (Amr round 6 item 5).
+  // instead of freezing mid-click.
   couplingBusy: boolean;
   couplingNeighbors: CouplingNeighbor[] | null;
 
@@ -92,7 +92,7 @@ interface HybridState {
   refreshCoupling: () => void;
 }
 
-// Everything that must die on navigation (spec §5 + approved design decision).
+// Everything that must die on navigation.
 const CLEARED = {
   selected: null as string | null, trace: null as TraceResult | null,
   pathResult: null as PathResult | null, startPin: '', endPin: '',

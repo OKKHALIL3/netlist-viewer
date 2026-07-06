@@ -1,19 +1,17 @@
 import type { HybridModel } from './model';
 
-// Path-expansion rail layout (Amr's round-3 navigation model): the canvas
-// shows ONE rail per open level, not the whole subtree. Rail 0 is the top
-// cell; double-clicking a block opens its children on the rail below it —
-// the block itself stays where it is. Only the chain of open blocks
-// (`openPath`) expands; siblings of an open block stay visible as thin
-// slivers "just to know what is beside you".
+// Path-expansion rail layout: the canvas shows ONE rail per open level, not
+// the whole subtree. Rail 0 is the top cell; double-clicking a block opens
+// its children on the rail below it — the block itself stays where it is.
+// Only the chain of open blocks (`openPath`) expands; siblings of an open
+// block stay visible as thin slivers — enough to know what sits beside you.
 //
-// Round 4 ("it should give you only its children, with everything else in
-// this hierarchy on the side, faded and compressed"): the deepest (frontier)
-// rail is the CONTENT — full-size, full-strength. Every rail above it is
-// CONTEXT — the open ancestor renders as a compressed card (CTX_W) and its
-// siblings as extra-thin slivers; the canvas fades them too.
+// Focus model: the deepest (frontier) rail is the CONTENT — full-size,
+// full-strength. Every rail above it is CONTEXT — the open ancestor renders
+// as a compressed card (CTX_W) and its siblings as extra-thin slivers; the
+// canvas fades them too.
 //
-// Round 6 (large designs): the open chain runs straight down a CENTER SPINE —
+// For large designs the open chain runs straight down a CENTER SPINE —
 // every open ancestor is centered, siblings alternate outward most-critical-
 // first, capped per side with a "+N" stub for the rest. The frontier wraps
 // into stacked, centered rows instead of one endless strip, strongest blocks
@@ -67,7 +65,7 @@ export function computeRails(
   if (!model.blocks.has('')) return { items, rails, stubs, hidden, rowsAt, width: 0, openPath: chain };
 
   // A 0-dev/0-net leaf is a device the CDL couldn't resolve into a cell
-  // (moscap/dummy wrappers) — not a block worth a card (Amr round 6 item 6).
+  // (moscap/dummy wrappers) — not a block worth a card.
   const emptyLeaf = (p: string) => {
     const b = model.blocks.get(p)!;
     return b.devices === 0 && b.netCount === 0 && b.children.length === 0;

@@ -36,9 +36,9 @@ test('build populates model and resets navigation to the closed top box', () => 
 
 test('toggleOpen opens the level below, toggles closed, ignores leaves', () => {
   s().build(tinyDesign(), null, null);
-  s().toggleOpen('');                        // Amr's bug 1: double-click the top block
+  s().toggleOpen('');                        // regression: double-click the top block
   assert.deepEqual(s().openPath, ['']);      // children now on rail 1, top box stays
-  s().toggleOpen('xu1');                     // Amr's bug 2: children open BELOW xu1
+  s().toggleOpen('xu1');                     // regression: children open BELOW xu1
   assert.deepEqual(s().openPath, ['', 'xu1']);
   s().toggleOpen('xu1');                     // toggle shut
   assert.deepEqual(s().openPath, ['']);

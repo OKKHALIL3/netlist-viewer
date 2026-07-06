@@ -7,7 +7,7 @@ function Node({ path, depth }: { path: string; depth: number }) {
   const [open, setOpen] = useState(depth < 2);
   const b = model!.blocks.get(path)!;
   const isSel = selected === path;
-  const name = depth === 0 ? 'top' : b.label; // root row: instance-style "top" + cell pill, like Amr's navigator
+  const name = depth === 0 ? 'top' : b.label; // root row: instance-style "top" + cell pill, same as the schematic navigator
   return (
     <div>
       {/* Same row classes as the schematic hierarchy tree (.tree-row/.tree-chev/
@@ -42,7 +42,7 @@ function Node({ path, depth }: { path: string; depth: number }) {
         {trace?.blocks.has(path) && (
           <span style={{ flexShrink: 0, fontSize: 8, background: T.conn, color: T.bg, borderRadius: 3, padding: '0 4px', fontWeight: 700 }}>●</span>
         )}
-        {/* cell (master) name pill — Amr's navigator convention */}
+        {/* cell (master) name pill — same convention as the schematic navigator */}
         <span className="tree-master">{b.master}</span>
       </div>
       {open && b.children.map(c => <Node key={c} path={c} depth={depth + 1} />)}

@@ -10,10 +10,9 @@ export const T = {
   bg: '#0e1116', panel: '#151a21', panel2: '#1b212b', card: '#1b212b',
   text: '#dbe3ee', muted: '#7d8a9c', faint: '#566073', border: '#262e3a',
   // edge was --line (#262e3a) — invisible against the canvas at context
-  // opacity; Amr round 6 asked for clearly visible lines BETWEEN the layers,
-  // so the whole edge system is bright slate now. `spine` is the open-chain
-  // descent itself — the line his annotation traced — brighter still and
-  // drawn full-strength above the context fans.
+  // opacity; the layer-to-layer connection lines must read clearly, so the
+  // whole edge system is bright slate. `spine` is the open-chain descent
+  // line — brighter still, drawn full-strength above the context fans.
   rail: '#38485c', edge: '#64809f', spine: '#8aa5c4',
   // Interactive accent — --accent / --accent-soft. `blue` is kept as the name
   // the components already use for accent-colored controls.

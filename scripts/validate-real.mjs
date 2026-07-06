@@ -1,4 +1,4 @@
-// Validate the full parse→correlate pipeline against the three REAL handoff
+// Validate the full parse→correlate pipeline against the three REAL sample
 // pairs (three different extractors) and assert the layer + correlation story
 // the brief demands. Run: npm run validate:real
 //
@@ -89,7 +89,7 @@ for (const [cdlName, dspfName] of PAIRS) {
     expect('AVRH classified power (topology+propagation)', top.nets.find(n => n.name === 'AVRH')?.kind === 'power');
     expect('VSS classified ground', top.nets.find(n => n.name === 'VSS')?.kind === 'ground');
     const buff = design.cells.get('n16g_clk_cml2cmos_buff');
-    expect('net1 dangling in source (boss Q1: yes, dummy resistor leg)',
+    expect('net1 dangling in source (known-good: intentional dummy resistor leg)',
       buff.nets.find(n => n.name === 'net1')?.endpoints.length === 1);
   }
 

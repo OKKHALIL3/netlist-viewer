@@ -105,7 +105,7 @@ export function buildHybridModel(design: Design): HybridModel {
   const model: HybridModel = {
     blocks, root: '', maxDepth,
     levelNetCounts: Array.from(levelNetCounts, v => v ?? 0),
-    // Top cell's rails only (Amr): deeper cells contribute locally-voted rail
+    // Top cell's rails only: deeper cells contribute locally-voted rail
     // names (topology classifier) that flood the supply domain map with
     // block-local net names meaningless at design scope.
     supplyDomains: [...blocks.get('')!.domains],
@@ -124,9 +124,9 @@ export function buildHybridModel(design: Design): HybridModel {
 // are the representative member's (drill in = see one element's structure).
 // Deepest parents first, so a group copies its representative's children
 // AFTER those children were themselves grouped (nested arrays). After the
-// bus runs, remaining same-master siblings fold into MASTER STACKS (Amr
-// round 6: "start stacking some cards underneath each other") — same
-// members/groupOf machinery, so traces/coupling/search follow for free.
+// bus runs, remaining same-master siblings fold into MASTER STACKS — one
+// stacked card per same-master family — on the same members/groupOf
+// machinery, so traces/coupling/search follow for free.
 function groupArrays(model: HybridModel): void {
   const parents = [...model.blocks.values()].sort((a, b) => b.depth - a.depth);
   for (const parent of parents) {
@@ -289,7 +289,7 @@ export function displayPath(model: HybridModel, path: string): string {
 }
 
 // Toggle an array group between its collapsed ×N stand-in and the individual
-// members (Amr: "when it says ×4 you can expand that if needed"). Structural:
+// members. Structural:
 // the group/members swap places in the parent's children — and in the outer
 // group's display copy when the parent is a representative member — and
 // displayPath stops folding members of an expanded group, so traces, search,
