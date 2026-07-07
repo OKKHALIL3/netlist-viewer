@@ -315,6 +315,11 @@ def parse_cdl(text: str) -> str:
     #           3) Last cell defined
 
     top_cell = header_top_cell if header_top_cell in design_cells else None
+    # The header names the cell in whatever case the author typed; resolve it
+    # case-insensitively so a "Top Cell Name: TOP_CHIP" hint still matches a
+    # ".SUBCKT top_chip" instead of being silently dropped to the heuristic.
+    if not top_cell and header_top_cell:
+        top_cell = cell_lower_to_name.get(header_top_cell.lower())
 
     if not top_cell:
         referenced = set()

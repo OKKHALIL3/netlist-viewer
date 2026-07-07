@@ -482,6 +482,25 @@ check('header comment pointing to nonexistent cell falls back',
     return d.topCell;
   })(), 'REAL');
 
+check('header comment resolves case-insensitively (not the heuristic fallback)',
+  (() => {
+    // Header names CHIP_TOP but the cell is .SUBCKT chip_top; the position
+    // heuristic would (wrongly) pick the trailing unreferenced UNUSED cell.
+    const d = parseCDL(`
+* Top Cell Name: CHIP_TOP
+.SUBCKT chip_top a b
+XI1 a b LEAF
+.ENDS
+.SUBCKT LEAF a b
+M1 a b a a nmos
+.ENDS
+.SUBCKT UNUSED a b
+M1 a b a a nmos
+.ENDS
+`);
+    return d.topCell;
+  })(), 'chip_top');
+
 // ─────────────────────────────────────────────────────────────────────────────
 section('Connectivity correctness');
 
