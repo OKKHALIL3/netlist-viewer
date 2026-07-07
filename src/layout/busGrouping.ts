@@ -20,8 +20,15 @@ export function parseBusSuffix(name: string): BusSuffix | null {
 
 export function busLabel(base: string, brackets: '<>' | '[]', indices: number[]): string {
   const [open, close] = brackets === '<>' ? ['<', '>'] : ['[', ']'];
-  const lo = Math.min(...indices);
-  const hi = Math.max(...indices);
+  if (indices.length === 0) return base;
+  // Fold, don't spread: Math.min(...indices) throws RangeError (stack overflow)
+  // on a very large scalarized array (a big SRAM/word array).
+  let lo = indices[0], hi = indices[0];
+  for (let k = 1; k < indices.length; k++) {
+    const v = indices[k];
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
   return lo === hi ? `${base}${open}${lo}${close}` : `${base}${open}${hi}:${lo}${close}`;
 }
 
