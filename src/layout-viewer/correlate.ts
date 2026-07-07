@@ -135,7 +135,11 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     if (!units.has(path)) units.set(path, { path, isDevice: false, points });
   }
 
-  interface PhysGroup { key: string; label: string; box: Bbox; members: number }
+  // `members` = every eligible unit (real devices AND, in coordinate-less
+  // files, geometry-only net nodes) — it shapes the box and orders families.
+  // `devices` counts only real devices, so the reported deviceCount matches the
+  // CDL-block accounting (which also counts devices, not geometry nodes).
+  interface PhysGroup { key: string; label: string; box: Bbox; members: number; devices: number }
   const physGroups = new Map<string, PhysGroup>();
 
   const root = nodeBox.get('')!;
@@ -167,8 +171,9 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
       const raw0 = rawSegments(unit.path, dspfSeps)[0] ?? unit.path;
       const key = (normSeg(raw0) || raw0.toLowerCase()).replace(BUS_IDX_RE, '');
       let g = physGroups.get(key);
-      if (!g) { g = { key, label: raw0.replace(BUS_IDX_RE, ''), box: emptyBbox(), members: 0 }; physGroups.set(key, g); }
+      if (!g) { g = { key, label: raw0.replace(BUS_IDX_RE, ''), box: emptyBbox(), members: 0, devices: 0 }; physGroups.set(key, g); }
       g.members++;
+      if (unit.isDevice) g.devices++;
       for (const [x, y] of unit.points) extendBbox(g.box, x, y);
     }
   }
@@ -192,7 +197,7 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     physIdByKey.set(g.key, id);
     instances.push({
       id, label: g.label, master: null, origin: 'dspf', depth: 1,
-      deviceCount: g.members, bbox: g.box,
+      deviceCount: g.devices, bbox: g.box,
     });
   }
   const physTotal = [...physGroups.values()].filter(g => bboxValid(g.box)).length;
