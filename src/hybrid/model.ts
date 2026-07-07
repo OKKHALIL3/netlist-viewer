@@ -7,7 +7,12 @@ export interface HybridBlock {
   parent: string | null; children: string[];
   devices: number; pins: number;
   pinRoles: { signal: number; supply: number; control: number };
-  netCount: number; domains: string[];
+  // domains = every rail the cell touches (power AND ground) — display only
+  // (stats card). powerDomains = the filterable subset: grounds are shared by
+  // everything, so only power rails act as supply DOMAINS — this feeds the
+  // supply domain map and the canvas domain filter, which must agree or
+  // unchecking a rail stops dimming anything (grounds would always "rescue").
+  netCount: number; domains: string[]; powerDomains: string[];
   category: string | null;
   parasiticR: number | null; parasiticC: number | null; couplingC: number | null;
   dspfNets: Set<number> | null;
@@ -60,7 +65,8 @@ function cellFacts(cell: Cell) {
     else roles.signal++;
   }
   const domains = cell.nets.filter(n => n.kind !== 'signal').map(n => n.name);
-  return { roles, domains, netCount: cell.nets.length, pins: cell.ports.length };
+  const powerDomains = cell.nets.filter(n => n.kind === 'power').map(n => n.name);
+  return { roles, domains, powerDomains, netCount: cell.nets.length, pins: cell.ports.length };
 }
 
 export function buildHybridModel(design: Design): HybridModel {
@@ -72,11 +78,12 @@ export function buildHybridModel(design: Design): HybridModel {
   const add = (path: string, label: string, master: string, depth: number, parent: string | null): HybridBlock | null => {
     if (blocks.has(path)) return null; // finger-collapsed duplicate (same normSeg) — keep first
     const cell = design.cells.get(master);
-    const facts = cell ? cellFacts(cell) : { roles: { signal: 0, supply: 0, control: 0 }, domains: [], netCount: 0, pins: 0 };
+    const facts = cell ? cellFacts(cell) : { roles: { signal: 0, supply: 0, control: 0 }, domains: [], powerDomains: [], netCount: 0, pins: 0 };
     const b: HybridBlock = {
       path, label, master, depth, parent, children: [],
       devices: recursiveDevices(design, master, memo, new Set()),
-      pins: facts.pins, pinRoles: facts.roles, netCount: facts.netCount, domains: facts.domains,
+      pins: facts.pins, pinRoles: facts.roles, netCount: facts.netCount,
+      domains: facts.domains, powerDomains: facts.powerDomains,
       category: null, parasiticR: null, parasiticC: null, couplingC: null, dspfNets: null,
     };
     blocks.set(path, b);
@@ -105,12 +112,10 @@ export function buildHybridModel(design: Design): HybridModel {
   const model: HybridModel = {
     blocks, root: '', maxDepth,
     levelNetCounts: Array.from(levelNetCounts, v => v ?? 0),
-    // Top cell's POWER rails only. Two filters: grounds (vss/vssio/…) are not
-    // supply domains, so kind must be 'power', not merely non-signal; and only
-    // the top cell contributes, since deeper cells' locally-voted rail names
-    // (topology classifier) would flood the map with block-local nets.
-    supplyDomains: (design.cells.get(design.topCell)?.nets ?? [])
-      .filter(n => n.kind === 'power').map(n => n.name),
+    // Top cell's POWER rails only: grounds are not supply domains, and deeper
+    // cells' locally-voted rail names (topology classifier) would flood the
+    // map with block-local nets meaningless at design scope.
+    supplyDomains: [...blocks.get('')!.powerDomains],
     hasLayout: false,
   };
   groupArrays(model);
@@ -257,7 +262,7 @@ function emitGroup(
     children: [...rep.children],
     devices: 0, pins: 0,
     pinRoles: { signal: 0, supply: 0, control: 0 },
-    netCount: 0, domains: rep.domains,
+    netCount: 0, domains: rep.domains, powerDomains: rep.powerDomains,
     category: null, parasiticR: null, parasiticC: null, couplingC: null, dspfNets: null,
     members,
   };

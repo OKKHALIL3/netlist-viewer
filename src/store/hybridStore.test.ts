@@ -105,10 +105,12 @@ test('passesFilters: unclassified and domain-less blocks always pass', () => {
   const m = s().model!;
   const xs1 = m.blocks.get('xu1/xs1')!;   // Unclassified
   assert.ok(passesFilters(xs1, new Set(['A:AMP']), new Set()));
-  const xu1 = m.blocks.get('xu1')!;       // A:AMP, domains vdd+vss
+  const xu1 = m.blocks.get('xu1')!;       // A:AMP, power domain vdd (vss is not a domain)
   assert.ok(!passesFilters(xu1, new Set(['A:AMP']), new Set()));
-  assert.ok(!passesFilters(xu1, new Set(), new Set(['vdd', 'vss'])));
-  assert.ok(passesFilters(xu1, new Set(), new Set(['vdd'])));   // one live domain is enough
+  // The map lists POWER rails only, so grounds must not rescue a block whose
+  // power rail is unchecked — unchecking vdd dims vdd-domain blocks.
+  assert.ok(!passesFilters(xu1, new Set(), new Set(['vdd'])));
+  assert.ok(passesFilters(xu1, new Set(), new Set()));
 });
 
 test('filters are default-on via disabled-sets', () => {

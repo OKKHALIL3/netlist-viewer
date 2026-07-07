@@ -41,9 +41,13 @@ test('supply domains: per-block field keeps grounds, the design map lists power 
   d.cells.get('STG')!.nets.find(n => n.name === 'd')!.kind = 'power';
   const m = buildHybridModel(d);
   // The per-block domains field still carries both power and ground — the
-  // canvas domain filter needs them.
+  // block stats card lists every rail the cell touches.
   assert.deepEqual(m.blocks.get('xu2')!.domains.sort(), ['vdd', 'vss']);
   assert.deepEqual(m.blocks.get('xu1/xs1')!.domains.sort(), ['d', 'vdd', 'vss']);
+  // powerDomains is the filterable subset (grounds are not domains) — it
+  // feeds both the SUPPLY DOMAIN MAP list and the canvas domain filter.
+  assert.deepEqual(m.blocks.get('xu2')!.powerDomains.sort(), ['vdd']);
+  assert.deepEqual(m.blocks.get('xu1/xs1')!.powerDomains.sort(), ['d', 'vdd']);
   // The SUPPLY DOMAIN MAP lists supplies only — grounds (vss) are dropped.
   assert.deepEqual(m.supplyDomains.sort(), ['vdd']);
 });

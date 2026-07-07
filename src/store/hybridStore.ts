@@ -13,7 +13,10 @@ import { normSegments, normSeg } from '../layout-viewer/correlate';
 
 export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>): boolean {
   const catOk = b.category === null || b.category === UNCLASSIFIED || !funcOff.has(b.category);
-  const domOk = b.domains.length === 0 || b.domains.some(d => !supplyOff.has(d));
+  // Filter on POWER domains only — the same set the supply domain map lists.
+  // Grounds stay out of both: every block touches ground, so a ground entry
+  // in this check would make the checkboxes unable to dim anything.
+  const domOk = b.powerDomains.length === 0 || b.powerDomains.some(d => !supplyOff.has(d));
   return catOk && domOk;
 }
 
