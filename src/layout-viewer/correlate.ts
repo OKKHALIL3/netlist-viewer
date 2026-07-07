@@ -57,9 +57,15 @@ export function enumerateHierarchy(design: Design): HierNode[] {
     seen.add(id);
     nodes.push({ id, label, depth, segs, master });
   };
-  const walk = (cellName: string, prefix: string[], depth: number) => {
+  // `guard` carries the cells open on the current branch so a malformed cyclic
+  // subckt (A instantiates A) stops instead of recursing forever — the same
+  // guard hybrid/model.ts uses. It is add/deleted per branch, so a cell shared
+  // across sibling branches (a diamond) is still enumerated on each path.
+  const walk = (cellName: string, prefix: string[], depth: number, guard: Set<string>) => {
+    if (guard.has(cellName)) return;
     const cell = design.cells.get(cellName);
     if (!cell) return;
+    guard.add(cellName);
     // Only subckt instances are blocks. Primitive devices (transistors, R, C)
     // are intentionally NOT enumerated — this viewer shows instance boundaries,
     // not device-level boxes. Devices still position their parent instance's
@@ -67,10 +73,11 @@ export function enumerateHierarchy(design: Design): HierNode[] {
     for (const inst of cell.instances) {
       const segs = [...prefix, normSeg(inst.id) || inst.id.toLowerCase()];
       add(segs, inst.id, depth, inst.master);
-      if (design.cells.has(inst.master)) walk(inst.master, segs, depth + 1);
+      if (design.cells.has(inst.master)) walk(inst.master, segs, depth + 1, guard);
     }
+    guard.delete(cellName);
   };
-  walk(design.topCell, [], 1);
+  walk(design.topCell, [], 1, new Set());
   return nodes;
 }
 

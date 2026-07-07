@@ -38,6 +38,15 @@ test('enumerateHierarchy includes only subckt instances, not primitive devices',
   assert.ok(!ids.includes('x9/mr1'), 'a nested primitive must not be a node');
 });
 
+test('enumerateHierarchy terminates on a cyclic subckt instead of overflowing the stack', () => {
+  // A pathological but parseable CDL where a cell instantiates itself. Without a
+  // cycle guard this recurses forever → RangeError: Maximum call stack size.
+  const design = makeDesign('A', { A: [['X1', 'A']] });
+  const nodes = enumerateHierarchy(design);
+  assert.ok(nodes.length >= 2);            // root + the one instance, then it stops
+  assert.ok(nodes.some(n => n.id === 'x1'));
+});
+
 test('flat design (only primitives) has no instance boxes; devices are top-level', () => {
   const design = makeDesign('TOP', { TOP: [] }, { TOP: ['MM15', 'MS1'] });
   const dspf = parseDspf([
