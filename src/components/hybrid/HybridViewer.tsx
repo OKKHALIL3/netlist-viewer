@@ -37,10 +37,11 @@ export function HybridViewer() {
     // Invalidate on version change when reclassify() mutates block categories
     void version;
     if (!model) return { pins: 0, nets: 0, devices: 0 };
+    const supplyDomains = new Set(model.supplyDomains);
     let pins = 0, nets = 0, devices = 0;
     for (const p of visiblePaths(model, openPath)) {
       const b = model.blocks.get(p)!;
-      if (!passesFilters(b, funcOff, supplyOff)) continue;
+      if (!passesFilters(b, funcOff, supplyOff, supplyDomains)) continue;
       pins += b.pins; nets += b.netCount; devices += b.devices;
     }
     return { pins, nets, devices };

@@ -103,14 +103,26 @@ test('goToCrumb collapses everything below the clicked level', () => {
 test('passesFilters: unclassified and domain-less blocks always pass', () => {
   s().build(tinyDesign(), null, null);
   const m = s().model!;
+  const sd = new Set(m.supplyDomains);    // the map's rails: ['vdd']
   const xs1 = m.blocks.get('xu1/xs1')!;   // Unclassified
-  assert.ok(passesFilters(xs1, new Set(['A:AMP']), new Set()));
+  assert.ok(passesFilters(xs1, new Set(['A:AMP']), new Set(), sd));
   const xu1 = m.blocks.get('xu1')!;       // A:AMP, power domain vdd (vss is not a domain)
-  assert.ok(!passesFilters(xu1, new Set(['A:AMP']), new Set()));
+  assert.ok(!passesFilters(xu1, new Set(['A:AMP']), new Set(), sd));
   // The map lists POWER rails only, so grounds must not rescue a block whose
   // power rail is unchecked — unchecking vdd dims vdd-domain blocks.
-  assert.ok(!passesFilters(xu1, new Set(), new Set(['vdd'])));
-  assert.ok(passesFilters(xu1, new Set(), new Set()));
+  assert.ok(!passesFilters(xu1, new Set(), new Set(['vdd']), sd));
+  assert.ok(passesFilters(xu1, new Set(), new Set(), sd));
+});
+
+test('passesFilters: a block-local power rail does not rescue a block whose mapped rail is off', () => {
+  const d = tinyDesign();
+  d.cells.get('STG')!.nets.find(n => n.name === 'd')!.kind = 'power'; // topology-voted local rail
+  s().build(d, null, null);
+  const m = s().model!;
+  const sd = new Set(m.supplyDomains);           // top-cell rails only: ['vdd']
+  const xs1 = m.blocks.get('xu1/xs1')!;          // powerDomains ['d','vdd']; 'd' not in the map
+  assert.ok(!passesFilters(xs1, new Set(), new Set(['vdd']), sd), 'unchecking vdd dims it; local d cannot rescue');
+  assert.ok(passesFilters(xs1, new Set(), new Set(), sd));
 });
 
 test('filters are default-on via disabled-sets', () => {

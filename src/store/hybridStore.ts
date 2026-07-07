@@ -11,12 +11,14 @@ import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
 import { findPath, resolvePinRef, type PinRef, type PathResult } from '../hybrid/path';
 import { normSegments, normSeg } from '../layout-viewer/correlate';
 
-export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>): boolean {
+export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>, supplyDomains: Set<string>): boolean {
   const catOk = b.category === null || b.category === UNCLASSIFIED || !funcOff.has(b.category);
-  // Filter on POWER domains only — the same set the supply domain map lists.
-  // Grounds stay out of both: every block touches ground, so a ground entry
-  // in this check would make the checkboxes unable to dim anything.
-  const domOk = b.powerDomains.length === 0 || b.powerDomains.some(d => !supplyOff.has(d));
+  // Only rails the supply map actually lists are filterable. A block-local power
+  // net (topology-voted, e.g. an internal rail) has no checkbox, so it can
+  // neither be toggled nor rescue a block whose MAPPED rail is unchecked —
+  // intersect with the map before testing. Grounds are already out of both.
+  const filterable = b.powerDomains.filter(d => supplyDomains.has(d));
+  const domOk = filterable.length === 0 || filterable.some(d => !supplyOff.has(d));
   return catOk && domOk;
 }
 
@@ -185,7 +187,10 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     couplingToken++;
     set({
       design, layoutData, model, conductors, couplingPairs, netLayers,
-      openPath: [], ...CLEARED,
+      // A new design has its own rail names — a supply toggle carried over from
+      // the previous design would dim blocks with no checkbox to restore them.
+      // (Only runs on a genuine rebuild; a mode-switch early-returns above.)
+      openPath: [], supplyOff: new Set<string>(), ...CLEARED,
     });
   },
 

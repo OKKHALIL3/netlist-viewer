@@ -204,11 +204,12 @@ export function RailsCanvas() {
   const midY = (p: string) => itemY(p) + itemH(item(p)) / 2;
   const openNodes = new Set(layout.openPath);
   const marks = new Set([...traceMarks, ...pathReps.filter(p => !pathOn.has(p))]);
+  const supplyDomains = new Set(model.supplyDomains);
 
   // per-rail net totals honoring the same filters as the footer
   const netsAt = (i: number) => layout.rails[i].reduce((a, p) => {
     const b = model.blocks.get(p)!;
-    return passesFilters(b, funcOff, supplyOff) ? a + b.netCount : a;
+    return passesFilters(b, funcOff, supplyOff, supplyDomains) ? a + b.netCount : a;
   }, 0);
   const netLabel = (i: number) => (i === 0 ? model.blocks.get('')!.label : `${netsAt(i)} net ±`);
 
@@ -346,7 +347,7 @@ export function RailsCanvas() {
           const ctx = kind === 'context';
           const isSel = selected === it.path;
           const isOpen = openNodes.has(it.path);
-          const dim = !passesFilters(b, funcOff, supplyOff);
+          const dim = !passesFilters(b, funcOff, supplyOff, supplyDomains);
           const accent = zoneColors && b.category && b.category !== UNCLASSIFIED
             ? T.groupColors[b.category.split(':')[0]] : T.unclass;
           const traced = trace?.blocks.has(it.path) || pathOn.has(it.path);
