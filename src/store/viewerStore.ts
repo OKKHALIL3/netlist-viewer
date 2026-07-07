@@ -137,8 +137,11 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   descend: (instanceId, masterCell) => {
     const { breadcrumb, design } = get();
     if (!design?.cells.has(masterCell)) return;
-    // Already at this instance — don't push duplicate entry
-    if (breadcrumb[breadcrumb.length - 1]?.label === instanceId) return;
+    // Already at this exact instance — don't push a duplicate entry. Match BOTH
+    // the label and the master: auto-generated ids (X0, XI1) recur at every
+    // level, so a child named like its parent must still be descendable.
+    const last = breadcrumb[breadcrumb.length - 1];
+    if (last?.label === instanceId && last?.cellName === masterCell) return;
     set({
       currentCell: masterCell,
       breadcrumb: [...breadcrumb, { label: instanceId, cellName: masterCell }],
