@@ -1,4 +1,5 @@
 import type { HybridModel } from './model';
+import { displayPath } from './model';
 
 // Path-expansion rail layout: the canvas shows ONE rail per open level, not
 // the whole subtree. Rail 0 is the top cell; double-clicking a block opens
@@ -26,7 +27,12 @@ const FULL_W = 150, GAP = 10;
 const MAX_SLIVERS_SIDE = 4;   // slivers kept per side of an open ancestor
 const MAX_ROW_W = 1080;       // frontier wraps into stacked rows beyond this
 
-export interface RailItem { path: string; x: number; w: number; lvl: number; row: number; sliver: boolean }
+// `kind` is only set by the multi-branch REVEAL layout, where a block's render
+// class can't be read off its rail (full-size targets live at any depth). The
+// single-chain layout leaves it undefined and the renderer derives it from
+// `sliver` + the frontier, so its item shape is unchanged.
+export type RailKind = 'full' | 'context' | 'sliver';
+export interface RailItem { path: string; x: number; w: number; lvl: number; row: number; sliver: boolean; kind?: RailKind }
 export interface RailStub { lvl: number; x: number; w: number; count: number }
 export interface RailsLayout {
   items: Map<string, RailItem>;
@@ -36,6 +42,7 @@ export interface RailsLayout {
   rowsAt: number[];       // rows per rail — the frontier may stack into several
   width: number;          // content width; the spine sits at width / 2
   openPath: string[];     // the validated open chain actually laid out
+  edges?: [string, string][]; // reveal only: explicit parent→child links to draw
 }
 
 // openPath entries must form a parent→child chain from the root — anything
@@ -55,7 +62,9 @@ export function computeRails(
   model: HybridModel, openPath: string[],
   order?: (a: string, b: string) => number,
   fullW: (path: string) => number = () => FULL_W,
+  reveal?: string[],
 ): RailsLayout {
+  if (reveal && reveal.length) return computeRevealRails(model, validChain(model, openPath), reveal, order, fullW);
   const items = new Map<string, RailItem>();
   const rails: string[][] = [];
   const stubs: RailStub[] = [];
@@ -143,6 +152,116 @@ export function computeRails(
   for (const it of placed) items.set(it.path, { ...it, x: it.x - minX });
   for (const st of stubs) st.x -= minX;
   return { items, rails, stubs, hidden, rowsAt, width: maxX - minX, openPath: chain };
+}
+
+// ---- Multi-branch reveal layout -----------------------------------------
+//
+// When a block is selected, the canvas opens a branch to the selection AND to
+// each of its device neighbors at once. The result is no longer one open chain
+// but a small tree: the selection and its neighbors are the full-size leaves,
+// the ancestors linking them to the root are compressed CONTEXT cards, and each
+// open ancestor's other children stay as thin slivers (capped, the rest a "+N"
+// stub). Laid out as a tidy tree — subtree widths bottom-up, positions
+// top-down so children sit under their parent — and the renderer draws the
+// explicit parent→child edges.
+
+const MAX_REVEAL_SLIVERS = 4; // per open ancestor before the rest fold into +N
+
+function dparent(model: HybridModel, p: string): string | null {
+  const par = model.blocks.get(p)?.parent;
+  return par === null || par === undefined ? null : displayPath(model, par);
+}
+
+function computeRevealRails(
+  model: HybridModel, chain: string[], reveal: string[],
+  order: ((a: string, b: string) => number) | undefined,
+  fullW: (path: string) => number,
+): RailsLayout {
+  const items = new Map<string, RailItem>();
+  const rails: string[][] = [];
+  const stubs: RailStub[] = [];
+  const hidden: number[] = [];
+  const edges: [string, string][] = [];
+  if (!model.blocks.has('')) return { items, rails, stubs, hidden, rowsAt: [], width: 0, openPath: chain, edges };
+
+  const targets = new Set<string>();
+  for (const t of reveal) if (model.blocks.has(t)) targets.add(t);
+
+  // Open nodes = every block whose children must be shown: the manual chain,
+  // plus every ancestor of every target down from the root.
+  const openSet = new Set<string>(chain);
+  openSet.add('');
+  for (const t of targets) for (let p = dparent(model, t); p !== null; p = dparent(model, p)) openSet.add(p);
+
+  const emptyLeaf = (p: string) => {
+    const b = model.blocks.get(p)!;
+    return b.devices === 0 && b.netCount === 0 && b.children.length === 0;
+  };
+  const instancesOf = (p: string) => model.blocks.get(p)!.members?.length ?? 1;
+  const kindOf = (p: string): RailKind => (targets.has(p) ? 'full' : openSet.has(p) ? 'context' : 'sliver');
+  const itemW = (p: string) => { const k = kindOf(p); return k === 'sliver' ? SLIVER_W : k === 'full' ? fullW(p) : CTX_W; };
+
+  // Children of an open node that earn a slot: all target/open children, then a
+  // capped run of sliver siblings; the rest are reported as one "+N" stub.
+  const shownChildren = (p: string): { kids: string[]; stub: number } => {
+    if (!openSet.has(p)) return { kids: [], stub: 0 };
+    const all = model.blocks.get(p)!.children.filter(c => !emptyLeaf(c));
+    if (order) all.sort((a, b) => order(a, b) || a.localeCompare(b));
+    const heavy = all.filter(c => targets.has(c) || openSet.has(c));
+    const slivs = all.filter(c => !targets.has(c) && !openSet.has(c));
+    return { kids: [...heavy, ...slivs.slice(0, MAX_REVEAL_SLIVERS)], stub: Math.max(0, slivs.length - MAX_REVEAL_SLIVERS) };
+  };
+
+  const subW = new Map<string, number>();
+  const width = (p: string): number => {
+    const hit = subW.get(p);
+    if (hit !== undefined) return hit;
+    const { kids, stub } = shownChildren(p);
+    let w = itemW(p);
+    if (kids.length || stub) {
+      const parts = kids.map(width);
+      if (stub) parts.push(STUB_W);
+      const cw = parts.reduce((a, b) => a + b, 0) + GAP * Math.max(0, parts.length - 1);
+      w = Math.max(w, cw);
+    }
+    subW.set(p, w);
+    return w;
+  };
+
+  // Each node owns the span [x0, x0+subtreeWidth]; its own card is centered in
+  // that span and its children are centered as a group beneath it.
+  const place = (p: string, x0: number, lvl: number) => {
+    const wsub = width(p), own = itemW(p);
+    items.set(p, { path: p, x: x0 + (wsub - own) / 2, w: own, lvl, row: 0, sliver: kindOf(p) === 'sliver', kind: kindOf(p) });
+    (rails[lvl] ??= []).push(p);
+    if (openSet.has(p)) {
+      const raw = model.blocks.get(p)!.children;
+      hidden[lvl + 1] = (hidden[lvl + 1] ?? 0) + raw.reduce((a, c) => a + (emptyLeaf(c) ? instancesOf(c) : 0), 0);
+    }
+    const { kids, stub } = shownChildren(p);
+    if (!kids.length && !stub) return;
+    const parts = kids.map(width);
+    if (stub) parts.push(STUB_W);
+    const total = parts.reduce((a, b) => a + b, 0) + GAP * Math.max(0, parts.length - 1);
+    let cur = x0 + (wsub - total) / 2;
+    kids.forEach((c, i) => {
+      place(c, cur, lvl + 1);
+      edges.push([p, c]);
+      cur += parts[i] + GAP;
+    });
+    if (stub) stubs.push({ lvl: lvl + 1, x: cur, w: STUB_W, count: stub });
+  };
+  place('', 0, 0);
+
+  let minX = Infinity, maxX = -Infinity;
+  for (const it of items.values()) { minX = Math.min(minX, it.x); maxX = Math.max(maxX, it.x + it.w); }
+  for (const st of stubs) { minX = Math.min(minX, st.x); maxX = Math.max(maxX, st.x + st.w); }
+  if (!Number.isFinite(minX)) { minX = 0; maxX = 0; }
+  for (const [k, it] of items) items.set(k, { ...it, x: it.x - minX });
+  for (const st of stubs) st.x -= minX;
+  const rowsAt = rails.map(() => 1);
+  for (let i = 0; i < rails.length; i++) if (hidden[i] === undefined) hidden[i] = 0;
+  return { items, rails, stubs, hidden, rowsAt, width: maxX - minX, openPath: chain, edges };
 }
 
 // The visible display set without geometry — for the footer totals and the

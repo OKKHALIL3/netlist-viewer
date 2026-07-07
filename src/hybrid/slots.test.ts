@@ -163,3 +163,58 @@ test('a wide frontier wraps into centered rows', () => {
     assert.ok(Math.abs((min + max) / 2 - l.width / 2) < 1);
   }
 });
+
+// ---- multi-branch reveal -------------------------------------------------
+
+const noOverlap = (items: { x: number; w: number; lvl: number }[]) => {
+  const byLvl = new Map<number, { x: number; w: number }[]>();
+  for (const it of items) (byLvl.get(it.lvl) ?? byLvl.set(it.lvl, []).get(it.lvl)!).push(it);
+  for (const row of byLvl.values()) {
+    const s = [...row].sort((a, b) => a.x - b.x);
+    for (let i = 1; i < s.length; i++) if (s[i].x < s[i - 1].x + s[i - 1].w - 0.01) return false;
+  }
+  return true;
+};
+
+test('reveal: targets render full-size, their open ancestors compress to context cards', () => {
+  const m = buildHybridModel(tinyDesign());
+  // select xu1/xs2; its device-neighbors are xu1/xs1 and xu2 (cross-branch)
+  const l = computeRails(m, [''], undefined, undefined, ['xu1/xs2', 'xu1/xs1', 'xu2']);
+  assert.equal(l.items.get('xu1/xs2')!.kind, 'full');
+  assert.equal(l.items.get('xu1/xs1')!.kind, 'full');
+  assert.equal(l.items.get('xu2')!.kind, 'full');
+  assert.equal(l.items.get('xu1')!.kind, 'context');   // ancestor of the selection
+  assert.equal(l.items.get('')!.kind, 'context');      // root
+  assert.equal(l.items.get('xu1')!.w, CTX_W);
+  assert.ok(l.items.get('xu2')!.w > CTX_W);            // full width
+  assert.ok(noOverlap([...l.items.values()]));
+});
+
+test('reveal: an open ancestor\'s non-target children become slivers', () => {
+  const m = buildHybridModel(tinyDesign());
+  // select xu2; its only device-neighbor is xu1/xs2 — so xu1/xs1 is an
+  // off-path sibling inside the opened xu1 branch → a sliver.
+  const l = computeRails(m, [''], undefined, undefined, ['xu2', 'xu1/xs2']);
+  assert.equal(l.items.get('xu2')!.kind, 'full');
+  assert.equal(l.items.get('xu1/xs2')!.kind, 'full');
+  assert.equal(l.items.get('xu1')!.kind, 'context');
+  const s = l.items.get('xu1/xs1')!;
+  assert.equal(s.kind, 'sliver');
+  assert.equal(s.sliver, true);
+  assert.equal(s.w, SLIVER_W);
+});
+
+test('reveal: edges connect every shown parent to its shown children', () => {
+  const m = buildHybridModel(tinyDesign());
+  const l = computeRails(m, [''], undefined, undefined, ['xu1/xs2', 'xu2']);
+  assert.ok(l.edges!.some(([a, b]) => a === '' && b === 'xu1'));
+  assert.ok(l.edges!.some(([a, b]) => a === '' && b === 'xu2'));
+  assert.ok(l.edges!.some(([a, b]) => a === 'xu1' && b === 'xu1/xs2'));
+});
+
+test('reveal: an empty target list falls back to the normal single-chain layout', () => {
+  const m = buildHybridModel(tinyDesign());
+  const l = computeRails(m, [''], undefined, undefined, []);
+  assert.equal(l.edges, undefined);
+  assert.equal(l.items.get('')!.kind, undefined);       // single-chain items carry no kind
+});

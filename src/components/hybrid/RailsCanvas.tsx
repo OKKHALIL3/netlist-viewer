@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
-import { computeRails } from '../../hybrid/slots';
+import { computeRails, type RailItem } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
 import { displayPath, type HybridModel } from '../../hybrid/model';
@@ -15,6 +15,7 @@ import { T } from './theme';
 const MARGIN_X = 70, TOP_PAD = 46, BLOCK_H = 58, CTX_H = 40, GAP_Y = 54, ROW_GAP_Y = 30;
 const CTX_CARD_OPACITY = 0.55, CTX_SLIVER_OPACITY = 0.32;
 const MIN_K = 0.15, MAX_K = 2.5;
+const MAX_REVEAL = 24; // strongest device-neighbors opened full-size on canvas at once
 
 // Counts on the block cards: keep them within the card at any magnitude.
 const fmtCount = (n: number) =>
@@ -84,13 +85,26 @@ export function RailsCanvas() {
     void version; // reclassify()/toggleGroup() mutate the model in place
     return model ? criticalityScores(model, weights) : null;
   }, [model, weights, version]);
+  // On selection the canvas opens a branch to the selection AND to each device
+  // neighbor, so the connected set renders full-size at once. A high-fan-out
+  // block can touch hundreds of neighbors; opening every branch would be an
+  // unreadable sprawl, so the canvas caps at the strongest MAX_REVEAL by
+  // criticality — the panel still lists them all, grouped by net.
+  const revealTargets = useMemo(() => {
+    if (!selected || !trace) return undefined;
+    let ns = [...trace.blocks];
+    if (ns.length > MAX_REVEAL && scores) {
+      ns = ns.sort((a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0)).slice(0, MAX_REVEAL);
+    }
+    return [selected, ...ns];
+  }, [selected, trace, scores]);
   const layout = useMemo(() => {
     void version; // toggleGroup() swaps children arrays in place
     if (!model || !scores) return null;
     // 128..180 clamp (log-normalized score ∈ [0,1]); uniform when sizing is off
     const fullW = (p: string) => (sizeByContent ? 128 + 52 * (scores.get(p) ?? 0) : 150);
-    return computeRails(model, openPath, criticalityOrder(scores), fullW);
-  }, [model, scores, openPath, sizeByContent, version]);
+    return computeRails(model, openPath, criticalityOrder(scores), fullW, revealTargets);
+  }, [model, scores, openPath, sizeByContent, version, revealTargets]);
   const visible = useMemo(() => new Set(layout ? [...layout.items.keys()] : []), [layout]);
   // Overlay targets hidden inside collapsed branches mark their deepest
   // visible ancestor with a dashed ring: "the connection continues in here".
@@ -121,7 +135,9 @@ export function RailsCanvas() {
 
   // Every navigation re-homes the view: the newly opened branch comes to the
   // middle of the screen instead of growing off to one side.
-  const chainKey = layout ? layout.openPath.join('|') : '';
+  // Refit on navigation AND on select/deselect — the reveal reshapes the tree,
+  // so bring the newly-revealed connected set into view.
+  const chainKey = (layout ? layout.openPath.join('|') : '') + '::' + (revealTargets?.join('|') ?? '');
   useEffect(() => { fitView(); }, [model, chainKey, fitView]);
 
   // Native wheel listener: React's synthetic onWheel is passive, and ctrl+
@@ -158,14 +174,20 @@ export function RailsCanvas() {
   if (!model || !layout) return null;
 
   const railCount = layout.rails.length;
-  const frontier = layout.openPath.length;      // rails above this are context
+  const frontier = layout.openPath.length;      // single-chain: rails above this are context
+  // The reveal layout opens multiple branches, so a rail's render class can't
+  // be read off `frontier` — it comes from each item's `kind`. A rail is "full"
+  // (tall band, bright) when any full-size card lives on it.
+  const revealMode = !!layout.edges;
+  const levelFull = (lvl: number) =>
+    revealMode ? (layout.rails[lvl]?.some(p => layout.items.get(p)?.kind === 'full') ?? false) : lvl === frontier;
   const svgW = MARGIN_X * 2 + Math.max(1, layout.width);
-  // Top-anchored vertical rhythm: every rail above the frontier is a short
-  // context band; the frontier band may stack several rows.
+  // Top-anchored vertical rhythm: context bands are short, full bands taller
+  // (and may stack several rows in the single-chain frontier).
   const rowsAt = (lvl: number) => layout.rowsAt[lvl] ?? 1;
-  const blockH = (lvl: number) => (lvl === frontier ? BLOCK_H : CTX_H);
+  const itemH = (it: RailItem) => (it.kind === 'full' || (!revealMode && it.lvl === frontier) ? BLOCK_H : CTX_H);
   const bandH = (lvl: number) =>
-    lvl === frontier ? rowsAt(lvl) * BLOCK_H + (rowsAt(lvl) - 1) * ROW_GAP_Y : CTX_H;
+    levelFull(lvl) ? rowsAt(lvl) * BLOCK_H + (rowsAt(lvl) - 1) * ROW_GAP_Y : CTX_H;
   const blockTop = (lvl: number) => TOP_PAD + 26 + lvl * (CTX_H + GAP_Y);
   const railLine = (lvl: number) => blockTop(lvl) + bandH(lvl);
   const svgH = railLine(railCount - 1) + 46;
@@ -176,7 +198,7 @@ export function RailsCanvas() {
     return blockTop(it.lvl) + it.row * (BLOCK_H + ROW_GAP_Y);
   };
   const cx = (p: string) => MARGIN_X + item(p).x + item(p).w / 2;
-  const midY = (p: string) => itemY(p) + blockH(item(p).lvl) / 2;
+  const midY = (p: string) => itemY(p) + itemH(item(p)) / 2;
   const openNodes = new Set(layout.openPath);
   const marks = new Set([...traceMarks, ...pathReps.filter(p => !pathOn.has(p))]);
 
@@ -226,9 +248,9 @@ export function RailsCanvas() {
            style={{ display: 'block', position: 'absolute', left: 0, top: 0, transformOrigin: '0 0',
                     fontFamily: T.mono, userSelect: 'none', willChange: 'transform' }}>
         {Array.from({ length: railCount }, (_, i) => (
-          <g key={i} opacity={i === frontier ? 1 : 0.55}>
+          <g key={i} opacity={levelFull(i) ? 1 : 0.55}>
             <line x1={16} y1={railLine(i)} x2={svgW - 16} y2={railLine(i)} stroke={T.rail} strokeWidth={1.4} />
-            <text x={18} y={blockTop(i) - 10} fontSize={i === frontier ? 11 : 9.5} fill={T.muted} fontStyle="italic">
+            <text x={18} y={blockTop(i) - 10} fontSize={levelFull(i) ? 11 : 9.5} fill={T.muted} fontStyle="italic">
               {netLabel(i)}
             </text>
             {(layout.hidden[i] ?? 0) > 0 && (
@@ -243,7 +265,7 @@ export function RailsCanvas() {
             stacked rows 2+ get one feeder line each along the right lane.
             Context-to-context edges fade with their rails; the fan into the
             frontier stays full-strength. */}
-        {layout.rails.map((rail, i) => {
+        {!revealMode && layout.rails.map((rail, i) => {
           if (i === 0) return null;
           const x1 = cx(layout.openPath[i - 1]), y1 = railLine(i - 1);
           const my = y1 + (blockTop(i) - y1) * 0.55;
@@ -270,17 +292,29 @@ export function RailsCanvas() {
         {/* the descent itself: open-chain spine segments redrawn full-strength
             over the faded context fans — the middle-of-the-tree descent line
             must never fade with its rail */}
-        {layout.openPath.map((p, i) => {
+        {!revealMode && layout.openPath.map((p, i) => {
           if (i === 0) return null;
           return <line key={`spine-${i}`} x1={cx(layout.openPath[i - 1])} y1={railLine(i - 1)}
                        x2={cx(p)} y2={itemY(p)} stroke={T.spine} strokeWidth={2.6} opacity={0.95} />;
         })}
-        {layout.openPath.length > 0 && frontier < railCount && (
+        {!revealMode && layout.openPath.length > 0 && frontier < railCount && (
           <line x1={cx(layout.openPath[frontier - 1])} y1={railLine(frontier - 1)}
                 x2={cx(layout.openPath[frontier - 1])}
                 y2={railLine(frontier - 1) + (blockTop(frontier) - railLine(frontier - 1)) * 0.55}
                 stroke={T.spine} strokeWidth={2.6} opacity={0.95} />
         )}
+        {/* reveal edges: every shown parent → child link. The two branches on
+            the path to the selection are drawn brighter (spine colour). */}
+        {revealMode && layout.edges!.map(([pa, ch], i) => {
+          const ap = layout.items.get(pa), cp = layout.items.get(ch);
+          if (!ap || !cp) return null;
+          const x1 = cx(pa), y1 = itemY(pa) + itemH(ap);
+          const x2 = cx(ch), y2 = itemY(ch);
+          const my = y1 + (y2 - y1) * 0.5;
+          const onSel = pa === selected || ch === selected;
+          return <path key={`re-${i}`} d={`M ${x1} ${y1} V ${my} H ${x2} V ${y2}`} fill="none"
+                       stroke={onSel ? T.spine : T.edge} strokeWidth={onSel ? 2.4 : 1.8} opacity={0.9} />;
+        })}
         {pathReps.length > 1 && (
           <path d={pathReps.map((p, i) => `${i ? 'L' : 'M'} ${cx(p)} ${midY(p)}`).join(' ')}
                 fill="none" stroke={T.path} strokeWidth={2.6} strokeDasharray="7 5" strokeLinejoin="round" opacity={0.95} />
@@ -301,9 +335,12 @@ export function RailsCanvas() {
         ))}
         {[...layout.items.values()].map(it => {
           const b = model.blocks.get(it.path)!;
-          const h = blockH(it.lvl);
+          const h = itemH(it);
           const x = MARGIN_X + it.x, y = itemY(it.path), w = it.w;
-          const ctx = it.lvl < frontier;
+          // Reveal layout tags each item; single-chain derives class from the
+          // frontier. Both drive the same three render branches below.
+          const kind = it.kind ?? (it.sliver ? 'sliver' : it.lvl < frontier ? 'context' : 'full');
+          const ctx = kind === 'context';
           const isSel = selected === it.path;
           const isOpen = openNodes.has(it.path);
           const dim = !passesFilters(b, funcOff, supplyOff);
@@ -311,9 +348,13 @@ export function RailsCanvas() {
             ? T.groupColors[b.category.split(':')[0]] : T.unclass;
           const traced = trace?.blocks.has(it.path) || pathOn.has(it.path);
           const contains = !traced && marks.has(it.path);
+          // One-shot halo (index.css .hy-ping): yellow on the selection, violet
+          // on a connected block. It mounts when a block first becomes a target,
+          // so every new selection flashes its selection + its neighbors.
+          const ping = isSel ? T.sel : traced ? T.conn : null;
           // faded context, full-strength frontier; anything selected/traced
           // pops back up so overlays stay readable in the faded zone
-          const base = ctx ? (it.sliver ? CTX_SLIVER_OPACITY : CTX_CARD_OPACITY) : 1;
+          const base = kind === 'full' ? 1 : kind === 'sliver' ? CTX_SLIVER_OPACITY : CTX_CARD_OPACITY;
           const gOpacity = dim ? T.dim : isSel || traced || contains ? Math.max(base, 0.9) : base;
           const title =
             `${b.label} (${b.master})` +
@@ -339,6 +380,7 @@ export function RailsCanvas() {
                                  fill="none" stroke={T.conn} strokeWidth={2} />}
                 {contains && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6}
                                    fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="4 3" />}
+                {ping && <rect className="hy-ping" x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6} stroke={ping} strokeWidth={2} />}
                 <rect x={x} y={y} width={w} height={h} rx={4} fill={T.card}
                       stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.2 : 1.2} />
                 <rect x={x} y={y} width={w} height={4} rx={2} fill={accent} />
@@ -363,6 +405,7 @@ export function RailsCanvas() {
                                  fill="none" stroke={T.conn} strokeWidth={2.2} />}
                 {contains && <rect x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8}
                                    fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="5 4" />}
+                {ping && <rect className="hy-ping" x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8} stroke={ping} strokeWidth={2.2} />}
                 {deck}
                 <rect x={x} y={y} width={w} height={h} rx={6} fill={T.card}
                       stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.4 : 1.8} />
@@ -418,6 +461,7 @@ export function RailsCanvas() {
                                fill="none" stroke={T.conn} strokeWidth={2.5} />}
               {contains && <rect x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10}
                                  fill="none" stroke={T.conn} strokeWidth={1.8} strokeDasharray="5 4" />}
+              {ping && <rect className="hy-ping" x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10} stroke={ping} strokeWidth={2.5} />}
               {deck}
               <rect x={x} y={y} width={w} height={h} rx={7} fill={T.card}
                     stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.6 : isOpen ? 2.2 : 1.5} />
@@ -490,6 +534,32 @@ export function RailsCanvas() {
             </g>
           );
         })}
+        {/* device-connection fly-lines: the selection curves out to each of its
+            neighbors, labelled by the net they share — the "connected to" story
+            drawn on the canvas. */}
+        {revealMode && selected && trace && visible.has(selected) && (() => {
+          const sx = cx(selected), sy = midY(selected);
+          return [...trace.blocks].map(nb => {
+            if (!visible.has(nb)) return null;
+            const nx = cx(nb), ny = midY(nb);
+            const sameRow = Math.abs(sy - ny) < 1;
+            const mx = (sx + nx) / 2;
+            const cyy = (sy + ny) / 2 + (sameRow ? 34 + Math.min(46, Math.abs(sx - nx) * 0.05) : 0);
+            const label = trace.netOf.get(nb) ?? '';
+            return (
+              <g key={`fly-${nb}`}>
+                <path d={`M ${sx} ${sy} Q ${mx} ${cyy} ${nx} ${ny}`} fill="none"
+                      stroke={T.conn} strokeWidth={1.8} opacity={0.7} />
+                {label && (
+                  <text x={mx} y={cyy - 4} fontSize={8} fill={T.conn} textAnchor="middle"
+                        stroke={T.bg} strokeWidth={3} paintOrder="stroke">
+                    {clip(label, 16)}
+                  </text>
+                )}
+              </g>
+            );
+          });
+        })()}
         {selected && visible.has(selected) && neighbors.length > 0 && (() => {
           const maxTotal = Math.max(...neighbors.map(n => n.total), Number.EPSILON);
           const sx = cx(selected), sy = midY(selected);

@@ -105,10 +105,12 @@ export function buildHybridModel(design: Design): HybridModel {
   const model: HybridModel = {
     blocks, root: '', maxDepth,
     levelNetCounts: Array.from(levelNetCounts, v => v ?? 0),
-    // Top cell's rails only: deeper cells contribute locally-voted rail
-    // names (topology classifier) that flood the supply domain map with
-    // block-local net names meaningless at design scope.
-    supplyDomains: [...blocks.get('')!.domains],
+    // Top cell's POWER rails only. Two filters: grounds (vss/vssio/…) are not
+    // supply domains, so kind must be 'power', not merely non-signal; and only
+    // the top cell contributes, since deeper cells' locally-voted rail names
+    // (topology classifier) would flood the map with block-local nets.
+    supplyDomains: (design.cells.get(design.topCell)?.nets ?? [])
+      .filter(n => n.kind === 'power').map(n => n.name),
     hasLayout: false,
   };
   groupArrays(model);

@@ -4,7 +4,7 @@ import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import type { HybridModel, HybridBlock } from '../hybrid/model';
 import { buildHybridModel, displayPath, setGroupExpanded } from '../hybrid/model';
 import { attachLayoutStats, type NetPairCoupling } from '../hybrid/layoutStats';
-import { buildConductors, traceConnectivity, type Conductors, type TraceResult } from '../hybrid/connectivity';
+import { buildConductors, traceDeviceConnectivity, type Conductors, type DeviceTrace } from '../hybrid/connectivity';
 import { couplingFor, buildSupplyIndex, type CouplingNeighbor } from '../hybrid/coupling';
 import { visiblePaths } from '../hybrid/slots';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
@@ -37,7 +37,7 @@ interface HybridState {
   layoutData: LayoutData | null;
   model: HybridModel | null;
   conductors: Conductors | null;
-  trace: TraceResult | null;
+  trace: DeviceTrace | null;
   couplingPairs: NetPairCoupling[] | null;
   netLayers: Map<string, string[]> | null;
   // The open chain (path-expansion navigation): openPath[i] is the block
@@ -94,7 +94,7 @@ interface HybridState {
 
 // Everything that must die on navigation.
 const CLEARED = {
-  selected: null as string | null, trace: null as TraceResult | null,
+  selected: null as string | null, trace: null as DeviceTrace | null,
   pathResult: null as PathResult | null, startPin: '', endPin: '',
   pathPinsValid: false, pathEnds: null as [PinRef, PinRef] | null,
   couplingBusy: false, couplingNeighbors: null as CouplingNeighbor[] | null,
@@ -262,14 +262,14 @@ export const useHybridStore = create<HybridState>((set, get) => ({
       openPath: trail,
       ...CLEARED,
       selected: path,
-      trace: traceConnectivity(design, model, conductors, path),
+      trace: traceDeviceConnectivity(design, model, conductors, path),
     });
   },
 
   select: (path) => {
     const { design, model, conductors } = get();
     if (path === null || !design || !model || !conductors) { set({ selected: path, trace: null }); return; }
-    set({ selected: path, trace: traceConnectivity(design, model, conductors, path) });
+    set({ selected: path, trace: traceDeviceConnectivity(design, model, conductors, path) });
   },
   clearOverlays: () => set({ ...CLEARED }),
   toggleZoneColors: () => set(s => ({ zoneColors: !s.zoneColors })),
