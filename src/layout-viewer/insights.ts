@@ -36,8 +36,19 @@ export function reachRatio(model: LayoutModel, netName: string): number {
 }
 
 // Top nets by physical spread (bbox area), descending. Degenerate
-// zero-area nets are skipped.
+// zero-area nets are skipped. The instance-bbox index is built ONCE and the
+// reach is computed from the net object in hand — the per-net reachRatio()
+// rebuilt that index and re-found the net by name, making this O(nets²) and
+// freezing the Insights panel on large designs.
 export function rankBySprawl(model: LayoutModel, limit = 8): SprawlNet[] {
+  const byId = new Map(model.instances.map(i => [i.id, i.bbox]));
+  const reachOf = (net: LayoutModel['nets'][number]): number => {
+    const u = emptyBbox();
+    let any = false;
+    for (const id of net.instances) { const b = byId.get(id); if (b) { unionInto(u, b); any = true; } }
+    const footArea = any && bboxValid(u) ? bboxArea(u) : 0;
+    return footArea > 1e-9 ? bboxArea(net.bbox) / footArea : 0;
+  };
   const ranked: SprawlNet[] = [];
   for (const n of model.nets) {
     if (!bboxValid(n.bbox)) continue;
@@ -45,7 +56,7 @@ export function rankBySprawl(model: LayoutModel, limit = 8): SprawlNet[] {
     if (area <= 0) continue;
     ranked.push({
       name: n.name, area, span: bboxSize(n.bbox),
-      reach: reachRatio(model, n.name), instances: n.instances.length,
+      reach: reachOf(n), instances: n.instances.length,
     });
   }
   ranked.sort((a, b) => b.area - a.area);

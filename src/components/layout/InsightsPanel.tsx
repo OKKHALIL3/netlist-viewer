@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
 import { rankBySprawl } from '../../layout-viewer/insights';
 
@@ -7,9 +8,9 @@ export function InsightsPanel() {
   const model = useViewerStore(s => s.layoutModel);
   const selection = useViewerStore(s => s.selection);
   const selectAndFocus = useViewerStore(s => s.selectAndFocus);
-  if (!model) return null;
-  const top = rankBySprawl(model, 8);
-  if (top.length === 0) return null;
+  // Recompute only when the model changes — not on every selection re-render.
+  const top = useMemo(() => (model ? rankBySprawl(model, 8) : []), [model]);
+  if (!model || top.length === 0) return null;
   return (
     <div className="insights-panel">
       <div className="insights-title">Most sprawling nets</div>
