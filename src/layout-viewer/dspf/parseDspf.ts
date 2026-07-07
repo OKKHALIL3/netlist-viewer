@@ -3,7 +3,7 @@ import type {
   DspfDevicePoint, DspfDeviceInfo, DspfDiagnostics,
 } from '../model';
 import { forEachLogicalLine } from './lines';
-import { splitTokens, parseParenPayload, type ParenInfo } from './tokens';
+import { splitTokens, parseParenPayload, parseKeyVals, type ParenInfo } from './tokens';
 import { parseResistor, parseCapacitor, parseDeviceStatement, type ResolveLayer } from './elements';
 import { parseSpiceNumber, isNumericToken } from './units';
 
@@ -208,31 +208,42 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
     }
 
     const c = head.toLowerCase();
-    if (c === 'r') {
-      const r = parseResistor(splitTokens(line), resolveLayer);
-      if (r && net) {
-        net.resistors.push(r); diag.resistors++;
-        if (r.x1 !== null && r.y1 !== null && r.x2 !== null && r.y2 !== null) diag.resistorsWithGeometry++;
-        addLayer(r.layer);
+    if (c === 'r' || c === 'c') {
+      const toks = splitTokens(line);
+      const { rest } = parseKeyVals(toks.slice(1));
+      // Distinguish a net parasitic from a native R/C DEVICE card. A parasitic
+      // puts a numeric value in the value slot (`R1 A:1 A:2 1.5`); a device card
+      // names a MODEL there (`Rbias n1 n2 rppolywo w=..`). Only a present,
+      // non-numeric value slot is a device — reroute it to the device path.
+      // A numeric value (with or without a suffix) or an absent/param-based
+      // value stays a parasitic, so no real parasitic is misclassified.
+      const modelInValueSlot = rest[2] !== undefined && !Number.isFinite(parseSpiceNumber(rest[2]));
+      if (!modelInValueSlot) {
+        if (net && c === 'r') {
+          const r = parseResistor(toks, resolveLayer);
+          if (r) {
+            net.resistors.push(r); diag.resistors++;
+            if (r.x1 !== null && r.y1 !== null && r.x2 !== null && r.y2 !== null) diag.resistorsWithGeometry++;
+            addLayer(r.layer);
+          }
+        } else if (net) {
+          const cap = parseCapacitor(toks, resolveLayer);
+          if (cap) {
+            // A cap to node 0, to any declared ground net, or between two nodes
+            // of THIS net is not cross-net coupling. The ground check strips the
+            // subnode suffix so a cap to a ground SUBNODE (VSS:88) is caught.
+            const sameNet = cap.b === net.name || cap.b.startsWith(net.name + data.delimiter);
+            const bBase = stripPin(cap.b, data.delimiter);
+            cap.coupling = cap.b !== '' && bBase !== '0'
+              && !groundSet.has(cap.b) && !groundSet.has(bBase) && !sameNet;
+            net.capacitors.push(cap); diag.capacitors++;
+            if (cap.coupling) diag.couplingCaps++;
+            addLayer(cap.layer);
+          }
+        }
+        return;
       }
-      return;
-    }
-    if (c === 'c') {
-      const cap = parseCapacitor(splitTokens(line), resolveLayer);
-      if (cap && net) {
-        // Refine the provisional coupling flag: a cap to node 0, to any
-        // declared ground net, or between two nodes of THIS net is not
-        // cross-net coupling. The ground check strips the subnode suffix so a
-        // cap to a ground SUBNODE (VSS:88) is recognised, not just bare VSS.
-        const sameNet = cap.b === net.name || cap.b.startsWith(net.name + data.delimiter);
-        const bBase = stripPin(cap.b, data.delimiter);
-        cap.coupling = cap.b !== '' && bBase !== '0'
-          && !groundSet.has(cap.b) && !groundSet.has(bBase) && !sameNet;
-        net.capacitors.push(cap); diag.capacitors++;
-        if (cap.coupling) diag.couplingCaps++;
-        addLayer(cap.layer);
-      }
-      return;
+      // modelInValueSlot → an R/C DEVICE card; fall through to the device path.
     }
 
     // Any other letter: a device instance statement (M/X/D/Q/…), typically in

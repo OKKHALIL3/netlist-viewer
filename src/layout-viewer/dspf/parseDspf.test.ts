@@ -259,6 +259,21 @@ test('caps to a ground-net subnode are not coupling', () => {
   assert.equal(d.diagnostics.couplingCaps, 0);
 });
 
+test('native R/C device cards are counted as devices, not net parasitics', () => {
+  const d = parseDspf([
+    '*|NET N 1f',
+    'R1 N:1 N:2 1.5',                    // a real parasitic (numeric value)
+    'C1 N:1 N:3 0.5f',                   // a real parasitic (suffixed value)
+    '*Instance Section',
+    'RBIAS n1 n2 rppolywo w=1u l=5u',    // a poly-resistor DEVICE (model in value slot)
+    'CDECAP n3 n4 mimcap',               // a MIM-cap DEVICE
+  ].join('\n'));
+  assert.equal(d.nets[0].resistors.length, 1, 'only the real parasitic R stays on the net');
+  assert.equal(d.nets[0].capacitors.length, 1, 'only the real parasitic C stays on the net');
+  assert.ok(d.devices.find(x => x.path === 'RBIAS'), 'RBIAS counted as a device');
+  assert.ok(d.devices.find(x => x.path === 'CDECAP'), 'CDECAP counted as a device');
+});
+
 test('instance-section devices merge into the device list with models', () => {
   const d = parseDspf([
     '*|DELIMITER #', '*|NET N 1f', '*|I (M7#d M7 d B 0 1 2)',
