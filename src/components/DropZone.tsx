@@ -21,6 +21,7 @@ export function DropZone() {
         setParsing(false);
       }
     };
+    reader.onerror = () => setParseError(`Could not read the file${reader.error ? `: ${reader.error.message}` : ''}`);
     reader.readAsText(file);
   };
 

@@ -33,6 +33,11 @@ export function TopBar() {
         setDspfProgress(null);
       }
     };
+    reader.onerror = () => {
+      setParseError(`Could not read the file${reader.error ? `: ${reader.error.message}` : ''}`);
+      setParsing(false);
+      setDspfProgress(null);
+    };
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -58,6 +63,7 @@ export function TopBar() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => loadFile(ev.target?.result as string);
+    reader.onerror = () => setParseError(`Could not read the file${reader.error ? `: ${reader.error.message}` : ''}`);
     reader.readAsText(file);
     e.target.value = '';
   };
@@ -69,6 +75,7 @@ export function TopBar() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => loadFile(ev.target?.result as string);
+    reader.onerror = () => setParseError(`Could not read the file${reader.error ? `: ${reader.error.message}` : ''}`);
     reader.readAsText(file);
   };
 
