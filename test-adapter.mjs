@@ -412,6 +412,32 @@ XI1 x y SOMECELL w=100n l=30n m=2
     return { master: inst.master, portMapLen: inst.portMap.length };
   })(), { master: 'SOMECELL', portMapLen: 2 });
 
+check('no-slash with a trailing $ comment: master is the cell, not the comment',
+  (() => {
+    const d = parseCDL(`
+.SUBCKT CHILD a b
+M1 a b a a nmos
+.ENDS
+.SUBCKT TOP x y
+XI1 x y CHILD $ this is an inline comment
+.ENDS
+`);
+    return cell(d, 'TOP').instances[0].master;
+  })(), 'CHILD');
+
+check('no-slash with a $[..] layout property: master is the cell',
+  (() => {
+    const d = parseCDL(`
+.SUBCKT CHILD a b
+M1 a b a a nmos
+.ENDS
+.SUBCKT TOP x y
+XI1 x y CHILD $[1]
+.ENDS
+`);
+    return cell(d, 'TOP').instances[0].master;
+  })(), 'CHILD');
+
 // ─────────────────────────────────────────────────────────────────────────────
 section('Top cell detection');
 

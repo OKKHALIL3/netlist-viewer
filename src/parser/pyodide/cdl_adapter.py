@@ -92,6 +92,14 @@ def _raw_x_master(tokens: list[str]) -> str | None:
     Mirrors src/parser/cdl.ts's parseXLine.
     """
     rest = tokens[1:]
+    # Drop a trailing inline comment / layout-property region: a token that
+    # starts with '$' begins a $comment or $prop, which always follows the
+    # master — otherwise a bare comment word ("... INV_X1 $ note") or a bracket
+    # prop ("... INV_X1 $[1]") would be returned as the master.
+    for j, t in enumerate(rest):
+        if t.startswith("$"):
+            rest = rest[:j]
+            break
     if "/" in rest:
         after = rest[rest.index("/") + 1:]
         return after[0] if after else None
