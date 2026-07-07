@@ -36,7 +36,9 @@ type NetKind = Net['kind'];
 export function pinDirection(name: string, ports: Port[]): 'I' | 'O' | 'B' {
   const p = ports.find(p => p.name.toLowerCase() === name.toLowerCase());
   if (p?.dir) return p.dir;
-  if (/^(out|y|z|q|qb?|do|dout|co|cout|s|sum|f|g)$/i.test(name)) return 'O';
+  // 'g' dropped: a bare gate terminal is never an output, so on an unresolved
+  // master it should default to input, not be forced to the output side.
+  if (/^(out|y|z|q|qb?|do|dout|co|cout|s|sum|f)$/i.test(name)) return 'O';
   if (/(_o|_out|_y)$/i.test(name)) return 'O';
   return 'I';
 }
