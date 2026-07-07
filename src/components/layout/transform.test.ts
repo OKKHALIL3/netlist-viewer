@@ -11,6 +11,13 @@ test('fitView centers the extent and round-trips coords (Y is flipped)', () => {
   assert.ok(Math.abs(wx - 4) < 1e-9 && Math.abs(wy - 6) < 1e-9);
 });
 
+test('fitView never returns a negative scale on a viewport narrower than the padding', () => {
+  // 92px viewport with 48px padding → (92 - 96) is negative; a negative scale
+  // would mirror the map and invert hit-testing.
+  const v = fitView([0, 0, 10, 10], 92, 92, 48);
+  assert.ok(v.scale > 0, `scale should stay positive, got ${v.scale}`);
+});
+
 test('zoomAt keeps the cursor world point fixed', () => {
   const v = fitView([0, 0, 10, 10], 200, 200, 20);
   const before = screenToWorld(v, 150, 150);
