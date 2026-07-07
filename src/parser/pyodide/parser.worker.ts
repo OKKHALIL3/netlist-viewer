@@ -26,7 +26,7 @@ let pyodidePromise: Promise<PyodideInterface> | null = null;
 
 async function getPyodide(): Promise<PyodideInterface> {
   if (!pyodidePromise) {
-    pyodidePromise = (async () => {
+    const p = (async () => {
       const mod = (await import(/* @vite-ignore */ `${PYODIDE_CDN}pyodide.mjs`)) as {
         loadPyodide: LoadPyodide;
       };
@@ -37,6 +37,11 @@ async function getPyodide(): Promise<PyodideInterface> {
       pyodide.runPython(cdlAdapterSource);
       return pyodide;
     })();
+    // A transient failure (CDN/PyPI blip) must not poison the whole session:
+    // clear the memo on rejection so the next parse retries a fresh load
+    // instead of re-awaiting the same rejected promise forever.
+    p.catch(() => { if (pyodidePromise === p) pyodidePromise = null; });
+    pyodidePromise = p;
   }
   return pyodidePromise;
 }
