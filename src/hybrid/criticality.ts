@@ -12,7 +12,11 @@ export function criticalityScores(model: HybridModel, weights: [number, number, 
   // Score DISPLAY blocks only: hidden array groups under non-representative
   // members carry union'd DSPF stats that would otherwise own the level max
   // and deflate every block the user can actually see.
-  const blocks = [...model.blocks.values()].filter(b => displayPath(model, b.path) === b.path);
+  // …and skip EXPANDED groups: while a ×N group is popped open its members are
+  // on canvas and it is not, but its summed stats would still own the level max
+  // and deflate every visible block at that depth.
+  const blocks = [...model.blocks.values()]
+    .filter(b => displayPath(model, b.path) === b.path && !(b.members && b.expanded));
   // per-level max per component
   const levelMax = new Map<number, number[]>();
   for (const b of blocks) {
@@ -32,7 +36,10 @@ export function criticalityScores(model: HybridModel, weights: [number, number, 
     c.forEach((v, i) => {
       if (!live[i]) return;
       const w = wSum > 0 ? weights[i] / wSum : 1 / live.filter(Boolean).length;
-      score += w * (Math.log(1 + (v as number)) / Math.log(1 + max[i]));
+      // log1p, not log(1 + x): for a sub-2^-53 max, 1 + x rounds to 1.0 and
+      // Math.log(1 + x) is 0 → 0/0 = NaN. log1p stays accurate for tiny values,
+      // so the divisor is > 0 whenever max[i] > 0.
+      score += w * (Math.log1p(v as number) / Math.log1p(max[i]));
     });
     scores.set(b.path, score);
   }
