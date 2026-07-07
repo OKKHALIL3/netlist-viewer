@@ -119,5 +119,13 @@ export function pathsToCell(
   };
   dfs([{ label: design.topCell, cellName: design.topCell }], design.topCell);
 
+  // A cell the top can't reach (an unused library cell, or a second independent
+  // top in a multi-top file) has no instantiation path, but it IS in the index —
+  // let it open as its own root view instead of showing "no matches".
+  if (paths.length === 0 && targetCell !== design.topCell
+      && design.cells.has(targetCell) && !canReach(design.topCell)) {
+    paths.push([{ label: targetCell, cellName: targetCell }]);
+  }
+
   return { paths, total: counts.get(targetCell) ?? paths.length };
 }
