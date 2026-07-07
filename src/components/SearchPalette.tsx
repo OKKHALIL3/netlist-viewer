@@ -63,6 +63,14 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     const matches = index.filter(
       r => r.id.toLowerCase().includes(q) || (r.kind !== 'pin' && r.detail.toLowerCase().includes(q)),
     );
+    // Rank by relevance before the result cap so an exact or prefix id match is
+    // never pushed off the end by earlier substring hits: exact id > id prefix >
+    // id substring > detail-only. Stable sort keeps document order within a tier.
+    const rankOf = (r: typeof matches[number]): number => {
+      const id = r.id.toLowerCase();
+      return id === q ? 0 : id.startsWith(q) ? 1 : id.includes(q) ? 2 : 3;
+    };
+    matches.sort((a, b) => rankOf(a) - rankOf(b));
 
     for (const r of matches) {
       if (clickable.length >= MAX_RESULTS) break;
