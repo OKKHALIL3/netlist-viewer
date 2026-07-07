@@ -204,7 +204,8 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     const layerSet = new Set<string>();
     // Deepest CDL box this node name sits in — or its physical family.
     const touchByName = (name: string) => {
-      let segs = normSegments(name, dspfSeps);
+      const orig = normSegments(name, dspfSeps);
+      let segs = orig;
       for (let pass = 0; pass < 2; pass++) {
         for (let len = segs.length - 1; len >= 1; len--) {
           const id = segs.slice(0, len).join('/');
@@ -214,8 +215,11 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
           segs = [segs[0].replace(/^x/, ''), ...segs.slice(1)];
         } else break;
       }
-      if (segs.length >= 2) {
-        const pid = physIdByKey.get(segs[0].replace(BUS_IDX_RE, ''));
+      // Physical-only families are keyed from the ORIGINAL leading segment on
+      // the device side, so match that here — not the XX-collapsed one, which
+      // would look up a key that was never registered.
+      if (orig.length >= 2) {
+        const pid = physIdByKey.get(orig[0].replace(BUS_IDX_RE, ''));
         if (pid) touched.add(pid);
       }
     };

@@ -132,6 +132,21 @@ test('a genuinely-absent doubled-X path stays a hierarchy-miss (no false match)'
   assert.equal(m.stats.devicesHierMiss, 1);
 });
 
+test('a net node under an XX-prefixed physical-only family links to that family block', () => {
+  const design = makeDesign('TOP', { TOP: [['XI1', 'BLK']], BLK: [] });
+  const dspf = parseDspf([
+    '*|NET SIG 1',
+    '*|S (XXFAM/M0:x 0 0)',                        // net node inside the physical-only family
+    '*|I (XXFAM/M0:d XXFAM/M0 d nch 0.5 0 0)',     // devices form family "xxfam"
+    '*|I (XXFAM/M1:d XXFAM/M1 d nch 0.5 4 4)',
+  ].join('\n'));
+  const m = correlate(design, dspf);
+  assert.ok(m.instances.find(i => i.id === 'dspf:xxfam'), 'XXFAM placed as a physical-only family');
+  const sig = m.nets.find(n => n.name === 'SIG')!;
+  assert.ok(sig.instances.includes('dspf:xxfam'),
+    `SIG should link to dspf:xxfam, got ${JSON.stringify(sig.instances)}`);
+});
+
 test('warns about hierarchy-miss devices (naming mismatch), not about dummies', () => {
   const design = makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] });
   const dspf = parseDspf('*|NET N 1\n*|I (ZZ/M1:d ZZ/M1 d nch 0.5 4 5)\n');
