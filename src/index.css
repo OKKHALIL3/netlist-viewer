@@ -308,9 +308,12 @@ body {
 }
 .hy-ping {
   fill: none;
+  stroke-opacity: 0;
   transform-box: fill-box;
   transform-origin: center;
-  animation: hy-ping 1.1s ease-out 3;
+  /* `forwards` holds the faded 100% frame — without it the ring snaps back to a
+     solid opaque outline once the 3 iterations end and stays there. */
+  animation: hy-ping 1.1s ease-out 3 forwards;
   pointer-events: none;
 }
 

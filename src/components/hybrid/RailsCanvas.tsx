@@ -40,7 +40,7 @@ function visibleAncestor(model: HybridModel, visible: ReadonlySet<string>, path:
 export function RailsCanvas() {
   const {
     model, openPath, selected, select, toggleOpen, toggleGroup, trace, funcOff, supplyOff,
-    zoneColors, sizeByContent, weights, pathResult, pathEnds, couplingBusy, couplingNeighbors, version,
+    zoneColors, sizeByContent, weights, pathResult, pathEnds, coupling, couplingBusy, couplingNeighbors, version,
   } = useHybridStore();
   // Free transform-based view (drag pans, ctrl/pinch wheel zooms — the canvas
   // itself moves, no scrollbars). Refs + direct style writes: no re-renders
@@ -91,13 +91,16 @@ export function RailsCanvas() {
   // unreadable sprawl, so the canvas caps at the strongest MAX_REVEAL by
   // criticality — the panel still lists them all, grouped by net.
   const revealTargets = useMemo(() => {
-    if (!selected || !trace) return undefined;
+    // The coupling overlay draws its own fly-lines from the single-chain
+    // frontier; the reveal reshapes that away, so the two lenses don't mix —
+    // when coupling is on, selection keeps the normal layout.
+    if (!selected || !trace || coupling.on) return undefined;
     let ns = [...trace.blocks];
     if (ns.length > MAX_REVEAL && scores) {
       ns = ns.sort((a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0)).slice(0, MAX_REVEAL);
     }
     return [selected, ...ns];
-  }, [selected, trace, scores]);
+  }, [selected, trace, scores, coupling.on]);
   const layout = useMemo(() => {
     void version; // toggleGroup() swaps children arrays in place
     if (!model || !scores) return null;
@@ -380,7 +383,7 @@ export function RailsCanvas() {
                                  fill="none" stroke={T.conn} strokeWidth={2} />}
                 {contains && <rect x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6}
                                    fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="4 3" />}
-                {ping && <rect className="hy-ping" x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6} stroke={ping} strokeWidth={2} />}
+                {ping && <rect key={`hy-ping-${selected}`} className="hy-ping" x={x - 2.5} y={y - 2.5} width={w + 5} height={h + 5} rx={6} stroke={ping} strokeWidth={2} />}
                 <rect x={x} y={y} width={w} height={h} rx={4} fill={T.card}
                       stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.2 : 1.2} />
                 <rect x={x} y={y} width={w} height={4} rx={2} fill={accent} />
@@ -405,7 +408,7 @@ export function RailsCanvas() {
                                  fill="none" stroke={T.conn} strokeWidth={2.2} />}
                 {contains && <rect x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8}
                                    fill="none" stroke={T.conn} strokeWidth={1.6} strokeDasharray="5 4" />}
-                {ping && <rect className="hy-ping" x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8} stroke={ping} strokeWidth={2.2} />}
+                {ping && <rect key={`hy-ping-${selected}`} className="hy-ping" x={x - 3} y={y - 3} width={w + 6} height={h + 6} rx={8} stroke={ping} strokeWidth={2.2} />}
                 {deck}
                 <rect x={x} y={y} width={w} height={h} rx={6} fill={T.card}
                       stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.4 : 1.8} />
@@ -461,7 +464,7 @@ export function RailsCanvas() {
                                fill="none" stroke={T.conn} strokeWidth={2.5} />}
               {contains && <rect x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10}
                                  fill="none" stroke={T.conn} strokeWidth={1.8} strokeDasharray="5 4" />}
-              {ping && <rect className="hy-ping" x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10} stroke={ping} strokeWidth={2.5} />}
+              {ping && <rect key={`hy-ping-${selected}`} className="hy-ping" x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10} stroke={ping} strokeWidth={2.5} />}
               {deck}
               <rect x={x} y={y} width={w} height={h} rx={7} fill={T.card}
                     stroke={isSel ? T.sel : accent} strokeWidth={isSel ? 2.6 : isOpen ? 2.2 : 1.5} />

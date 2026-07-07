@@ -218,3 +218,18 @@ test('reveal: an empty target list falls back to the normal single-chain layout'
   assert.equal(l.edges, undefined);
   assert.equal(l.items.get('')!.kind, undefined);       // single-chain items carry no kind
 });
+
+test('reveal: an unresolved-wrapper target (0-dev/0-net leaf) is still placed full-size', () => {
+  // XB has an unresolved master → 0-dev/0-net childless leaf (the exact kind of
+  // block deviceBlocksOf can surface as a neighbor); it must not be dropped.
+  const cells = new Map<string, Cell>();
+  cells.set('TOP', cell('TOP', ['sig', 'vdd', 'vss'], [
+    ['XA', 'LEAFP', { p: 'sig', vdd: 'vdd', vss: 'vss' }],
+    ['XB', 'UNRES', { p: 'sig' }],
+  ], []));
+  cells.set('LEAFP', cell('LEAFP', ['p', 'vdd', 'vss'], [], [['R1', 'R', 'r', [['a', 'p'], ['b', 'vdd']]]]));
+  const m = buildHybridModel({ cells, topCell: 'TOP', warnings: [] });
+  const l = computeRails(m, [''], undefined, undefined, ['xa', 'xb']);
+  assert.equal(l.items.get('xb')?.kind, 'full');   // placed as a target despite being an empty leaf
+  assert.ok(l.items.has('xa'));
+});

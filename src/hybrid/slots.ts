@@ -205,7 +205,10 @@ function computeRevealRails(
   // capped run of sliver siblings; the rest are reported as one "+N" stub.
   const shownChildren = (p: string): { kids: string[]; stub: number } => {
     if (!openSet.has(p)) return { kids: [], stub: 0 };
-    const all = model.blocks.get(p)!.children.filter(c => !emptyLeaf(c));
+    // Empty-leaf children are hidden — UNLESS one is a reveal target (an
+    // unresolved device wrapper the trace surfaced as a neighbor); a target
+    // must always get a card.
+    const all = model.blocks.get(p)!.children.filter(c => !emptyLeaf(c) || targets.has(c));
     if (order) all.sort((a, b) => order(a, b) || a.localeCompare(b));
     const heavy = all.filter(c => targets.has(c) || openSet.has(c));
     const slivs = all.filter(c => !targets.has(c) && !openSet.has(c));
@@ -236,7 +239,8 @@ function computeRevealRails(
     (rails[lvl] ??= []).push(p);
     if (openSet.has(p)) {
       const raw = model.blocks.get(p)!.children;
-      hidden[lvl + 1] = (hidden[lvl + 1] ?? 0) + raw.reduce((a, c) => a + (emptyLeaf(c) ? instancesOf(c) : 0), 0);
+      // a target empty-leaf gets a card, so it isn't part of the hidden tally
+      hidden[lvl + 1] = (hidden[lvl + 1] ?? 0) + raw.reduce((a, c) => a + (emptyLeaf(c) && !targets.has(c) ? instancesOf(c) : 0), 0);
     }
     const { kids, stub } = shownChildren(p);
     if (!kids.length && !stub) return;
@@ -260,8 +264,10 @@ function computeRevealRails(
   for (const [k, it] of items) items.set(k, { ...it, x: it.x - minX });
   for (const st of stubs) st.x -= minX;
   const rowsAt = rails.map(() => 1);
-  for (let i = 0; i < rails.length; i++) if (hidden[i] === undefined) hidden[i] = 0;
-  return { items, rails, stubs, hidden, rowsAt, width: maxX - minX, openPath: chain, edges };
+  // Pin hidden[] to the rail count — place() may write one slot past the last
+  // rail for an open node whose children are all empty leaves.
+  const hiddenOut = rails.map((_, i) => hidden[i] ?? 0);
+  return { items, rails, stubs, hidden: hiddenOut, rowsAt, width: maxX - minX, openPath: chain, edges };
 }
 
 // The visible display set without geometry — for the footer totals and the
