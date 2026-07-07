@@ -213,7 +213,9 @@ function InstanceNodeImpl({ data }: NodeProps) {
         section.rows.map(({ row, top }) => {
           const isOutput = section.group === 'output';
           const position = isOutput ? Position.Right : Position.Left;
-          const isActive = !!activeNet && row.nets.includes(activeNet);
+          // Bus-aware, like edgeHandle and the pin-row text: on a collapsed array
+          // block a member net (D<5>) must light the dot whose row shows D<1023:0>.
+          const isActive = rowMatchesActive(row.nets, activeNet);
           const visibleStyle = {
             top,
             background: isActive ? activeColor : isOutput ? 'var(--pin-o)' : 'var(--pin-i)',
