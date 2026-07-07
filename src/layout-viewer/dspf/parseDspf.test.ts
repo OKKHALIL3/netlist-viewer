@@ -250,6 +250,15 @@ test('caps to a declared ground net are not coupling (Quantus CB to 0-style)', (
   assert.equal(d.diagnostics.couplingCaps, 0);
 });
 
+test('caps to a ground-net subnode are not coupling', () => {
+  const d = parseDspf([
+    '*|DELIMITER :', '*|GROUND_NET VSS', '*|NET A 1f', '*|S (A:1 0 0)',
+    'C1 A:1 VSS:88 0.05f',    // cap to a ground SUBNODE, not the bare ground node
+  ].join('\n'));
+  assert.equal(d.nets[0].capacitors[0].coupling, false);
+  assert.equal(d.diagnostics.couplingCaps, 0);
+});
+
 test('instance-section devices merge into the device list with models', () => {
   const d = parseDspf([
     '*|DELIMITER #', '*|NET N 1f', '*|I (M7#d M7 d B 0 1 2)',

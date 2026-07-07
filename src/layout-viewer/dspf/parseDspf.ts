@@ -222,9 +222,12 @@ export function parseDspf(text: string, opts: ParseDspfOptions = {}): LayoutData
       if (cap && net) {
         // Refine the provisional coupling flag: a cap to node 0, to any
         // declared ground net, or between two nodes of THIS net is not
-        // cross-net coupling.
+        // cross-net coupling. The ground check strips the subnode suffix so a
+        // cap to a ground SUBNODE (VSS:88) is recognised, not just bare VSS.
         const sameNet = cap.b === net.name || cap.b.startsWith(net.name + data.delimiter);
-        cap.coupling = cap.b !== '' && cap.b !== '0' && !groundSet.has(cap.b) && !sameNet;
+        const bBase = stripPin(cap.b, data.delimiter);
+        cap.coupling = cap.b !== '' && bBase !== '0'
+          && !groundSet.has(cap.b) && !groundSet.has(bBase) && !sameNet;
         net.capacitors.push(cap); diag.capacitors++;
         if (cap.coupling) diag.couplingCaps++;
         addLayer(cap.layer);
