@@ -12,7 +12,7 @@ import { T } from './theme';
 
 export function HybridViewer() {
   const { design, layoutData, layoutModel } = useViewerStore();
-  const { model, build, openPath, goToCrumb, clearOverlays, funcOff, supplyOff, version, coupling, selected, refreshCoupling } = useHybridStore();
+  const { model, build, openPath, clearOverlays, funcOff, supplyOff, version, coupling, selected, refreshCoupling } = useHybridStore();
 
   useEffect(() => {
     if (design) build(design, layoutData, layoutModel);
@@ -48,29 +48,15 @@ export function HybridViewer() {
   }, [model, openPath, funcOff, supplyOff, version]);
 
   if (!model) return null;
-  // The crumb bar IS the open chain — clicking a crumb collapses everything
-  // below that level (the clicked level's children stay on canvas).
-  const crumbs = openPath.length ? openPath : [''];
+  // The open-chain crumb trail renders in the TopBar's center slot (same
+  // place as the schematic/layout trail — the bar must not move per view).
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: T.bg }}>
-      {/* Same .breadcrumb/.crumb-item/.crumb-sep language as the schematic
-          top-bar trail (Space Mono, dim → accent on hover, current in text). */}
-      <div className="breadcrumb"
-           style={{ flex: 'none', justifyContent: 'flex-start', padding: '6px 14px', borderBottom: `1px solid ${T.border}` }}>
-        {crumbs.map((c, i) => (
-          <span key={c || 'root'} style={{ display: 'flex', alignItems: 'center' }}>
-            {i > 0 && <span className="crumb-sep">/</span>}
-            <span className={`crumb-item${i === crumbs.length - 1 ? ' cur' : ''}`}
-                  title={i === 0 ? model.blocks.get('')?.label : undefined}
-                  onClick={i === crumbs.length - 1 ? undefined : () => goToCrumb(i)}>
-              {i === 0 ? 'top' : (model.blocks.get(c)?.label ?? c)}
-            </span>
-          </span>
-        ))}
-      </div>
       <div style={{ display: 'flex', flex: 1, minHeight: 0, position: 'relative' }}>
-        <HybridControls />
+        {/* Hierarchy first (far left) — same column order as the schematic
+            and layout shells; the filter/controls column sits after it. */}
         <HierTreePanel />
+        <HybridControls />
         <RailsCanvas />
         {/* Right overlay rail: stats, coupling, and propagation stack in one
             bounded column — the two list cards shrink and scroll internally,

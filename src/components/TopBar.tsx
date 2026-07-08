@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useViewerStore } from '../store/viewerStore';
+import { useHybridStore } from '../store/hybridStore';
 import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
 
@@ -9,6 +10,12 @@ export function TopBar() {
     ascendTo, setMode, toggleHideSupply, loadDesign, setParsing, setParseError, setSearchOpen,
     appMode, setAppMode, loadLayout, layoutModel,
   } = useViewerStore();
+  // Hybrid trail — rendered in the SAME center slot as the schematic trail so
+  // the breadcrumb never moves between views. Selective subscriptions: the
+  // top bar must not re-render on every hybrid-store change.
+  const hyModel = useHybridStore(s => s.model);
+  const hyOpenPath = useHybridStore(s => s.openPath);
+  const hyGoToCrumb = useHybridStore(s => s.goToCrumb);
   const fileRef = useRef<HTMLInputElement>(null);
   const dspfRef = useRef<HTMLInputElement>(null);
   // 0..1 while a DSPF parse is running in the worker, null otherwise.
@@ -91,8 +98,9 @@ export function TopBar() {
         ACE
       </div>
 
-      {/* Breadcrumb (center) — schematic navigation; the hybrid viewer draws
-          its own trail, so showing (and mutating) this one there is misleading */}
+      {/* Breadcrumb (center) — the navigation trail lives here in EVERY view.
+          Schematic and layout share the schematic trail; hybrid shows its own
+          open chain (crumbs ARE openPath — clicking one collapses below it). */}
       {design && appMode !== 'hybrid' && (
         <div className="breadcrumb">
           {breadcrumb.map((entry, i) => (
@@ -103,6 +111,22 @@ export function TopBar() {
                 onClick={() => ascendTo(i)}
               >
                 {entry.label}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+      {design && appMode === 'hybrid' && hyModel && (
+        <div className="breadcrumb">
+          {(hyOpenPath.length ? hyOpenPath : ['']).map((c, i, arr) => (
+            <span key={c || 'root'}>
+              {i > 0 && <span className="crumb-sep">/</span>}
+              <span
+                className={`crumb-item${i === arr.length - 1 ? ' cur' : ''}`}
+                title={i === 0 ? hyModel.blocks.get('')?.label : undefined}
+                onClick={i === arr.length - 1 ? undefined : () => hyGoToCrumb(i)}
+              >
+                {i === 0 ? 'top' : (hyModel.blocks.get(c)?.label ?? c)}
               </span>
             </span>
           ))}
@@ -120,6 +144,31 @@ export function TopBar() {
 
         {design && (
           <>
+            {/* Schematic-only controls come FIRST so everything after them —
+                view toggle, search, file buttons — sits in the exact same
+                place in all three views (right-aligned constant tail). */}
+            {appMode === 'schematic' && (
+              <>
+                {/* Hide supply toggle */}
+                <div className="supply-toggle">
+                  <span className="supply-label">Hide supply nets</span>
+                  <div className={`toggle-sw${hideSupply ? ' on' : ''}`} onClick={toggleHideSupply}>
+                    <i />
+                  </div>
+                </div>
+
+                {/* View modes */}
+                <div className="mode-btns">
+                  <button className={mode === 'inst' ? 'on' : ''} onClick={() => setMode('inst')}>Instances</button>
+                  <button className={mode === 'both' ? 'on' : ''} onClick={() => setMode('both')}>Nets + Instances</button>
+                  <button className={mode === 'net' ? 'on' : ''} onClick={() => setMode('net')}>Net focus</button>
+                </div>
+
+                <span className="badge">cell: {currentCell}</span>
+                <span className="badge">{netCount.toLocaleString()} nets</span>
+              </>
+            )}
+
             {/* App mode: schematic ⇄ hybrid ⇄ layout */}
             <div className="mode-btns">
               <button className={appMode === 'schematic' ? 'on' : ''} onClick={() => setAppMode('schematic')}>
@@ -142,34 +191,10 @@ export function TopBar() {
               </button>
             </div>
 
-            {/* Design-wide search — jumps in schematic AND hybrid mode */}
-            {(appMode === 'schematic' || appMode === 'hybrid') && (
-              <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
-                ⌕ Search <kbd>/</kbd>
-              </button>
-            )}
-
-            {appMode === 'schematic' && (
-              <>
-                {/* Hide supply toggle */}
-                <div className="supply-toggle">
-                  <span className="supply-label">Hide supply nets</span>
-                  <div className={`toggle-sw${hideSupply ? ' on' : ''}`} onClick={toggleHideSupply}>
-                    <i />
-                  </div>
-                </div>
-
-                {/* View modes */}
-                <div className="mode-btns">
-                  <button className={mode === 'inst' ? 'on' : ''} onClick={() => setMode('inst')}>Instances</button>
-                  <button className={mode === 'both' ? 'on' : ''} onClick={() => setMode('both')}>Nets + Instances</button>
-                  <button className={mode === 'net' ? 'on' : ''} onClick={() => setMode('net')}>Net focus</button>
-                </div>
-
-                <span className="badge">cell: {currentCell}</span>
-                <span className="badge">{netCount.toLocaleString()} nets</span>
-              </>
-            )}
+            {/* Design-wide search — same spot in every view ("/" works everywhere) */}
+            <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
+              ⌕ Search <kbd>/</kbd>
+            </button>
           </>
         )}
 
