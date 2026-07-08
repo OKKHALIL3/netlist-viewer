@@ -138,10 +138,33 @@ export function RailsCanvas() {
 
   // Every navigation re-homes the view: the newly opened branch comes to the
   // middle of the screen instead of growing off to one side.
-  // Refit on navigation AND on select/deselect — the reveal reshapes the tree,
-  // so bring the newly-revealed connected set into view.
+  // Refit on navigation AND on deselect — but when a SELECTION reshaped the
+  // tree, keep the user's zoom and just pan the clicked block to the middle:
+  // fitting the whole exploded reveal would yank them out to a full overview.
+  const selCenter = useMemo(() => {
+    if (!selected || !layout) return null;
+    const it = layout.items.get(selected);
+    if (!it) return null;
+    const full = it.kind === 'full' || (!layout.edges && it.lvl === layout.openPath.length);
+    return {
+      x: MARGIN_X + it.x + it.w / 2,
+      y: TOP_PAD + 26 + it.lvl * (CTX_H + GAP_Y) + it.row * (BLOCK_H + ROW_GAP_Y) + (full ? BLOCK_H : CTX_H) / 2,
+    };
+  }, [selected, layout]);
+  const selCenterRef = useRef(selCenter);
+  selCenterRef.current = selCenter;
   const chainKey = (layout ? layout.openPath.join('|') : '') + '::' + (revealTargets?.join('|') ?? '');
-  useEffect(() => { fitView(); }, [model, chainKey, fitView]);
+  useEffect(() => {
+    const c = selCenterRef.current;
+    const el = wrapRef.current;
+    if (c && el && el.clientWidth) {
+      const { k } = view.current;
+      view.current = { x: el.clientWidth / 2 - c.x * k, y: el.clientHeight / 2 - c.y * k, k };
+      applyView();
+    } else {
+      fitView();
+    }
+  }, [model, chainKey, fitView]);
 
   // Native wheel listener: React's synthetic onWheel is passive, and ctrl+
   // wheel (pinch) must preventDefault or the BROWSER zooms the whole page.
