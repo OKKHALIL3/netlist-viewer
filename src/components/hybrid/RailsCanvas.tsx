@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useHybridStore, passesFilters } from '../../store/hybridStore';
 import { computeRails, type RailItem } from '../../hybrid/slots';
 import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
@@ -90,17 +90,27 @@ export function RailsCanvas() {
   // block can touch hundreds of neighbors; opening every branch would be an
   // unreadable sprawl, so the canvas caps at the strongest MAX_REVEAL by
   // criticality — the panel still lists them all, grouped by net.
-  const revealTargets = useMemo(() => {
+  // The reveal is DEFERRED past the double-click window: the first click of a
+  // dblclick selects, and reshaping the tree right then moves the block out
+  // from under the second click — toggleOpen would never fire. Selection
+  // highlight, stats and the connected panel still react instantly.
+  const [reveal, setReveal] = useState<{ sel: string; trace: NonNullable<typeof trace> } | null>(null);
+  useEffect(() => {
     // The coupling overlay draws its own fly-lines from the single-chain
     // frontier; the reveal reshapes that away, so the two lenses don't mix —
     // when coupling is on, selection keeps the normal layout.
-    if (!selected || !trace || coupling.on) return undefined;
-    let ns = [...trace.blocks];
+    if (!selected || !trace || coupling.on) { setReveal(null); return; }
+    const t = setTimeout(() => setReveal({ sel: selected, trace }), 300);
+    return () => clearTimeout(t);
+  }, [selected, trace, coupling.on]);
+  const revealTargets = useMemo(() => {
+    if (!reveal) return undefined;
+    let ns = [...reveal.trace.blocks];
     if (ns.length > MAX_REVEAL && scores) {
       ns = ns.sort((a, b) => (scores.get(b) ?? 0) - (scores.get(a) ?? 0)).slice(0, MAX_REVEAL);
     }
-    return [selected, ...ns];
-  }, [selected, trace, scores, coupling.on]);
+    return [reveal.sel, ...ns];
+  }, [reveal, scores]);
   const layout = useMemo(() => {
     void version; // toggleGroup() swaps children arrays in place
     if (!model || !scores) return null;
@@ -153,7 +163,9 @@ export function RailsCanvas() {
   }, [selected, layout]);
   const selCenterRef = useRef(selCenter);
   selCenterRef.current = selCenter;
-  const chainKey = (layout ? layout.openPath.join('|') : '') + '::' + (revealTargets?.join('|') ?? '');
+  // openPath.length disambiguates [] from [''] — both join to '' — so opening
+  // the TOP block still re-homes the view.
+  const chainKey = (layout ? `${layout.openPath.length}:${layout.openPath.join('|')}` : '') + '::' + (revealTargets?.join('|') ?? '');
   useEffect(() => {
     const c = selCenterRef.current;
     const el = wrapRef.current;
