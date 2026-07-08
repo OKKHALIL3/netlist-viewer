@@ -31,16 +31,21 @@ export function PropagationPanel() {
               <span style={{ width: 6, height: 6, borderRadius: 3, background: T.conn, flex: '0 0 auto' }} />
               {sn.name}
             </div>
-            {sn.blocks.map(p => (
-              <div key={p} title={p || model.blocks.get(p)?.label}
-                   onClick={() => jumpToPath(p)}
-                   style={{ fontFamily: T.mono, fontSize: 11.5, color: T.text, padding: '1px 0 1px 11px', cursor: 'pointer',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = T.accent; }}
-                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T.text; }}>
-                {model.blocks.get(p)?.label ?? p}
-              </div>
-            ))}
+            {sn.blocks.map(p => {
+              const b = model.blocks.get(p);
+              return (
+                <div key={p} title={b ? `${b.label} (${b.master})` : p}
+                     onClick={() => jumpToPath(p)}
+                     style={{ fontFamily: T.mono, fontSize: 11.5, color: T.text, padding: '1px 0 1px 11px', cursor: 'pointer',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                     onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = T.accent; }}
+                     onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = T.text; }}>
+                  {b?.label ?? p}
+                  {/* cell (master) name — same convention as the navigator pills */}
+                  {b && <span style={{ color: T.faint }}> ({b.master})</span>}
+                </div>
+              );
+            })}
           </div>
         ))}
       </Panel>
