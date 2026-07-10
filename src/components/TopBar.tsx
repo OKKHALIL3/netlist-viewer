@@ -6,8 +6,8 @@ import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
 
 export function TopBar() {
   const {
-    design, currentCell, breadcrumb, mode, hideSupply, parsing, parseError,
-    ascendTo, setMode, toggleHideSupply, loadDesign, setParsing, setParseError, setSearchOpen,
+    design, currentCell, breadcrumb, mode, hideSupply, organize, parsing, parseError,
+    ascendTo, setMode, toggleHideSupply, toggleOrganize, loadDesign, setParsing, setParseError, setSearchOpen,
     appMode, setAppMode, loadLayout, layoutModel,
   } = useViewerStore();
   // Hybrid trail — rendered in the SAME center slot as the schematic trail so
@@ -153,6 +153,14 @@ export function TopBar() {
                 <div className="supply-toggle">
                   <span className="supply-label">Hide supply nets</span>
                   <div className={`toggle-sw${hideSupply ? ' on' : ''}`} onClick={toggleHideSupply}>
+                    <i />
+                  </div>
+                </div>
+
+                {/* Organize toggle — cluster blocks into labeled functional sections */}
+                <div className="supply-toggle" title="Group blocks into labeled functional sections (analog core, bias, digital, I/O)">
+                  <span className="supply-label">Organize</span>
+                  <div className={`toggle-sw${organize ? ' on' : ''}`} onClick={toggleOrganize}>
                     <i />
                   </div>
                 </div>

@@ -16,18 +16,50 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useViewerStore, type SelectionType } from '../store/viewerStore';
-import { layoutCell } from '../layout/elk';
+import { layoutCell, layoutCellGrouped } from '../layout/elk';
 import { clusterBusRibbons } from '../layout/busGrouping';
 import { computeInstanceLayout, pinDirection } from '../layout/pinGroups';
 import { buildCellView, type CellView } from '../layout/cellView';
 import { isFloatingNet } from '../layout/netStatus';
+import { computeGroups, type OrganizeGroup } from '../organize/groups';
+import { labelGroups, getCachedGroupLabels, type GroupLabels } from '../organize/labelGroups';
+import { getApiKey } from '../ai/describeCell';
 import { InstanceNode, type InstanceNodeData } from './nodes/InstanceNode';
 import { PrimitiveNode, type PrimitiveNodeData } from './nodes/PrimitiveNode';
 import { PortNode, type PortNodeData } from './nodes/PortNode';
+import { GroupNode, type GroupNodeData } from './nodes/GroupNode';
 import type { Design, Net, Port } from '../parser/types';
 import type { NodePosition } from '../layout/elk';
 
-const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode };
+const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode, groupNode: GroupNode };
+
+// Decorative section boxes for the Organize view. Placed FIRST in the node
+// array so they paint behind the real blocks, and non-interactive so a click
+// falls through to the block inside.
+function buildGroupNodes(
+  groups: OrganizeGroup[],
+  boxes: Map<string, NodePosition>,
+  labels: GroupLabels,
+): Node[] {
+  const out: Node[] = [];
+  for (const g of groups) {
+    const box = boxes.get(g.id);
+    if (!box) continue;
+    const lab = labels[g.id];
+    out.push({
+      id: `__group__:${g.id}`,
+      type: 'groupNode',
+      position: { x: box.x, y: box.y },
+      data: { label: lab?.name ?? g.label, note: lab?.note ?? '', kind: g.kind } as GroupNodeData,
+      style: { width: box.width, height: box.height },
+      selectable: false,
+      draggable: false,
+      connectable: false,
+      zIndex: 0,
+    });
+  }
+  return out;
+}
 
 function netColor(net: Net): string {
   if (net.kind === 'power') return 'var(--net-pwr)';
@@ -364,11 +396,14 @@ function buildGraph(
 }
 
 function Canvas() {
-  const { design, currentCell, mode, nodeLayout, hideSupply, focusNet, selection, setSelection, setFocusNet, focusRequest } =
+  const { design, currentCell, mode, nodeLayout, hideSupply, organize, focusNet, selection, setSelection, setFocusNet, focusRequest } =
     useViewerStore();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map());
+  const [groupBoxes, setGroupBoxes] = useState<Map<string, NodePosition>>(new Map());
+  // Claude-fetched labels, keyed by cell name so a fetch never leaks across cells.
+  const [fetchedLabels, setFetchedLabels] = useState<Record<string, GroupLabels>>({});
   const [laying, setLaying] = useState(false);
   const { fitView, fitBounds } = useReactFlow();
 
@@ -385,35 +420,72 @@ function Canvas() {
   // canvas. Everything downstream (ELK, buildGraph, highlight) consumes the view.
   const view = useMemo(() => (cell ? buildCellView(cell) : null), [cell]);
 
+  // Organize view: cluster this cell's blocks into functional sections. Only
+  // worth boxing when there are ≥2 distinct groups — a single-group cell (e.g. a
+  // flat transistor leaf) falls back to the plain layout so nothing changes.
+  const groups = useMemo(
+    () => (view && organize ? computeGroups(view, design) : []),
+    [view, organize, design],
+  );
+  const useGroups = organize && groups.length >= 2;
+
+  // Labels shown on the boxes: deterministic ones seeded from cache during
+  // render (no flash), overridden by a Claude fetch for this cell once it lands.
+  const seededLabels = useMemo<GroupLabels>(
+    () => (view && useGroups ? getCachedGroupLabels(view.name) ?? {} : {}),
+    [view, useGroups],
+  );
+  const groupLabels: GroupLabels = (view && fetchedLabels[view.name]) || seededLabels;
+
   useEffect(() => {
     if (!view) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) setLaying(true);
     });
-    layoutCell(view, design, nodeLayout).then(pos => {
+    const run = useGroups
+      ? layoutCellGrouped(view, design, nodeLayout, groups)
+      : layoutCell(view, design, nodeLayout).then(positions => ({ positions, groupBoxes: new Map<string, NodePosition>() }));
+    Promise.resolve(run).then(({ positions, groupBoxes }) => {
       if (cancelled) return;
-      setPositions(pos);
+      setPositions(positions);
+      setGroupBoxes(groupBoxes);
       setLaying(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [view, design, nodeLayout]);
+  }, [view, design, nodeLayout, useGroups, groups]);
+
+  // Sharpen group labels via Claude when a section view is active. Strictly
+  // additive: the deterministic labels already render; this only upgrades them
+  // when a key is present and the call succeeds. State is set only in the async
+  // callback (never synchronously in the effect body).
+  useEffect(() => {
+    if (!view || !useGroups) return;
+    if (getCachedGroupLabels(view.name) || fetchedLabels[view.name] || !getApiKey()) return;
+    const cellName = view.name;
+    let cancelled = false;
+    labelGroups(view, groups)
+      .then(labels => { if (!cancelled) setFetchedLabels(m => ({ ...m, [cellName]: labels })); })
+      .catch(() => { /* keep deterministic labels */ });
+    return () => { cancelled = true; };
+  }, [view, useGroups, groups, fetchedLabels]);
 
   useEffect(() => {
     if (!view || positions.size === 0) return;
     const { nodes: n, edges: e } = buildGraph(view, selection, mode, hideSupply, focusNet, design, positions);
+    const groupNodes = useGroups ? buildGroupNodes(groups, groupBoxes, groupLabels) : [];
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
-      setNodes(n);
+      setNodes([...groupNodes, ...n]);
       setEdges(e);
     });
     return () => {
       cancelled = true;
     };
-  }, [view, positions, selection, mode, hideSupply, focusNet, design]);
+  }, [view, positions, selection, mode, hideSupply, focusNet, design, useGroups, groups, groupBoxes, groupLabels]);
 
   // Pan/zoom the viewport to the current selection whenever the cell changed
   // (descend/ascend/search jumped here) or a search jump landed on a result

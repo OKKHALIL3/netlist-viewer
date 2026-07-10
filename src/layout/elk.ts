@@ -1,8 +1,9 @@
 // Use the self-contained browser bundle (no web-worker dependency)
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { ElkNode, ElkExtendedEdge } from 'elkjs';
-import type { Cell, Design } from '../parser/types';
+import type { Cell, Design, Net } from '../parser/types';
 import type { NodeLayout } from '../store/viewerStore';
+import type { OrganizeGroup } from '../organize/groups';
 import { computeInstanceLayout, computeRadialLayout } from './pinGroups';
 import { groupPorts } from './busGrouping';
 import { deviceFootprint } from '../components/nodes/deviceSymbols';
@@ -24,40 +25,32 @@ const PORT_ROW_PITCH = 42;   // vertical gap between stacked flags
 const STAGGER_LANES = 2;     // flags zig-zag between this many horizontal lanes
 const STAGGER_PITCH = 32;    // horizontal step per lane (fans the leads toward the core)
 
+// Reserve room at the top of each functional group box for its title chip.
+const GROUP_LABEL_PAD = 44;
+const GROUP_PAD = 18;
+
 let elkInstance: InstanceType<typeof ELK> | null = null;
 function getElk() {
   if (!elkInstance) elkInstance = new ELK();
   return elkInstance;
 }
 
-export async function layoutCell(
-  cell: Cell,
-  design: Design | null,
-  nodeLayout: NodeLayout,
-): Promise<Map<string, NodePosition>> {
-  const elk = getElk();
+// A net-kind lookup for one cell (name → 'signal' | 'power' | 'ground').
+function makeNetKindOf(cell: Cell): (net: string) => Net['kind'] {
+  const kinds = new Map(cell.nets.map(n => [n.name, n.kind]));
+  return (net: string) => kinds.get(net) ?? 'signal';
+}
 
-  const netKindOf = (() => {
-    const kinds = new Map(cell.nets.map(n => [n.name, n.kind]));
-    return (net: string) => kinds.get(net) ?? 'signal';
-  })();
-
+// ELK child nodes for a cell's core content — instance blocks + device symbols.
+// Sizes match what the React nodes actually render.
+function coreChildren(cell: Cell, design: Design | null, nodeLayout: NodeLayout, netKindOf: (net: string) => Net['kind']): ElkNode[] {
   const instanceSize = (inst: Cell['instances'][number]) => {
     const ports = design?.cells.get(inst.master)?.ports ?? [];
     return nodeLayout === 'beta'
       ? computeRadialLayout(inst.conn, ports, netKindOf)
       : { width: NODE_WIDTH, height: computeInstanceLayout(inst.conn, ports, netKindOf).height };
   };
-
-  // Collapse contiguous bus-bit ports (addr<0>..addr<30>) into one layout node
-  // each, so a wide port bus takes a single row instead of a tall stack. Every
-  // bit maps to its group's representative port id — the handle anchor the
-  // edges below and the scene builder both use.
-  const portGroups = groupPorts(cell.ports);
-  const portRep = new Map<string, string>();
-  for (const g of portGroups) for (const name of g.names) portRep.set(name, g.repName);
-
-  const children: ElkNode[] = [
+  return [
     ...cell.instances.map(inst => {
       const { width, height } = instanceSize(inst);
       return { id: inst.id, width, height };
@@ -71,35 +64,32 @@ export async function layoutCell(
         ? { id: prim.id, width: fp.width, height: fp.height + PRIM_LABEL }
         : { id: prim.id, width: PRIM_SIZE, height: PRIM_SIZE + PRIM_LABEL };
     }),
-    // Pin cell-boundary ports to a fixed edge of the layout — inputs (and
-    // bidirectional/unknown-direction ports) to the left, outputs to the
-    // right — so I/O lands in the same place across every cell instead of
-    // wherever connectivity happens to push it. Supply/ground port groups are
-    // the exception: they get no horizontal constraint here because they're
-    // lifted onto the top/bottom rails afterward (see repositionSupplyRails).
-    ...portGroups.map(g => {
-      const kind = netKindOf(g.repName);
-      const isRail = kind === 'power' || kind === 'ground';
-      return {
-        id: `__port__:${g.repName}`,
-        width: PORT_WIDTH,
-        height: PORT_HEIGHT,
-        layoutOptions: isRail
-          ? {}
-          : { 'elk.layered.layering.layerConstraint': g.dir === 'O' ? 'LAST_SEPARATE' : 'FIRST_SEPARATE' },
-      };
-    }),
   ];
+}
 
-  if (children.length === 0) return new Map();
+// ELK child nodes for the cell-boundary ports (one per collapsed port group).
+// Signal ports get a layer constraint pinning inputs left / outputs right;
+// supply/ground rails get none (they're lifted onto the top/bottom rails after).
+function portChildren(portGroups: ReturnType<typeof groupPorts>, netKindOf: (net: string) => Net['kind']): ElkNode[] {
+  return portGroups.map(g => {
+    const kind = netKindOf(g.repName);
+    const isRail = kind === 'power' || kind === 'ground';
+    const node: ElkNode = { id: `__port__:${g.repName}`, width: PORT_WIDTH, height: PORT_HEIGHT };
+    // Rails get no layer constraint (they're lifted to top/bottom afterward);
+    // signal ports pin inputs to the first layer, outputs to the last.
+    if (!isRail) {
+      node.layoutOptions = { 'elk.layered.layering.layerConstraint': g.dir === 'O' ? 'LAST_SEPARATE' : 'FIRST_SEPARATE' };
+    }
+    return node;
+  });
+}
 
+// Cell-boundary connections (the "__port__" pseudo-node) get their own layout
+// node per port (`__port__:<name>`) so a pin whose only other connection is the
+// cell's I/O boundary is still laid out next to a wire.
+function buildEdges(cell: Cell, portRep: Map<string, string>): ElkExtendedEdge[] {
   const seenEdge = new Set<string>();
   const edges: ElkExtendedEdge[] = [];
-
-  // Cell-boundary connections (the "__port__" pseudo-node) get their own
-  // layout node per port (`__port__:<name>`) so a pin whose only other
-  // connection is the cell's I/O boundary is still laid out next to a wire,
-  // instead of floating with no edges at all.
   for (const net of cell.nets) {
     const eps = net.endpoints.map(([id, pin]) => (id === '__port__' ? `__port__:${portRep.get(pin) ?? pin}` : id));
     if (eps.length < 2) continue;
@@ -113,6 +103,34 @@ export async function layoutCell(
       edges.push({ id: `e_${net.name}_${i}`, sources: [src], targets: [tgt] });
     }
   }
+  return edges;
+}
+
+function portRepMap(portGroups: ReturnType<typeof groupPorts>): Map<string, string> {
+  const portRep = new Map<string, string>();
+  for (const g of portGroups) for (const name of g.names) portRep.set(name, g.repName);
+  return portRep;
+}
+
+export async function layoutCell(
+  cell: Cell,
+  design: Design | null,
+  nodeLayout: NodeLayout,
+): Promise<Map<string, NodePosition>> {
+  const elk = getElk();
+  const netKindOf = makeNetKindOf(cell);
+
+  // Collapse contiguous bus-bit ports (addr<0>..addr<30>) into one layout node
+  // each, so a wide port bus takes a single row instead of a tall stack.
+  const portGroups = groupPorts(cell.ports);
+  const portRep = portRepMap(portGroups);
+
+  const children: ElkNode[] = [
+    ...coreChildren(cell, design, nodeLayout, netKindOf),
+    ...portChildren(portGroups, netKindOf),
+  ];
+
+  if (children.length === 0) return new Map();
 
   const graph: ElkNode = {
     id: 'root',
@@ -125,7 +143,7 @@ export async function layoutCell(
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
     },
     children,
-    edges,
+    edges: buildEdges(cell, portRep),
   };
 
   try {
@@ -145,6 +163,101 @@ export async function layoutCell(
   } catch (err) {
     console.warn('ELK layout failed, using fallback grid', err);
     return fallbackGrid(children);
+  }
+}
+
+export interface GroupedLayout {
+  /** Leaf nodes (instances/devices) + boundary ports, all in absolute coords. */
+  positions: Map<string, NodePosition>;
+  /** Group id → absolute bounding box of the group's dotted section. */
+  groupBoxes: Map<string, NodePosition>;
+}
+
+// The "Organize" view: each functional group becomes an ELK compound node so its
+// members lay out together inside a dotted box, and the boxes lay out left→right
+// by signal flow. Cross-group wires are resolved by ELK's INCLUDE_CHILDREN
+// hierarchy handling. Returns absolute positions (relative child coords flattened
+// against their group's origin) so buildGraph/edges/highlight consume it unchanged.
+export async function layoutCellGrouped(
+  cell: Cell,
+  design: Design | null,
+  nodeLayout: NodeLayout,
+  groups: OrganizeGroup[],
+): Promise<GroupedLayout> {
+  const elk = getElk();
+  const netKindOf = makeNetKindOf(cell);
+  const portGroups = groupPorts(cell.ports);
+  const portRep = portRepMap(portGroups);
+
+  // Every core child by id, so each group can claim its members as ELK children.
+  const coreById = new Map<string, ElkNode>();
+  for (const child of coreChildren(cell, design, nodeLayout, netKindOf)) coreById.set(child.id ?? '', child);
+
+  const groupNodes: ElkNode[] = groups.map(g => ({
+    id: `__group__:${g.id}`,
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': 'RIGHT',
+      'elk.padding': `[top=${GROUP_LABEL_PAD}.0,left=${GROUP_PAD}.0,bottom=${GROUP_PAD}.0,right=${GROUP_PAD}.0]`,
+      'elk.spacing.nodeNode': '28',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '54',
+    },
+    children: g.memberIds.map(id => coreById.get(id)).filter((n): n is ElkNode => !!n),
+  }));
+
+  const children: ElkNode[] = [...groupNodes, ...portChildren(portGroups, netKindOf)];
+  if (children.length === 0) return { positions: new Map(), groupBoxes: new Map() };
+
+  const graph: ElkNode = {
+    id: 'root',
+    layoutOptions: {
+      'elk.algorithm': 'layered',
+      'elk.direction': 'RIGHT',
+      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '96',
+      'elk.spacing.nodeNode': '64',
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+    },
+    children,
+    edges: buildEdges(cell, portRep),
+  };
+
+  try {
+    const result = await elk.layout(graph);
+    const positions = new Map<string, NodePosition>();
+    const groupBoxes = new Map<string, NodePosition>();
+    for (const node of result.children ?? []) {
+      const id = node.id ?? '';
+      if (id.startsWith('__group__:') && node.children) {
+        const gx = node.x ?? 0, gy = node.y ?? 0;
+        groupBoxes.set(id.slice('__group__:'.length), {
+          x: gx, y: gy, width: node.width ?? NODE_WIDTH, height: node.height ?? PRIM_SIZE,
+        });
+        for (const child of node.children) {
+          positions.set(child.id ?? '', {
+            x: gx + (child.x ?? 0),
+            y: gy + (child.y ?? 0),
+            width: child.width ?? NODE_WIDTH,
+            height: child.height ?? PRIM_SIZE,
+          });
+        }
+      } else {
+        positions.set(id, {
+          x: node.x ?? 0, y: node.y ?? 0,
+          width: node.width ?? NODE_WIDTH, height: node.height ?? PRIM_SIZE,
+        });
+      }
+    }
+    // Rails/ports are top-level nodes, so the same post-processing works on the
+    // flattened map; group boxes were already framed from member positions.
+    repositionSupplyRails(portGroups, netKindOf, positions);
+    compressBoundaryPorts(portGroups, netKindOf, positions);
+    return { positions, groupBoxes };
+  } catch (err) {
+    console.warn('ELK grouped layout failed, using flat layout', err);
+    const positions = await layoutCell(cell, design, nodeLayout);
+    return { positions, groupBoxes: new Map() };
   }
 }
 

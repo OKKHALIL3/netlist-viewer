@@ -34,6 +34,9 @@ interface ViewerState {
   mode: ViewMode;
   nodeLayout: NodeLayout;
   hideSupply: boolean;
+  // Organize view: cluster the cell's blocks into labeled functional sections
+  // (analog core / bias / digital / io / passives) laid out by signal flow.
+  organize: boolean;
   focusNet: string | null;
   selection: SelectionType | null;
   warnings: string[];
@@ -74,6 +77,7 @@ interface ViewerState {
   setMode: (mode: ViewMode) => void;
   toggleNodeLayout: () => void;
   toggleHideSupply: () => void;
+  toggleOrganize: () => void;
   setFocusNet: (net: string | null) => void;
   setSelection: (sel: SelectionType | null) => void;
   setParsing: (parsing: boolean) => void;
@@ -99,6 +103,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   mode: 'both',
   nodeLayout: 'beta',
   hideSupply: true,
+  organize: typeof localStorage !== 'undefined' && localStorage.getItem('cdl-viewer:organize') === '1',
   focusNet: null,
   selection: null,
   warnings: [],
@@ -183,6 +188,12 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   toggleNodeLayout: () => set(s => ({ nodeLayout: s.nodeLayout === 'beta' ? 'classic' : 'beta' })),
 
   toggleHideSupply: () => set(s => ({ hideSupply: !s.hideSupply })),
+
+  toggleOrganize: () => set(s => {
+    const organize = !s.organize;
+    if (typeof localStorage !== 'undefined') localStorage.setItem('cdl-viewer:organize', organize ? '1' : '0');
+    return { organize };
+  }),
 
   setFocusNet: (net) => set({ focusNet: net }),
 
