@@ -17,6 +17,7 @@
 import type { Design } from '../parser/types';
 import type { CellView } from '../layout/cellView';
 import { ruleClassifier } from '../hybrid/classify';
+import { detectDeviceStructures } from './deviceStructures';
 
 // The coarse display groups. Deliberately fewer than the fine taxonomy: the goal
 // is a readable analog/digital/bias/io split a reviewer takes in at a glance,
@@ -74,7 +75,15 @@ export function computeGroups(view: CellView, design: Design | null): OrganizeGr
     const cat = classifier.classify(inst.master, design?.cells.get(inst.master));
     add(kindOfCategory(cat), inst.id);
   }
+
+  // Device-level idioms first — differential pairs, cross-coupled pairs,
+  // current mirrors, CMOS pairs, stacks, dummy ties — each occurrence its own
+  // labeled box. Only devices no structure claimed fall into the coarse
+  // core/passive buckets below (the old behavior).
+  const structures = detectDeviceStructures(view, view.primitives);
+  const structured = new Set(structures.flatMap(s => s.memberIds));
   for (const prim of view.primitives) {
+    if (structured.has(prim.id)) continue;
     add(prim.kind === 'M' ? 'core' : 'passive', prim.id);
   }
 
@@ -85,6 +94,7 @@ export function computeGroups(view: CellView, design: Design | null): OrganizeGr
       groups.push({ id: kind, kind, label: GROUP_LABEL[kind], memberIds: ids });
     }
   }
+  groups.push(...structures);
   return groups;
 }
 
