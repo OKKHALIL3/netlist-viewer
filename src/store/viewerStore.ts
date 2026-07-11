@@ -3,7 +3,7 @@ import type { Design, Cell } from '../parser/types';
 import type { LayoutData, LayoutModel } from '../layout-viewer/model';
 import { correlate } from '../layout-viewer/correlate';
 
-export type ViewMode = 'inst' | 'both' | 'net';
+export type ViewMode = 'inst' | 'both';
 
 // Top-level app mode: schematic view, physical layout view, or the hybrid hierarchy view.
 export type AppMode = 'schematic' | 'layout' | 'hybrid';
@@ -182,7 +182,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   },
 
   setMode: (mode) => {
-    set({ mode, focusNet: mode !== 'net' ? null : get().focusNet });
+    set({ mode, focusNet: null });
   },
 
   toggleNodeLayout: () => set(s => ({ nodeLayout: s.nodeLayout === 'beta' ? 'classic' : 'beta' })),

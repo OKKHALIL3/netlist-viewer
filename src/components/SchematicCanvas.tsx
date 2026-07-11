@@ -195,9 +195,9 @@ function buildGraph(
   // would render as a bare, floating-looking pin (the wire is suppressed but
   // the pin stays). Map each such terminal to its net kind so the device node
   // can cap it with a ground/VDD stub glyph instead. Same condition as the
-  // wire-hiding guard below: only when hide-supply is on and not in net mode.
+  // wire-hiding guard below.
   const supplyStubsByPrim = new Map<string, Record<string, 'power' | 'ground'>>();
-  if (hideSupply && mode !== 'net') {
+  if (hideSupply) {
     const netKind = new Map(cell.nets.map(n => [n.name, n.kind]));
     for (const prim of cell.primitives) {
       let stubs: Record<string, 'power' | 'ground'> | undefined;
@@ -275,12 +275,11 @@ function buildGraph(
       // An explicitly selected rail net is the exception: selecting it always
       // reveals its wire so the highlight has something to land on.
       const isSelectedNet = selection?.type === 'net' && selection.name === net.name;
-      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net' && !isSelectedNet;
+      const wiresHidden = hideSupply && net.kind !== 'signal' && !isSelectedNet;
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
       const isActive = isFocused || isHighlighted;
-      const isDimmed = focusNet !== null && !isFocused && mode === 'net';
       // When something is selected/focused, fade unrelated wires further so
       // the active net's path reads as an isolated wire rather than one of
       // several similarly-weighted lines grazing the same pin rows.
@@ -316,7 +315,7 @@ function buildGraph(
       if (realEps.length < 2) continue;
 
       const color = isActive ? netColorHi(net) : netColor(net);
-      const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
+      const opacity = isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
       const strokeWidth = isActive ? 2.4 : 1.6;
 
       const outIdx = realEps.findIndex(ep => pinDirection(ep.handle, instancePorts.get(ep.nodeId) ?? []) === 'O');
@@ -324,7 +323,7 @@ function buildGraph(
       const { nodeId: srcId, handle: srcPin } = realEps[srcIdx];
 
       const labelStyle = {
-        fill: isDimmed ? 'transparent' : 'var(--txt-faint)',
+        fill: 'var(--txt-faint)',
         fontSize: 9,
         fontFamily: 'Space Mono, monospace',
       };
@@ -396,7 +395,7 @@ function buildGraph(
 }
 
 function Canvas() {
-  const { design, currentCell, mode, nodeLayout, hideSupply, organize, focusNet, selection, setSelection, setFocusNet, focusRequest } =
+  const { design, currentCell, mode, nodeLayout, hideSupply, organize, focusNet, selection, setSelection, focusRequest } =
     useViewerStore();
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
@@ -407,10 +406,10 @@ function Canvas() {
   const [laying, setLaying] = useState(false);
   const { fitView, fitBounds } = useReactFlow();
 
-  // Power/ground wires are suppressed while "Hide supply nets" is on (except in
-  // Net mode, which always draws them) — see the matching guard in buildGraph.
-  // The legend greys out those entries so it matches what's actually drawn.
-  const supplyHidden = hideSupply && mode !== 'net';
+  // Power/ground wires are suppressed while "Hide supply nets" is on — see the
+  // matching guard in buildGraph. The legend greys out those entries so it
+  // matches what's actually drawn.
+  const supplyHidden = hideSupply;
 
   const cell = design?.cells.get(currentCell);
 
@@ -538,14 +537,12 @@ function Canvas() {
   const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
     const netName = (edge.data as { netName: string } | undefined)?.netName;
     if (!netName) return;
-    if (mode === 'net') setFocusNet(netName);
     setSelection({ type: 'net', name: netName });
-  }, [mode, setFocusNet, setSelection]);
+  }, [setSelection]);
 
   const onPaneClick = useCallback(() => {
     setSelection(null);
-    if (mode === 'net') setFocusNet(null);
-  }, [mode, setSelection, setFocusNet]);
+  }, [setSelection]);
 
   // "F" key → fit view (standard EDA shortcut)
   useEffect(() => {
@@ -600,7 +597,7 @@ function Canvas() {
       >
         ⊡ Fit  <kbd>F</kbd>
       </button>
-      <div className="canvas-hint">click a block, pin, port, or net to highlight its connections · double-click to descend · click a wire to focus net</div>
+      <div className="canvas-hint">click a block, pin, port, or net to highlight its connections · double-click to descend</div>
     </div>
   );
 }

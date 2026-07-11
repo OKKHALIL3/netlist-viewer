@@ -29,9 +29,7 @@ function PortNodeImpl({ data }: NodeProps) {
   const selectNet = d.repNet ?? port.name;
   // Per-slice selectors (see InstanceNode) so a selection click doesn't
   // re-render every port node.
-  const mode = useViewerStore(s => s.mode);
   const setSelection = useViewerStore(s => s.setSelection);
-  const setFocusNet = useViewerStore(s => s.setFocusNet);
   const design = useViewerStore(s => s.design);
   const currentCell = useViewerStore(s => s.currentCell);
 
@@ -62,7 +60,6 @@ function PortNodeImpl({ data }: NodeProps) {
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (mode === 'net') setFocusNet(selectNet);
     setSelection({ type: 'net', name: selectNet });
   };
 

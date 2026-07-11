@@ -197,12 +197,11 @@ export function buildGraph(
       // An explicitly selected rail net is the exception: selecting it always
       // reveals its wire so the highlight has something to land on.
       const isSelectedNet = selection?.type === 'net' && selection.name === net.name;
-      const wiresHidden = hideSupply && net.kind !== 'signal' && mode !== 'net' && !isSelectedNet;
+      const wiresHidden = hideSupply && net.kind !== 'signal' && !isSelectedNet;
 
       const isFocused = focusNet === net.name;
       const isHighlighted = highlightedNets.has(net.name);
       const isActive = isFocused || isHighlighted;
-      const isDimmed = focusNet !== null && !isFocused && mode === 'net';
       // When something is selected/focused, fade unrelated wires further so
       // the active net's path reads as an isolated wire rather than one of
       // several similarly-weighted lines grazing the same pin rows.
@@ -241,7 +240,7 @@ export function buildGraph(
       if (realEps.length < 2) continue;
 
       const color = isActive ? netColorHi(net) : netColor(net);
-      const opacity = isDimmed ? 0.05 : isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
+      const opacity = isActive ? 0.95 : hasFocus ? 0.15 : 0.65;
       const strokeWidth = isActive ? 2.4 : 1.6;
 
       const outIdx = realEps.findIndex(ep => pinDirection(ep.handle, instancePorts.get(ep.nodeId) ?? []) === 'O');
@@ -249,7 +248,7 @@ export function buildGraph(
       const { nodeId: srcId, handle: srcPin } = realEps[srcIdx];
 
       const labelStyle = {
-        fill: isDimmed ? 'transparent' : 'var(--txt-faint)',
+        fill: 'var(--txt-faint)',
         fontSize: 9,
         fontFamily: 'Space Mono, monospace',
       };

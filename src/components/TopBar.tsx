@@ -169,7 +169,6 @@ export function TopBar() {
                 <div className="mode-btns">
                   <button className={mode === 'inst' ? 'on' : ''} onClick={() => setMode('inst')}>Instances</button>
                   <button className={mode === 'both' ? 'on' : ''} onClick={() => setMode('both')}>Nets + Instances</button>
-                  <button className={mode === 'net' ? 'on' : ''} onClick={() => setMode('net')}>Net focus</button>
                 </div>
 
                 <span className="badge">cell: {currentCell}</span>

@@ -112,21 +112,18 @@ function InstanceNodeImpl({ data }: NodeProps) {
   // re-render all blocks at once, which is what locked the tab up.
   const descend = useViewerStore(s => s.descend);
   const setSelection = useViewerStore(s => s.setSelection);
-  const setFocusNet = useViewerStore(s => s.setFocusNet);
-  const mode = useViewerStore(s => s.mode);
   const design = useViewerStore(s => s.design);
   const currentCell = useViewerStore(s => s.currentCell);
   const nodeLayout = useViewerStore(s => s.nodeLayout);
   const isArray = (arraySize ?? 1) > 1;
 
   // Selecting a pin's net (used by the per-pin click handlers below). Mirrors
-  // PortNode/onEdgeClick: focus the net in Net mode, and select it everywhere so
-  // its wire + connected pins highlight — including supply/ground pins, which
-  // otherwise could only be reached by clicking their (often distant) wire.
+  // PortNode/onEdgeClick: select the net so its wire + connected pins highlight
+  // — including supply/ground pins, which otherwise could only be reached by
+  // clicking their (often distant) wire.
   const pickNet = (row: { nets: string[] }) => {
     const net = row.nets[0];
     if (!net) return;
-    if (mode === 'net') setFocusNet(net);
     setSelection({ type: 'net', name: net });
   };
 
