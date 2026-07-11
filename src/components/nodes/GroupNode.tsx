@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import type { NodeProps } from '@xyflow/react';
+import { useStore, type NodeProps } from '@xyflow/react';
 import type { GroupKind } from '../../organize/groups';
 
 // A decorative dotted section box for the Organize view. Rendered behind the
@@ -26,13 +26,19 @@ const COLORS: Record<GroupKind, string> = {
 function GroupNodeImpl({ data }: NodeProps) {
   const d = data as GroupNodeData;
   const color = COLORS[d.kind] ?? COLORS.other;
+  // Counter-scale the header (and the box border) against the viewport zoom so
+  // section titles stay readable at fit view on a large cell — at a fixed 13px
+  // flow size they shrank to a few screen pixels. Capped so a hand-zoom far
+  // past fit can't blow a title up to the size of its own box.
+  const zoom = useStore(s => s.transform[2]);
+  const boost = Math.min(10, Math.max(1, 1 / zoom));
   return (
     <div
       style={{
         position: 'relative',
         width: '100%',
         height: '100%',
-        border: `1.5px dashed ${color}`,
+        border: `${1.5 * boost}px dashed ${color}`,
         borderRadius: 14,
         background: `${color}0f`,
         pointerEvents: 'none',
@@ -44,7 +50,11 @@ function GroupNodeImpl({ data }: NodeProps) {
           position: 'absolute',
           top: 8,
           left: 14,
-          right: 14,
+          // Pre-divide the row's width by the scale factor so the scaled-up
+          // header still clips at the box's right edge instead of spilling out.
+          width: `calc((100% - 28px) / ${boost})`,
+          transform: `scale(${boost})`,
+          transformOrigin: 'top left',
           display: 'flex',
           gap: 10,
           alignItems: 'baseline',
@@ -59,6 +69,11 @@ function GroupNodeImpl({ data }: NodeProps) {
             letterSpacing: 0.3,
             color,
             whiteSpace: 'nowrap',
+            // A dark pill behind the title keeps it legible where wires and
+            // blocks crowd the top edge of the section.
+            background: 'rgba(11, 15, 20, 0.78)',
+            padding: '1px 8px',
+            borderRadius: 6,
           }}
         >
           {d.label}
