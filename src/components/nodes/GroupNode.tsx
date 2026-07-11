@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useLayoutEffect, useRef, useState } from 'react';
 import { useStore, type NodeProps } from '@xyflow/react';
 import type { GroupKind } from '../../organize/groups';
 
@@ -31,9 +31,25 @@ function GroupNodeImpl({ data }: NodeProps) {
   // flow size they shrank to a few screen pixels. Capped so a hand-zoom far
   // past fit can't blow a title up to the size of its own box.
   const zoom = useStore(s => s.transform[2]);
-  const boost = Math.min(10, Math.max(1, 1 / zoom));
+  const boxRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLSpanElement>(null);
+  // Layout (pre-transform) widths of the box and the title, so the boost can be
+  // capped per box: a narrow section must show its whole name, not clip it.
+  // Both are boost-independent — transforms don't affect layout, the box is
+  // sized by the node style, and the title span never flex-shrinks.
+  const [meas, setMeas] = useState({ box: 0, title: 0 });
+  useLayoutEffect(() => {
+    const box = boxRef.current?.offsetWidth ?? 0;
+    const title = titleRef.current?.offsetWidth ?? 0;
+    setMeas(m => (m.box === box && m.title === title ? m : { box, title }));
+  });
+  // Title fits iff title·boost ≤ box − 3·boost (border) − 28 (row insets),
+  // i.e. boost ≤ (box − 28) / (title + 3).
+  const fitBoost = meas.title > 0 ? (meas.box - 28) / (meas.title + 3) : Infinity;
+  const boost = Math.max(1, Math.min(10, 1 / zoom, fitBoost));
   return (
     <div
+      ref={boxRef}
       style={{
         position: 'relative',
         width: '100%',
@@ -62,6 +78,7 @@ function GroupNodeImpl({ data }: NodeProps) {
         }}
       >
         <span
+          ref={titleRef}
           style={{
             fontFamily: "'Sora', system-ui, sans-serif",
             fontWeight: 600,
@@ -69,6 +86,7 @@ function GroupNodeImpl({ data }: NodeProps) {
             letterSpacing: 0.3,
             color,
             whiteSpace: 'nowrap',
+            flexShrink: 0,
             // A dark pill behind the title keeps it legible where wires and
             // blocks crowd the top edge of the section.
             background: 'rgba(11, 15, 20, 0.78)',
