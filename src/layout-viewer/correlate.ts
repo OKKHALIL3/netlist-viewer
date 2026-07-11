@@ -147,15 +147,24 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   for (const unit of units.values()) {
     for (const [x, y] of unit.points) extendBbox(root, x, y);
     const { segs, ids } = resolveSegs(unit.path);
-    for (const id of ids) {
-      const box = nodeBox.get(id)!;
-      for (const [x, y] of unit.points) extendBbox(box, x, y);
-      if (unit.isDevice) nodeCount.set(id, nodeCount.get(id)! + 1);
+    // An LVS dummy marker anywhere on the path means layout-only fill/decap
+    // geometry, which can physically sit anywhere on the die — even when the
+    // extractor scopes it under a matched hierarchy path. It must never shape
+    // or count into a CDL block: on mirrored twin channels, one channel's
+    // dummy fill was stretching the OTHER channel's block box across the pair.
+    // (The die-extent root box above still covers it.)
+    const isDummy = DUMMY_RE.test(unit.path);
+    if (!isDummy) {
+      for (const id of ids) {
+        const box = nodeBox.get(id)!;
+        for (const [x, y] of unit.points) extendBbox(box, x, y);
+        if (unit.isDevice) nodeCount.set(id, nodeCount.get(id)! + 1);
+      }
     }
     if (unit.isDevice) {
       nodeCount.set('', nodeCount.get('')! + 1);
-      if (ids.length > 0) devicesMatched++;
-      else if (DUMMY_RE.test(unit.path)) devicesDummy++;   // layout-only dummy
+      if (isDummy) devicesDummy++;                         // layout-only dummy
+      else if (ids.length > 0) devicesMatched++;
       else if (segs.length <= 1) devicesTopLevel++;        // direct top-cell device
       else devicesHierMiss++;                              // path prefix not in the CDL
     }

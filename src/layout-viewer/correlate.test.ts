@@ -93,17 +93,70 @@ test('categorizes uncorrelated devices into dummy / top-level / hierarchy-miss',
   const dspf = parseDspf([
     '*|NET N 1',
     '*|I (XI1/M1:d XI1/M1 d nch 0.5 0 0)',            // matched (under XI1)
-    '*|I (XI1/M0_unmatched:d XI1/M0_unmatched d nch 0.5 1 1)',  // matched wins over the dummy marker
+    '*|I (XI1/M0_unmatched:d XI1/M0_unmatched d nch 0.5 1 1)',  // dummy marker wins even under a matched prefix
     '*|I (M9_noxref:d M9_noxref d nch 0.5 2 2)',         // LVS dummy (no schematic xref)
     '*|I (MTOP:d MTOP d nch 0.5 3 3)',              // top-level primitive
     '*|I (XZZ/M1:d XZZ/M1 d nch 0.5 4 4)',            // hierarchy path not in the CDL
   ].join('\n'));
   const m = correlate(design, dspf);
   assert.equal(m.stats.devicesTotal, 5);
-  assert.equal(m.stats.devicesMatched, 2);
-  assert.equal(m.stats.devicesDummy, 1);
+  assert.equal(m.stats.devicesMatched, 1);
+  assert.equal(m.stats.devicesDummy, 2);
   assert.equal(m.stats.devicesTopLevel, 1);
   assert.equal(m.stats.devicesHierMiss, 1);
+});
+
+// ── Mirror-channel leakage (boss report 2026-07-10) ────────────────────────
+// Two identical channels (XI9/XI10, same master). LVS dummies that the
+// extractor scopes UNDER a matched hierarchy path are fill geometry that can
+// physically sit anywhere on the die — including inside the twin channel.
+// They must never shape or count into the matched CDL block.
+
+test('a dummy device under a matched prefix does not stretch the block box or count', () => {
+  const design = makeDesign('TOP', {
+    TOP: [['XI9', 'SGL'], ['XI10', 'SGL']],
+    SGL: [['XI26', 'INBUF']],
+    INBUF: [],
+  });
+  const dspf = parseDspf([
+    '*|DIVIDER |', '*|DELIMITER :',
+    '*|NET N 1',
+    '*|I (XI9|XI26|MM1:d XI9|XI26|MM1 d nch 0.5 10 0)',   // right channel, real
+    '*|I (XI10|XI26|MM1:d XI10|XI26|MM1 d nch 0.5 0 0)',  // left channel, real (mirror)
+    '*|I (XI9|XI26|X33_noxref:d XI9|XI26|X33_noxref d nch 0.5 1 0)', // dummy fill sitting in the LEFT channel
+  ].join('\n'));
+  const m = correlate(design, dspf);
+  const right = m.instances.find(i => i.id === 'xi9/xi26')!;
+  assert.deepEqual(right.bbox, [10, 0, 10, 0], 'XI9/XI26 must not swallow the left-side dummy');
+  assert.equal(right.deviceCount, 1, 'dummy must not count into the matched block');
+  assert.equal(m.stats.devicesMatched, 2);
+  assert.equal(m.stats.devicesDummy, 1);
+  // the die extent still covers the fill
+  const root = m.instances.find(i => i.id === '')!;
+  assert.deepEqual(root.bbox, [0, 0, 10, 0]);
+});
+
+test('coordinate-less files: dummy net-node geometry under a matched prefix is excluded too', () => {
+  const design = makeDesign('TOP', {
+    TOP: [['XI9', 'SGL'], ['XI10', 'SGL']],
+    SGL: [['XI26', 'INBUF']],
+    INBUF: [],
+  });
+  // xACT style: *|I carries no coordinates, so block boxes are shaped by *|S
+  // net-node geometry (the subnode fallback). A noxref-named net scoped under
+  // XI9|XI26 hangs dummy geometry across the die.
+  const dspf = parseDspf([
+    '*|DIVIDER |', '*|DELIMITER :',
+    '*|NET XI9|XI26|net5 1f',
+    '*|S (XI9|XI26|net5:1 10 0)',
+    '*|S (XI9|XI26|net5:2 11 1)',
+    '*|I (XI9|XI26|MM1:g XI9|XI26|MM1 g B 0.0)',
+    '*|NET XI9|XI26|noxref_10 1f',
+    '*|S (XI9|XI26|noxref_10:3 1 0)',                     // dummy geometry in the LEFT channel
+  ].join('\n'));
+  const m = correlate(design, dspf);
+  const right = m.instances.find(i => i.id === 'xi9/xi26')!;
+  assert.deepEqual(right.bbox, [10, 0, 11, 1], 'noxref net nodes must not stretch the block');
 });
 
 test('doubled leading X in DSPF paths correlates to the CDL instance (XXI107 → XI107)', () => {
