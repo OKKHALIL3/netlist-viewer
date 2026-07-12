@@ -9,6 +9,7 @@ import { DropZone } from './components/DropZone';
 import { SearchPalette } from './components/SearchPalette';
 import { LayoutView } from './components/layout/LayoutView';
 import { HybridViewer } from './components/hybrid/HybridViewer';
+import { HYBRID_ENABLED, LAYOUT_ENABLED } from './flags';
 
 export default function App() {
   const { design, warnings, currentCell, appMode } = useViewerStore();
@@ -21,9 +22,9 @@ export default function App() {
       <TopBar />
       {!design ? (
         <DropZone />
-      ) : appMode === 'layout' ? (
+      ) : LAYOUT_ENABLED && appMode === 'layout' ? (
         <LayoutView />
-      ) : appMode === 'hybrid' ? (
+      ) : HYBRID_ENABLED && appMode === 'hybrid' ? (
         <CanvasErrorBoundary resetKey={design.topCell}>
           <HybridViewer />
         </CanvasErrorBoundary>

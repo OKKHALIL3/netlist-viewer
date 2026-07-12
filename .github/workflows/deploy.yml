@@ -29,7 +29,18 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run build
+      # Two builds per push: the gated public site at the root, and the full
+      # app (every viewer enabled) under /preview/ for pre-release testing.
+      # Releasing the next viewer = adding it to VITE_VIEWERS below.
+      - name: Build public site (released viewers only)
+        run: npm run build
+        env:
+          VITE_VIEWERS: schematic
+      - name: Build full preview
+        run: npm run build -- --base=/netlist-viewer/preview/ --outDir=dist-preview
+        env:
+          VITE_VIEWERS: all
+      - run: mv dist-preview dist/preview
       - name: Publish dist to gh-pages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

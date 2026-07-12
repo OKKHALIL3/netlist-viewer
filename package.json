@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "test": "node test-adapter.mjs",
     "validate:real": "node scripts/validate-real.mjs",
-    "test:layout": "node --import tsx --test \"src/parser/*.test.ts\" \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\" \"src/layout/**/*.test.ts\" \"src/hybrid/**/*.test.ts\" \"src/search/**/*.test.ts\" \"src/organize/**/*.test.ts\"",
+    "test:layout": "node --import tsx --test \"src/*.test.ts\" \"src/parser/*.test.ts\" \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\" \"src/layout/**/*.test.ts\" \"src/hybrid/**/*.test.ts\" \"src/search/**/*.test.ts\" \"src/organize/**/*.test.ts\"",
     "preview": "vite preview",
     "serve:viz": "tsx server/subcircuit_visualize.ts",
     "deploy": "npm run build && gh-pages -d dist"

@@ -3,6 +3,7 @@ import { useViewerStore } from '../store/viewerStore';
 import { useHybridStore } from '../store/hybridStore';
 import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
+import { HYBRID_ENABLED, LAYOUT_ENABLED } from '../flags';
 
 export function TopBar() {
   const {
@@ -32,7 +33,7 @@ export function TopBar() {
       try {
         const data = await parseDspfAsync(ev.target?.result as string, setDspfProgress);
         loadLayout(data);
-        setAppMode('layout');
+        if (LAYOUT_ENABLED) setAppMode('layout');
       } catch (err) {
         setParseError(err instanceof Error ? err.message : String(err));
       } finally {
@@ -176,27 +177,35 @@ export function TopBar() {
               </>
             )}
 
-            {/* App mode: schematic ⇄ hybrid ⇄ layout */}
-            <div className="mode-btns">
-              <button className={appMode === 'schematic' ? 'on' : ''} onClick={() => setAppMode('schematic')}>
-                Schematic
-              </button>
-              <button
-                className={appMode === 'hybrid' ? 'on' : ''}
-                title="Hybrid hierarchy viewer (CDL + DSPF)"
-                onClick={() => setAppMode('hybrid')}
-              >
-                Hybrid
-              </button>
-              <button
-                className={appMode === 'layout' ? 'on' : ''}
-                disabled={!layoutModel}
-                title={layoutModel ? 'Physical layout map' : 'Load a DSPF first'}
-                onClick={() => setAppMode('layout')}
-              >
-                Layout
-              </button>
-            </div>
+            {/* App mode: schematic ⇄ hybrid ⇄ layout. With schematic as the
+                only enabled viewer there is nothing to switch, so the whole
+                group disappears. */}
+            {(HYBRID_ENABLED || LAYOUT_ENABLED) && (
+              <div className="mode-btns">
+                <button className={appMode === 'schematic' ? 'on' : ''} onClick={() => setAppMode('schematic')}>
+                  Schematic
+                </button>
+                {HYBRID_ENABLED && (
+                  <button
+                    className={appMode === 'hybrid' ? 'on' : ''}
+                    title="Hybrid hierarchy viewer (CDL + DSPF)"
+                    onClick={() => setAppMode('hybrid')}
+                  >
+                    Hybrid
+                  </button>
+                )}
+                {LAYOUT_ENABLED && (
+                  <button
+                    className={appMode === 'layout' ? 'on' : ''}
+                    disabled={!layoutModel}
+                    title={layoutModel ? 'Physical layout map' : 'Load a DSPF first'}
+                    onClick={() => setAppMode('layout')}
+                  >
+                    Layout
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Design-wide search — same spot in every view ("/" works everywhere) */}
             <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
@@ -206,11 +215,17 @@ export function TopBar() {
         )}
 
         <input ref={fileRef} type="file" accept=".cdl,.sp,.spi,.spice" style={{ display: 'none' }} onChange={handleFile} />
-        <input ref={dspfRef} type="file" accept=".dspf,.spf,.txt" style={{ display: 'none' }} onChange={handleDspf} />
-        {design && (
-          <button className="btn-secondary" onClick={() => dspfRef.current?.click()} title="Correlate a DSPF parasitic file">
-            Add DSPF
-          </button>
+        {/* DSPF only feeds the hybrid and layout views — hide the whole
+            affordance in builds where neither is enabled. */}
+        {(HYBRID_ENABLED || LAYOUT_ENABLED) && (
+          <>
+            <input ref={dspfRef} type="file" accept=".dspf,.spf,.txt" style={{ display: 'none' }} onChange={handleDspf} />
+            {design && (
+              <button className="btn-secondary" onClick={() => dspfRef.current?.click()} title="Correlate a DSPF parasitic file">
+                Add DSPF
+              </button>
+            )}
+          </>
         )}
         <button className="btn-primary" disabled={parsing} onClick={() => fileRef.current?.click()}>
           {design ? 'Load file' : 'Open CDL…'}

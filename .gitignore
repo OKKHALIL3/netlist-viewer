@@ -27,3 +27,4 @@ __pycache__/
 
 # Internal planning docs (agent-generated) stay out of the repo
 docs/superpowers/
+dist-preview
