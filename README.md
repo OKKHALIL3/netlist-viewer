@@ -2,7 +2,7 @@
 
 **Step 1 of the ACE workflow — interactive CDL netlist browser.**
 
-Live demo → **[okkhalil3.github.io/cdl-netlist](https://okkhalil3.github.io/cdl-netlist)**
+Live demo → **[okkhalil3.github.io/netlist-viewer](https://okkhalil3.github.io/netlist-viewer)**
 
 ---
 
