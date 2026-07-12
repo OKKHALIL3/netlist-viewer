@@ -6,6 +6,8 @@ import { arrayedDesign } from '../hybrid/__fixtures__/arrayed';
 import { cell } from '../hybrid/__fixtures__/tiny';
 import { useHybridStore, passesFilters, layersFor } from './hybridStore';
 import type { PathResult } from '../hybrid/path';
+import { parseDspf } from '../layout-viewer/dspf/parseDspf';
+import { correlate } from '../layout-viewer/correlate';
 
 const s = () => useHybridStore.getState();
 
@@ -150,11 +152,40 @@ test('path pins run findPath; navigation clears result', () => {
   s().togglePathMode();
   s().setPathPins('xu1/xs1:d', 'xu2:z');
   assert.equal(s().pathResult!.netCount, 3);
+  assert.equal(s().pathParasitics, null);  // no DSPF loaded → unavailable, never guessed
   s().toggleOpen('');
   assert.equal(s().pathResult, null);
   s().setPathPins('xu1:vdd', 'xu2:a');   // supply pin → explicit no-path
   assert.equal(s().pathResult, null);
   s().togglePathMode();
+});
+
+test('with a DSPF loaded, path pins also solve per-net parasitics', () => {
+  const d = tinyDesign();
+  const data = parseDspf(`
+*|DIVIDER /
+*|DELIMITER :
+.SUBCKT TOP in out vdd vss
+*|NET mid 1.0e-15
+*|I (XU1/XS2/M1:d XU1/XS2/M1 d O 0 2.0 2.0)
+*|I (XU2/M1:g XU2/M1 g I 0 3.0 3.0)
+Rm1 XU1/XS2/M1:d XU2/M1:g 400
+Cm1 XU2/M1:g 0 2.0e-15
+.ENDS
+`);
+  s().build(d, data, correlate(d, data));
+  s().togglePathMode();
+  s().setPathPins('xu1/xs2:d', 'xu2:a');   // same conductor: one segment (mid)
+  const p = s().pathParasitics!;
+  assert.ok(p);
+  assert.equal(p.segments.length, 1);
+  assert.equal(p.segments[0].dspfNet, 'mid');
+  assert.equal(p.segments[0].status, 'ok');
+  assert.ok(Math.abs(p.segments[0].r! - 400) < 1e-9);
+  s().toggleOpen('');                       // navigation kills the report too
+  assert.equal(s().pathParasitics, null);
+  s().togglePathMode();
+  s().build(tinyDesign(), null, null);      // fresh reference: reset for later tests
 });
 
 test('coupling: defaults and toggles', () => {
@@ -172,7 +203,7 @@ test('layersFor normalizes conductor net names the same way netLayers keys were 
   // netLayers keys come from normSegments (normSeg per '/'-segment on the DSPF
   // side): lowercase, finger suffixes stripped.
   const netLayers = new Map([['xi1/net5', ['M2', 'M3']]]);
-  const pr = (netNames: string[]): PathResult => ({ blocks: [], conductors: [], netCount: netNames.length, netNames });
+  const pr = (netNames: string[]): PathResult => ({ blocks: [], conductors: [], netCount: netNames.length, netNames, hops: [] });
   assert.deepEqual(layersFor(pr(['XI1/net5']), netLayers), ['M2', 'M3']);      // case mismatch
   assert.deepEqual(layersFor(pr(['xi1/net5@2']), netLayers), ['M2', 'M3']);    // finger suffix
   assert.equal(layersFor(pr(['xi1/net6']), netLayers), null);                 // genuinely absent → unavailable

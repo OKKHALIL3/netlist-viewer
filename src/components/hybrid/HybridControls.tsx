@@ -5,6 +5,7 @@ import { displayPath } from '../../hybrid/model';
 import { normSeg } from '../../layout-viewer/correlate';
 import { T } from './theme';
 import { PinPicker, type InstanceOption } from './PinPicker';
+import { PathParasiticsReport } from './PathParasiticsReport';
 
 // Display names for the taxonomy groups — category keys stay 'A:AMP'
 // style everywhere (store, overrides, zone colors).
@@ -36,7 +37,7 @@ export function HybridControls() {
   const {
     design, model,
     funcOff, toggleFunc, supplyOff, toggleSupply,
-    pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathPinsValid,
+    pathMode, togglePathMode, startPin, endPin, setPathPins, pathResult, pathLayers, pathParasitics, pathPinsValid,
     coupling, toggleCoupling, setCouplingMinC, toggleCouplingSupply,
   } = useHybridStore();
   // Functional-map groups start collapsed — expansion is view state,
@@ -160,6 +161,9 @@ export function HybridControls() {
               <div style={{ marginTop: 10, background: T.panel2, borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
                 <div>Total net count <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathResult.netCount}⟩</b></div>
                 <div>Layers included <b style={{ fontFamily: T.mono, color: T.path }}>⟨{pathLayers ? pathLayers.join(', ') : 'unavailable'}⟩</b></div>
+                {pathParasitics
+                  ? <PathParasiticsReport p={pathParasitics} />
+                  : <div style={{ marginTop: 6, fontSize: 10, color: T.muted }}>Load a DSPF to see path parasitics.</div>}
               </div>
             )}
             {pathPinsValid && !pathResult && (
