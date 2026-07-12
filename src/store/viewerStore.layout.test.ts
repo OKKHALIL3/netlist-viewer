@@ -6,7 +6,7 @@ import { parseDspf } from '../layout-viewer/dspf/parseDspf';
 
 test('loadLayout correlates against the loaded design and inits layer visibility', () => {
   const s = useViewerStore.getState();
-  s.loadDesign(makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] }));
+  s.loadDesign(makeDesign('TOP', { TOP: [['X9', 'BLK']], BLK: [] }, { BLK: ['M1', 'M2'] }));
   const data = parseDspf([
     '*|NET N 1', '*|S (X9/M1:o 0 0)', '*|S (X9/M2:o 2 2)',
     'R1 X9/M1:o X9/M2:o 1 $layer=metal2',

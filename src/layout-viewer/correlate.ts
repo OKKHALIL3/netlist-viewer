@@ -38,7 +38,11 @@ const BUS_IDX_RE = /(\[\d+\]|<\d+>)$/;
 
 // LVS markers for layout-only devices that have no schematic counterpart
 // (fill, decap, antenna diodes, dummies). These can never correlate — they
-// are not a CDL/DSPF mismatch, so we count them separately.
+// are not a CDL/DSPF mismatch, so we count them separately. This catches only
+// the marker conventions we KNOW (Calibre/Quantus); extractors are free to
+// name dummies anything, so the structural guard is the CDL-declaration check
+// in correlate() — a unit under a matched prefix must name something the CDL
+// actually declares in that cell, or it is layout-only regardless of naming.
 const DUMMY_RE = /(unmatched|noxref)/i;
 
 // Cap on drawn physical-only families — beyond this the canvas stops being
@@ -100,6 +104,49 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
     }
     return ids;
   };
+  // CDL-declaration check. `matchedIds` only proves the path's PREFIX is CDL
+  // hierarchy — it says nothing about what hangs below it. LVS dummy fill is
+  // regularly scoped under a matched instance (XI9/XI26/<fill>) with naming we
+  // cannot predict, and its geometry sits anywhere on the die (on mirrored
+  // twin channels it landed inside the twin). The CDL is the authority on what
+  // a cell contains: the segment just below the deepest matched instance must
+  // be a primitive that cell declares (device units), or a primitive/net/port
+  // (net-node geometry). Deeper segments are extractor subdevice detail. A
+  // master with no CDL body (blackbox PDK leaf) can't contradict anything —
+  // stay lenient there.
+  const nodeMaster = new Map<string, string | null>();
+  for (const n of nodes) nodeMaster.set(n.id, n.master);
+  interface CellLeaves { prims: Set<string>; netsPorts: Set<string> }
+  const cellLeafCache = new Map<string, CellLeaves | null>();
+  const leavesOf = (master: string | null): CellLeaves | null => {
+    if (!master) return null;
+    let entry = cellLeafCache.get(master);
+    if (entry === undefined) {
+      const cell = design.cells.get(master);
+      if (!cell) entry = null;                       // blackbox — no CDL body
+      else {
+        const prims = new Set<string>();
+        for (const p of cell.primitives) { const s = normSeg(p.id); if (s) prims.add(s); }
+        const netsPorts = new Set<string>();
+        for (const nt of cell.nets) { const s = normSeg(nt.name); if (s) netsPorts.add(s); }
+        for (const pt of cell.ports) { const s = normSeg(pt.name); if (s) netsPorts.add(s); }
+        entry = { prims, netsPorts };
+      }
+      cellLeafCache.set(master, entry);
+    }
+    return entry;
+  };
+  // `ids` are contiguous from the root (a node's parent is always a node), so
+  // ids.length is the depth of CDL knowledge and segs[ids.length] is the first
+  // segment the CDL must vouch for.
+  const cdlGenuine = (segs: string[], ids: string[], isDevice: boolean): boolean => {
+    const k = ids.length;
+    if (k >= segs.length) return true;               // the whole path is CDL hierarchy
+    const leaves = leavesOf(nodeMaster.get(ids[k - 1]) ?? null);
+    if (!leaves) return true;                        // blackbox master — lenient
+    const leaf = segs[k];
+    return leaves.prims.has(leaf) || (!isDevice && leaves.netsPorts.has(leaf));
+  };
   // Layout↔schematic naming: some extractors prefix a nested subckt instance
   // with an extra X (DSPF "XXI107" vs CDL "XI107"). ONLY when the path didn't
   // match as-is, retry with a doubled leading X collapsed — a safe fallback
@@ -147,13 +194,15 @@ export function correlate(design: Design, data: LayoutData): LayoutModel {
   for (const unit of units.values()) {
     for (const [x, y] of unit.points) extendBbox(root, x, y);
     const { segs, ids } = resolveSegs(unit.path);
-    // An LVS dummy marker anywhere on the path means layout-only fill/decap
-    // geometry, which can physically sit anywhere on the die — even when the
-    // extractor scopes it under a matched hierarchy path. It must never shape
-    // or count into a CDL block: on mirrored twin channels, one channel's
-    // dummy fill was stretching the OTHER channel's block box across the pair.
-    // (The die-extent root box above still covers it.)
-    const isDummy = DUMMY_RE.test(unit.path);
+    // Layout-only fill/decap geometry can physically sit anywhere on the die —
+    // even when the extractor scopes it under a matched hierarchy path. It
+    // must never shape or count into a CDL block: on mirrored twin channels,
+    // one channel's dummy fill was stretching the OTHER channel's block box
+    // across the pair. Known LVS markers catch it by name; the CDL-declaration
+    // check catches it whatever the extractor calls it. (The die-extent root
+    // box above still covers it either way.)
+    const isDummy = DUMMY_RE.test(unit.path)
+      || (ids.length > 0 && !cdlGenuine(segs, ids, unit.isDevice));
     if (!isDummy) {
       for (const id of ids) {
         const box = nodeBox.get(id)!;
