@@ -5,7 +5,11 @@ import type { Conductors } from './connectivity';
 import { normSeg } from '../layout-viewer/correlate';
 
 export interface PinRef { block: string; pin: string }
-export interface PathResult { blocks: string[]; conductors: number[]; netCount: number; netNames: string[] }
+// One net traversal in REAL-path terms (display collapsing loses the
+// adjacency): the path enters conductor i from block `from` and leaves it
+// into block `to`. null = the top cell's own port (only possible at the ends).
+export interface PathHop { conductor: number; from: string | null; to: string | null }
+export interface PathResult { blocks: string[]; conductors: number[]; netCount: number; netNames: string[]; hops: PathHop[] }
 
 // Resolve a TYPED "block:pin" ref to canonical form, or null if it names no
 // real pin. Users type paths as displayed (original case, e.g. "XU1/XS2"),
@@ -117,5 +121,15 @@ export function findPath(design: Design, model: HybridModel, cond: Conductors, s
     const m0 = cond.members.get(id)?.[0];
     return m0 ? (m0.scope ? `${m0.scope}/${m0.net}` : m0.net) : '?';
   });
-  return { blocks, conductors, netCount: conductors.length, netNames };
+  // Hop chain on the raw alternation (c b c b … c): raw[i] bridges conductor
+  // i and i+1. Endpoint blocks resolve like pinConductor does — an array
+  // group is traced through its representative member.
+  const realOf = (p: PinRef): string | null =>
+    p.block === '' ? null : (model.blocks.get(p.block)?.members?.[0] ?? p.block);
+  const hops = conductors.map((c, i) => ({
+    conductor: c,
+    from: i === 0 ? realOf(start) : raw[i - 1],
+    to: i === conductors.length - 1 ? realOf(end) : raw[i],
+  }));
+  return { blocks, conductors, netCount: conductors.length, netNames, hops };
 }

@@ -9,6 +9,7 @@ import { couplingFor, buildSupplyIndex, type CouplingNeighbor } from '../hybrid/
 import { visiblePaths } from '../hybrid/slots';
 import { classifyModel, UNCLASSIFIED } from '../hybrid/classify';
 import { findPath, resolvePinRef, type PinRef, type PathResult } from '../hybrid/path';
+import { pathParasitics, type PathParasitics } from '../hybrid/pathParasitics';
 import { normSegments, normSeg } from '../layout-viewer/correlate';
 
 export function passesFilters(b: HybridBlock, funcOff: Set<string>, supplyOff: Set<string>, supplyDomains: Set<string>): boolean {
@@ -63,6 +64,8 @@ interface HybridState {
   endPin: string;
   pathResult: PathResult | null;
   pathLayers: string[] | null;
+  // per-net R/C/Elmore along the path, solved from the DSPF (null: no DSPF)
+  pathParasitics: PathParasitics | null;
   pathPinsValid: boolean;
   // resolved endpoints in DISPLAY terms (for the canvas markers) — the raw
   // input strings may differ in case or name an array member
@@ -101,6 +104,7 @@ interface HybridState {
 const CLEARED = {
   selected: null as string | null, trace: null as DeviceTrace | null,
   pathResult: null as PathResult | null, startPin: '', endPin: '',
+  pathParasitics: null as PathParasitics | null,
   pathPinsValid: false, pathEnds: null as [PinRef, PinRef] | null,
   couplingBusy: false, couplingNeighbors: null as CouplingNeighbor[] | null,
 };
@@ -152,6 +156,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   endPin: '',
   pathResult: null,
   pathLayers: null,
+  pathParasitics: null,
   pathPinsValid: false,
   pathEnds: null,
   coupling: { on: false, minC: 1e-15, includeSupply: false },
@@ -303,7 +308,7 @@ export const useHybridStore = create<HybridState>((set, get) => ({
   setPathPins: (startPin, endPin) => {
     const { design, model, conductors } = get();
     set({ startPin, endPin });
-    if (!design || !model || !conductors || !startPin || !endPin) { set({ pathResult: null, pathLayers: null, pathPinsValid: false }); return; }
+    if (!design || !model || !conductors || !startPin || !endPin) { set({ pathResult: null, pathLayers: null, pathParasitics: null, pathPinsValid: false }); return; }
     const parse = (s2: string): PinRef => {
       const i = s2.lastIndexOf(':');
       return { block: s2.slice(0, i), pin: s2.slice(i + 1) };
@@ -314,13 +319,17 @@ export const useHybridStore = create<HybridState>((set, get) => ({
     const a = resolvePinRef(design, model, parse(startPin));
     const b = resolvePinRef(design, model, parse(endPin));
     if (!a || !b) {
-      set({ pathResult: null, pathLayers: null, pathPinsValid: false, pathEnds: null });
+      set({ pathResult: null, pathLayers: null, pathParasitics: null, pathPinsValid: false, pathEnds: null });
       return;
     }
     const result = findPath(design, model, conductors, a, b);
+    const layoutData = get().layoutData;
     set({
       pathResult: result,
       pathLayers: result ? layersFor(result, get().netLayers) : null,
+      // Solved per query, not cached: one nodal solve per net on the path is
+      // milliseconds; monster nets bail out inside the solver ('too-large').
+      pathParasitics: result && layoutData ? pathParasitics(layoutData, conductors, result, [a, b]) : null,
       pathPinsValid: true,
       pathEnds: [
         { block: displayPath(model, a.block), pin: a.pin },
