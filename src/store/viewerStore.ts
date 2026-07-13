@@ -43,6 +43,9 @@ interface ViewerState {
   parsing: boolean;
   parseError: string | null;
   searchOpen: boolean;
+  // The landing page owns the screen until the user opens a viewer from it;
+  // after that all navigation happens through the TopBar.
+  landing: boolean;
   // Collapsible side panels (hierarchy on the left, inspector on the right).
   // Shared across schematic and layout modes.
   leftPanelOpen: boolean;
@@ -83,6 +86,7 @@ interface ViewerState {
   setParsing: (parsing: boolean) => void;
   setParseError: (error: string | null) => void;
   setSearchOpen: (open: boolean) => void;
+  leaveLanding: () => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
   setAppMode: (mode: AppMode) => void;
@@ -110,6 +114,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   parsing: false,
   parseError: null,
   searchOpen: false,
+  landing: true,
   leftPanelOpen: true,
   rightPanelOpen: true,
   focusRequest: 0,
@@ -206,6 +211,7 @@ export const useViewerStore = create<ViewerState>((set, get) => ({
   setParseError: (error) => set({ parseError: error }),
 
   setSearchOpen: (open) => set({ searchOpen: open }),
+  leaveLanding: () => set({ landing: false }),
 
   toggleLeftPanel: () => set(s => ({ leftPanelOpen: !s.leftPanelOpen })),
   toggleRightPanel: () => set(s => ({ rightPanelOpen: !s.rightPanelOpen })),

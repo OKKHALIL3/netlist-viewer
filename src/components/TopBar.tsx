@@ -4,6 +4,7 @@ import { useHybridStore } from '../store/hybridStore';
 import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
 import { HYBRID_ENABLED, LAYOUT_ENABLED } from '../flags';
+import { BrandMark } from './BrandMark';
 
 export function TopBar() {
   const {
@@ -95,8 +96,8 @@ export function TopBar() {
     >
       {/* Logo */}
       <div className="logo">
-        <span className="logo-dot" />
-        ACE
+        <BrandMark size={20} />
+        ACE Viewer
       </div>
 
       {/* Breadcrumb (center) — the navigation trail lives here in EVERY view.
