@@ -647,6 +647,21 @@ export function RailsCanvas() {
           computing coupling…
         </div>
       )}
+      {/* Prominent, click-blocking overlay for a slow coupling compute. It
+          fades in on a delay (see .coupling-overlay) so it only surfaces when
+          the scan actually stalls the canvas — quick recomputes finish first
+          and never trigger it. Swallow pointer events so the frozen-looking
+          canvas can't be dragged/clicked while it works. */}
+      {couplingBusy && (
+        <div className="coupling-overlay"
+             onPointerDown={e => e.stopPropagation()}
+             onClick={e => e.stopPropagation()}>
+          <div className="coupling-overlay-card">
+            <span className="coupling-spinner" />
+            <span>Computing coupling…</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

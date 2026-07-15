@@ -78,8 +78,13 @@ body {
   min-height: 54px;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 0 16px;
+  /* column-gap 14 keeps the horizontal spacing; row-gap 10 gives the two rows
+     breathing room on narrow screens where the controls wrap below the title. */
+  gap: 10px 14px;
+  /* Vertical padding matters only once the bar wraps to two rows — without it
+     the wrapped controls row sits flush against the panels below and reads as
+     cramped/broken. */
+  padding: 9px 16px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #161c24, #10141a);
   flex-shrink: 0;
@@ -100,8 +105,14 @@ body {
   gap: 4px;
   font-family: 'Space Mono', monospace;
   font-size: 12px;
-  flex: 1;
-  justify-content: center;
+  /* Sit next to the logo rather than growing to fill the row. The full control
+     cluster already claims the right side, so a growing (flex: 1) breadcrumb
+     never actually centres in the viewport — and when the bar wraps it strands
+     the trail alone on the first row. Hugging the logo reads as a clean
+     title-bar + toolbar stack in both the one-row and wrapped layouts. */
+  flex: 0 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
 }
 .crumb-sep { color: var(--txt-faint); margin: 0 3px; }
 .crumb-item { color: var(--txt-dim); cursor: pointer; }
@@ -315,6 +326,34 @@ body {
      solid opaque outline once the 3 iterations end and stays there. */
   animation: hy-ping 1.1s ease-out 3 forwards;
   pointer-events: none;
+}
+
+/* Coupling recompute is a synchronous pair scan that can freeze the canvas for
+   a moment on a large DSPF. This overlay makes the wait obvious so the user
+   holds off instead of clicking into the freeze. The fade-in is DELAYED and
+   animates opacity (compositor-driven), so it keeps appearing even while the
+   main thread is blocked — yet a fast recompute (coupling re-runs on every
+   selection change) finishes before the delay elapses, so it never flashes for
+   the common quick case. It covers the canvas and swallows clicks while up. */
+@keyframes coupling-appear { from { opacity: 0; } to { opacity: 1; } }
+@keyframes hy-spin { to { transform: rotate(360deg); } }
+.coupling-overlay {
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(10, 13, 18, 0.5);
+  animation: coupling-appear 0.16s ease-out 0.25s both;
+}
+.coupling-overlay-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 20px;
+  font-size: 13px; color: var(--txt);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.coupling-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2.5px solid var(--line); border-top-color: var(--c);
+  animation: hy-spin 0.8s linear infinite;
 }
 
 /* An instance ARRAY (a scalarized bus like Xbit<1023:0> folded into one block)
