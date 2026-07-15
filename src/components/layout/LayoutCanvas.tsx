@@ -2,12 +2,17 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useViewerStore } from '../../store/viewerStore';
 import type { View } from './transform';
 import { fitView, worldToScreen, screenToWorld, zoomAt, panBy } from './transform';
+import { wheelZoomFactor } from '../../viewport/wheelZoom';
 import { pickInstance, pickNetBox } from './pick';
 import { layerColor } from './layerColors';
 import type { LayoutModel, LayoutInstance, LayoutNet, Bbox } from '../../layout-viewer/model';
 import { bboxArea } from '../../layout-viewer/model';
 
 const PAD = 48;
+// Wheel-zoom range, as multiples of the scale that fits the whole design:
+// a quarter of that already shows everything with room to spare, and 4000x in
+// gets far below device dimensions.
+const MIN_ZOOM_REL = 0.25, MAX_ZOOM_REL = 4000;
 const NEUTRAL = '#6b7689';
 const SEL = '#ffd23f', CONN = '#c084fc', NETBOX = '#5fd0a0';
 // Physical-only blocks (in the DSPF, absent from the CDL) get their own hue.
@@ -189,6 +194,9 @@ export function LayoutCanvas() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const readoutRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View | null>(null);
+  // Scale at which the whole design fits — the reference the wheel-zoom limits
+  // are expressed against. Only fit-all writes it (framing one net does not).
+  const fitScaleRef = useRef<number | null>(null);
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const hoverRef = useRef<string | null>(null);
   const [, force] = useState(0);
@@ -251,8 +259,10 @@ export function LayoutCanvas() {
     cv.style.width = `${w}px`; cv.style.height = `${h}px`;
     const ctx = cv.getContext('2d')!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (!viewRef.current) viewRef.current = fitView(model.extent, w, h, PAD);
-    else viewRef.current = { ...viewRef.current, h };
+    if (!viewRef.current) {
+      viewRef.current = fitView(model.extent, w, h, PAD);
+      fitScaleRef.current = viewRef.current.scale;
+    } else viewRef.current = { ...viewRef.current, h };
     const selId = selection?.type === 'instance' ? selection.id : null;
     const selNet = selection?.type === 'net' ? selection.name : null;
     draw(ctx, model, viewRef.current, w, h, depthMax(layoutDepth), layerVisibility,
@@ -271,6 +281,7 @@ export function LayoutCanvas() {
     const wrap = wrapRef.current;
     if (!model || !wrap) return;
     viewRef.current = fitView(model.extent, wrap.clientWidth, wrap.clientHeight, PAD);
+    fitScaleRef.current = viewRef.current.scale;
     force(n => n + 1);
   }, [model]);
 
@@ -291,8 +302,10 @@ export function LayoutCanvas() {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-      if (e.key === 'f' || e.key === 'F') fitAll();
-      else if (e.key === 'Escape') setSelection(null);
+      if (e.key === 'f' || e.key === 'F') {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't hijack ⌘F / ctrl+F
+        fitAll();
+      } else if (e.key === 'Escape') setSelection(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -310,7 +323,14 @@ export function LayoutCanvas() {
   const onWheel = (e: React.WheelEvent) => {
     if (!viewRef.current) return;
     const r = canvasRef.current!.getBoundingClientRect();
-    viewRef.current = zoomAt(viewRef.current, e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX - r.left, e.clientY - r.top);
+    // Zoom limits are relative to the fit-all scale: scale is px-per-micron, so
+    // there is no meaningful absolute range — but "much smaller than fits" and
+    // "absurdly deep" are both dead ends.
+    const fit = fitScaleRef.current ?? viewRef.current.scale;
+    viewRef.current = zoomAt(
+      viewRef.current, wheelZoomFactor(e), e.clientX - r.left, e.clientY - r.top,
+      fit * MIN_ZOOM_REL, fit * MAX_ZOOM_REL,
+    );
     force(n => n + 1);
   };
   const onDown = (e: React.MouseEvent) => { drag.current = { x: e.clientX, y: e.clientY, moved: false }; };
@@ -343,13 +363,26 @@ export function LayoutCanvas() {
     setSelection(id !== null ? { type: 'instance', id } : null);
   };
 
+  // Double-clicking empty space fits, same as F and as the other two viewers.
+  // On a block it must do nothing — that would yank the view away from what the
+  // user just clicked on.
+  const onDoubleClick = (e: React.MouseEvent) => {
+    const v = viewRef.current;
+    if (!v || !model) return;
+    const r = canvasRef.current!.getBoundingClientRect();
+    const [wx, wy] = screenToWorld(v, e.clientX - r.left, e.clientY - r.top);
+    const hit = pickInstance(model, focusEligible ? Infinity : depthMax(layoutDepth), wx, wy, focusEligible);
+    if (hit === null) fitAll();
+  };
+
   return (
     <div ref={wrapRef} className="layout-canvas-wrap"
          onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp}
+         onDoubleClick={onDoubleClick}
          onMouseLeave={() => { drag.current = null; if (hoverRef.current) { hoverRef.current = null; force(n => n + 1); } }}>
       <canvas ref={canvasRef} />
       <div className="layout-tools">
-        <button onClick={fitAll} title="Fit to view (F)">⤢ Fit</button>
+        <button onClick={fitAll} title="Fit view (F)">⊡ Fit <kbd>F</kbd></button>
         <button onClick={exportPng} title="Export PNG">⬇ PNG</button>
       </div>
       {model && totalSegs > SEG_BUDGET && selection?.type !== 'net' && (

@@ -228,7 +228,8 @@ body {
   transition: border-color 0.15s, color 0.15s;
 }
 .fit-btn:hover { border-color: var(--accent); color: var(--txt); }
-.fit-btn kbd {
+/* The keycap hint reads the same on every canvas's Fit control. */
+.fit-btn kbd, .layout-tools kbd {
   font-size: 10px; background: #1a2029; border: 1px solid var(--line);
   border-radius: 3px; padding: 1px 5px; font-family: 'Space Mono', monospace;
 }

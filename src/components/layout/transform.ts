@@ -1,4 +1,5 @@
 import type { Bbox } from '../../layout-viewer/model';
+import { clampZoom } from '../../viewport/wheelZoom';
 
 // screenX = wx*scale + tx ;  screenY = H - (wy*scale + ty)   (Y flipped: µm up)
 export interface View { scale: number; tx: number; ty: number; h: number }
@@ -29,9 +30,15 @@ export function panBy(v: View, dxScreen: number, dyScreen: number): View {
   return { ...v, tx: v.tx + dxScreen, ty: v.ty - dyScreen };
 }
 
-export function zoomAt(v: View, factor: number, sx: number, sy: number): View {
+// min/max bound the resulting scale. They default to unbounded so the existing
+// callers/tests are unaffected; the canvas passes limits derived from its
+// fit-all scale, since scale here is px-per-micron and has no fixed range.
+export function zoomAt(
+  v: View, factor: number, sx: number, sy: number,
+  min = 0, max = Infinity,
+): View {
   const [wx, wy] = screenToWorld(v, sx, sy);
-  const scale = v.scale * factor;
+  const scale = clampZoom(v.scale * factor, min, max);
   // solve tx,ty so that (wx,wy) stays under (sx,sy)
   const tx = sx - wx * scale;
   const ty = (v.h - sy) - wy * scale;

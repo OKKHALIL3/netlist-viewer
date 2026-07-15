@@ -33,6 +33,13 @@ import type { NodePosition } from '../layout/elk';
 
 const nodeTypes = { instanceNode: InstanceNode, primitiveNode: PrimitiveNode, portNode: PortNode, groupNode: GroupNode };
 
+// One padding for every "fit the whole thing" path — the F key, the Fit button,
+// the initial fit and the fit on arriving at a cell — so they all land on the
+// same view. Framing one selected target zooms closer, with more air around it.
+const FIT_PADDING = 0.15;
+const ZOOM_TO_TARGET_PADDING = 0.3;
+const FIT_DURATION = 300;
+
 // Decorative section boxes for the Organize view. Placed FIRST in the node
 // array so they paint behind the real blocks, and non-interactive so a click
 // falls through to the block inside.
@@ -400,6 +407,10 @@ function Canvas() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const [positions, setPositions] = useState<Map<string, NodePosition>>(new Map());
+  // Which cell `positions` was laid out for. ELK runs async and the old
+  // positions stay on screen until it lands, so without this the auto-fit below
+  // would frame a new cell using the previous cell's boxes.
+  const [positionsCell, setPositionsCell] = useState<string | null>(null);
   const [groupBoxes, setGroupBoxes] = useState<Map<string, NodePosition>>(new Map());
   // Claude-fetched labels, keyed by cell name so a fetch never leaks across cells.
   const [fetchedLabels, setFetchedLabels] = useState<Record<string, GroupLabels>>({});
@@ -448,6 +459,7 @@ function Canvas() {
     Promise.resolve(run).then(({ positions, groupBoxes }) => {
       if (cancelled) return;
       setPositions(positions);
+      setPositionsCell(view.name);
       setGroupBoxes(groupBoxes);
       setLaying(false);
     });
@@ -498,6 +510,11 @@ function Canvas() {
   const prevFocusRef = useRef(focusRequest);
   useEffect(() => {
     if (!view || positions.size === 0) return;
+    // Wait for ELK: until the positions belong to the cell we are showing, the
+    // boxes below are the PREVIOUS cell's. Framing those would point the camera
+    // at the wrong place — and consuming the flags here would then suppress the
+    // real fit once the correct layout arrives, leaving the cell off-screen.
+    if (positionsCell !== view.name) return;
     const cellChanged = prevCellRef.current !== currentCell;
     const navRequested = prevFocusRef.current !== focusRequest;
     if (!cellChanged && !navRequested) return;
@@ -512,7 +529,11 @@ function Canvas() {
     } else if (selection?.type === 'net') {
       targetIds = [...computeHighlight(view, selection).nodes];
     }
-    if (targetIds.length === 0) targetIds = [...positions.keys()];
+    // Nothing specific to frame: show the whole cell, and frame it exactly as
+    // the Fit control would — landing on a cell and pressing F should not give
+    // two different views of it.
+    const wholeCell = targetIds.length === 0;
+    if (wholeCell) targetIds = [...positions.keys()];
 
     const boxes = targetIds.map(id => positions.get(id)).filter((p): p is NodePosition => !!p);
     if (boxes.length === 0) return;
@@ -522,9 +543,9 @@ function Canvas() {
     const maxY = Math.max(...boxes.map(p => p.y + p.height));
     fitBounds(
       { x: minX, y: minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) },
-      { padding: 0.3, duration: 400 },
+      { padding: wholeCell ? FIT_PADDING : ZOOM_TO_TARGET_PADDING, duration: 400 },
     );
-  }, [positions, currentCell, focusRequest, selection, view, fitBounds]);
+  }, [positions, positionsCell, currentCell, focusRequest, selection, view, fitBounds]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes(nds => applyNodeChanges(changes, nds));
@@ -544,21 +565,32 @@ function Canvas() {
     setSelection(null);
   }, [setSelection]);
 
-  // "F" key → fit view (standard EDA shortcut)
+  // "F" key → fit view (standard EDA shortcut, same in every viewer)
+  const fitAll = useCallback(
+    () => { fitView({ padding: FIT_PADDING, duration: FIT_DURATION }); },
+    [fitView],
+  );
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === 'f' || e.key === 'F') {
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-        fitView({ padding: 0.15, duration: 300 });
-      }
+      if (e.key !== 'f' && e.key !== 'F') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't hijack ⌘F / ctrl+F
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      fitAll();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [fitView]);
+  }, [fitAll]);
+
+  // Double-clicking empty canvas fits, matching the other two viewers. React
+  // Flow's own double-click zoom is off: in this app a double-click means
+  // "descend into this block", so an extra 2x zoom on the pane is a surprise.
+  const onDoubleClick = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).classList.contains('react-flow__pane')) fitAll();
+  }, [fitAll]);
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative' }} onDoubleClick={onDoubleClick}>
       {laying && <div className="layout-spinner">Computing layout…</div>}
       <ReactFlow
         nodes={nodes}
@@ -573,7 +605,8 @@ function Canvas() {
         // swallows the click. Disabling it lets pin dots fire onClick (select net).
         nodesConnectable={false}
         fitView
-        fitViewOptions={{ padding: 0.15 }}
+        fitViewOptions={{ padding: FIT_PADDING }}
+        zoomOnDoubleClick={false}
         minZoom={0.05}
         maxZoom={4}
       >
@@ -592,7 +625,7 @@ function Canvas() {
       </div>
       <button
         className="fit-btn"
-        onClick={() => fitView({ padding: 0.15, duration: 300 })}
+        onClick={fitAll}
         title="Fit view (F)"
       >
         ⊡ Fit  <kbd>F</kbd>

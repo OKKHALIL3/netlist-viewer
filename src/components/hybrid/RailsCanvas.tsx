@@ -5,6 +5,7 @@ import { criticalityScores, criticalityOrder } from '../../hybrid/criticality';
 import { UNCLASSIFIED } from '../../hybrid/classify';
 import { displayPath, type HybridModel } from '../../hybrid/model';
 import { T } from './theme';
+import { wheelZoomFactor } from '../../viewport/wheelZoom';
 
 // Emphasis model: the frontier rail is the content — full-size and
 // full-strength; every ancestor rail renders as short compressed cards +
@@ -185,13 +186,14 @@ export function RailsCanvas() {
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        const rect = el.getBoundingClientRect();
-        zoomAt(e.clientX - rect.left, e.clientY - rect.top, Math.exp(-e.deltaY * 0.002));
-      } else {
-        view.current = { ...view.current, x: view.current.x - e.deltaX, y: view.current.y - e.deltaY };
-        applyView();
-      }
+      // Wheel zooms here exactly as it does on the schematic and layout canvases
+      // (drag still pans, so nothing is lost by not scroll-panning). ctrl/⌘ is
+      // the trackpad pinch and zooms faster, same as everywhere else.
+      const rect = el.getBoundingClientRect();
+      zoomAt(
+        e.clientX - rect.left, e.clientY - rect.top,
+        wheelZoomFactor({ deltaY: e.deltaY, deltaMode: e.deltaMode, ctrlKey: e.ctrlKey || e.metaKey }),
+      );
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
@@ -201,8 +203,9 @@ export function RailsCanvas() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'f' && e.key !== 'F') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;   // don't hijack ⌘F / ctrl+F
       const t = e.target as HTMLElement;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+      if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
       fitView();
     };
     window.addEventListener('keydown', onKey);
@@ -632,7 +635,7 @@ export function RailsCanvas() {
                 onClick={e => { e.stopPropagation(); zoomStep(0.8); }}>−</button>
         <button className="fit-btn" style={{ position: 'static' }} title="Zoom in"
                 onClick={e => { e.stopPropagation(); zoomStep(1.25); }}>+</button>
-        <button className="fit-btn" style={{ position: 'static' }} title="Center & fit (F)"
+        <button className="fit-btn" style={{ position: 'static' }} title="Fit view (F)"
                 onClick={e => { e.stopPropagation(); fitView(); }}>
           ⊡ Fit <kbd>F</kbd>
         </button>
