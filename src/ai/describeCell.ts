@@ -1,20 +1,12 @@
 import type { Cell } from '../parser/types';
+import { simpleCompletion } from '../chat/client';
 
-const API_KEY_STORAGE = 'cdl-viewer:anthropic-api-key';
 const DESC_CACHE_STORAGE = 'cdl-viewer:cell-descriptions';
 const MODEL = 'claude-haiku-4-5-20251001';
 
-export function getApiKey(): string | null {
-  return localStorage.getItem(API_KEY_STORAGE);
-}
-
-export function setApiKey(key: string): void {
-  localStorage.setItem(API_KEY_STORAGE, key);
-}
-
-export function clearApiKey(): void {
-  localStorage.removeItem(API_KEY_STORAGE);
-}
+// Key storage lives in ./apiKey; re-exported here so existing importers keep
+// their import path.
+export { getApiKey, setApiKey, clearApiKey } from './apiKey';
 
 function loadCache(): Record<string, string> {
   try {
@@ -84,43 +76,7 @@ export async function describeCell(cell: Cell, force = false): Promise<string> {
     if (cached) return cached;
   }
 
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No Anthropic API key set.');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 300,
-      messages: [{ role: 'user', content: buildPrompt(cell) }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    let message = body;
-    try {
-      message = JSON.parse(body)?.error?.message ?? body;
-    } catch {
-      // keep raw body
-    }
-    throw new Error(`Anthropic API error (${res.status}): ${message}`);
-  }
-
-  const data = await res.json();
-  const text = (data.content ?? [])
-    .filter((block: { type: string }) => block.type === 'text')
-    .map((block: { text: string }) => block.text)
-    .join('')
-    .trim();
-
-  if (!text) throw new Error('Anthropic API returned an empty response.');
+  const text = await simpleCompletion({ model: MODEL, maxTokens: 300, prompt: buildPrompt(cell) });
 
   setCachedDescription(cell.name, text);
   return text;

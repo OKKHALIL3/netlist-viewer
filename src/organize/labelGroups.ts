@@ -7,7 +7,7 @@
 
 import type { CellView } from '../layout/cellView';
 import type { OrganizeGroup } from './groups';
-import { getApiKey } from '../ai/describeCell';
+import { simpleCompletion } from '../chat/client';
 
 const CACHE_STORAGE = 'cdl-viewer:group-labels';
 const MODEL = 'claude-haiku-4-5-20251001';
@@ -114,37 +114,7 @@ export async function labelGroups(view: CellView, groups: OrganizeGroup[], force
     if (cached) return cached;
   }
 
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No Anthropic API key set.');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 500,
-      messages: [{ role: 'user', content: buildPrompt(view, groups) }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text();
-    let message = body;
-    try { message = JSON.parse(body)?.error?.message ?? body; } catch { /* keep raw body */ }
-    throw new Error(`Anthropic API error (${res.status}): ${message}`);
-  }
-
-  const data = await res.json();
-  const text: string = (data.content ?? [])
-    .filter((block: { type: string }) => block.type === 'text')
-    .map((block: { text: string }) => block.text)
-    .join('')
-    .trim();
+  const text = await simpleCompletion({ model: MODEL, maxTokens: 500, prompt: buildPrompt(view, groups) });
 
   const labels = parseLabels(text, groups);
   if (!labels) throw new Error('Could not parse group labels from the model response.');

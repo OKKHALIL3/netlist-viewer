@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { getApiKey } from '../ai/describeCell';
+import { getApiKey } from '../ai/apiKey';
 import type { ChatTool, ToolResult } from './tools/types';
 
 // The one Anthropic client for the app: streaming tool loop for the chat
@@ -165,7 +165,7 @@ export async function simpleCompletion(opts: { model: string; maxTokens: number;
   } catch (e) {
     if (e instanceof Anthropic.APIError) {
       const message = (e.error as { error?: { message?: string } } | undefined)?.error?.message ?? e.message;
-      throw new Error(`Anthropic API error (${e.status}): ${message}`);
+      throw new Error(`Anthropic API error (${e.status}): ${message}`, { cause: e });
     }
     throw e;
   }

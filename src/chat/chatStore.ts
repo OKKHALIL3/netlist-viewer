@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type Anthropic from '@anthropic-ai/sdk';
-import { getApiKey } from '../ai/describeCell';
+import { getApiKey } from '../ai/apiKey';
 import { runAgentTurn } from './agent';
 import { runParserTurn } from './basicParser';
 import { buildTools } from './tools/registry';

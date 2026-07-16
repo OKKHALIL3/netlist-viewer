@@ -4,7 +4,7 @@ import { useViewerStore } from '../../store/viewerStore';
 import { parseMarkers, refKey, refLabel, type Ref } from '../../chat/refs';
 import { buildTools } from '../../chat/tools/registry';
 import { makeChatCtx } from '../../chat/tools/liveCtx';
-import { getApiKey, setApiKey, clearApiKey } from '../../ai/describeCell';
+import { getApiKey, setApiKey, clearApiKey } from '../../ai/apiKey';
 import { CHAT_MODELS, getChatModel, setChatModel, type ChatModel } from '../../chat/client';
 import type { ResultTable } from '../../chat/tools/types';
 
