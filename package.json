@@ -9,12 +9,13 @@
     "lint": "eslint .",
     "test": "node test-adapter.mjs",
     "validate:real": "node scripts/validate-real.mjs",
-    "test:layout": "node --import tsx --test \"src/*.test.ts\" \"src/parser/*.test.ts\" \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\" \"src/layout/**/*.test.ts\" \"src/hybrid/**/*.test.ts\" \"src/search/**/*.test.ts\" \"src/organize/**/*.test.ts\" \"src/viewport/**/*.test.ts\"",
+    "test:layout": "node --import tsx --test \"src/*.test.ts\" \"src/parser/*.test.ts\" \"src/layout-viewer/**/*.test.ts\" \"src/components/layout/**/*.test.ts\" \"src/store/**/*.test.ts\" \"src/layout/**/*.test.ts\" \"src/hybrid/**/*.test.ts\" \"src/search/**/*.test.ts\" \"src/organize/**/*.test.ts\" \"src/viewport/**/*.test.ts\" \"src/chat/**/*.test.ts\"",
     "preview": "vite preview",
     "serve:viz": "tsx server/subcircuit_visualize.ts",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.1",
     "@xyflow/react": "^12.11.0",
     "elkjs": "^0.11.1",
     "react": "^19.2.6",

@@ -6,6 +6,7 @@
 export interface ViewerFlags {
   hybrid: boolean;
   layout: boolean;
+  chat: boolean;
 }
 
 export function parseViewers(raw: string | undefined): ViewerFlags {
@@ -13,8 +14,8 @@ export function parseViewers(raw: string | undefined): ViewerFlags {
     .split(',')
     .map(s => s.trim().toLowerCase())
     .filter(Boolean);
-  if (list.length === 0 || list.includes('all')) return { hybrid: true, layout: true };
-  return { hybrid: list.includes('hybrid'), layout: list.includes('layout') };
+  if (list.length === 0 || list.includes('all')) return { hybrid: true, layout: true, chat: true };
+  return { hybrid: list.includes('hybrid'), layout: list.includes('layout'), chat: list.includes('chat') };
 }
 
 // import.meta.env only exists under vite; the optional chain keeps this
@@ -23,3 +24,4 @@ const flags = parseViewers(import.meta.env?.VITE_VIEWERS);
 
 export const HYBRID_ENABLED = flags.hybrid;
 export const LAYOUT_ENABLED = flags.layout;
+export const CHAT_ENABLED = flags.chat;
