@@ -9,7 +9,8 @@ import { Landing } from './components/Landing';
 import { SearchPalette } from './components/SearchPalette';
 import { LayoutView } from './components/layout/LayoutView';
 import { HybridViewer } from './components/hybrid/HybridViewer';
-import { HYBRID_ENABLED, LAYOUT_ENABLED } from './flags';
+import { ChatPanel } from './components/chat/ChatPanel';
+import { CHAT_ENABLED, HYBRID_ENABLED, LAYOUT_ENABLED } from './flags';
 
 export default function App() {
   const { design, warnings, currentCell, appMode, landing } = useViewerStore();
@@ -57,6 +58,7 @@ export default function App() {
         </div>
       )}
       <SearchPalette />
+      {CHAT_ENABLED && <ChatPanel />}
       {warnings.length > 0 && (
         <details className="warnings-bar">
           <summary>{warnings.length} parse warning{warnings.length !== 1 ? 's' : ''}</summary>
