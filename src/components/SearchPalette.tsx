@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useViewerStore, type SelectionType, type BreadcrumbEntry } from '../store/viewerStore';
 import { useHybridStore } from '../store/hybridStore';
 import { buildSearchIndex, buildOccurrenceCounts, pathsToCell, type SearchResult } from '../search/searchIndex';
+import { matchIndex } from '../chat/queries/match';
 import type { Design } from '../parser/types';
 
 const KIND_LABELS: Record<SearchResult['kind'], string> = {
@@ -57,20 +58,10 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     const clickable: OccRow[] = [];
     if (!q) return { rows, clickable };
 
-    // Pins only match on their own name — their detail carries the connected
-    // net name, and matching that too would flood results with every pin tied
-    // to a common net (e.g. "vdd!") whenever that net is searched.
-    const matches = index.filter(
-      r => r.id.toLowerCase().includes(q) || (r.kind !== 'pin' && r.detail.toLowerCase().includes(q)),
-    );
-    // Rank by relevance before the result cap so an exact or prefix id match is
-    // never pushed off the end by earlier substring hits: exact id > id prefix >
-    // id substring > detail-only. Stable sort keeps document order within a tier.
-    const rankOf = (r: typeof matches[number]): number => {
-      const id = r.id.toLowerCase();
-      return id === q ? 0 : id.startsWith(q) ? 1 : id.includes(q) ? 2 : 3;
-    };
-    matches.sort((a, b) => rankOf(a) - rankOf(b));
+    // Matching + ranking shared with the chat resolver (queries/match.ts):
+    // ranked before the result cap so an exact or prefix id match is never
+    // pushed off the end by earlier substring hits.
+    const matches = matchIndex(index, q);
 
     for (const r of matches) {
       if (clickable.length >= MAX_RESULTS) break;
