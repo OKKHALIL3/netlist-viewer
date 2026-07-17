@@ -70,3 +70,35 @@ test('scoped layout instance keys match normalized slash paths', () => {
   const occ = layout!.entries.find(e => e.type === 'occ');
   assert.ok(occ && occ.type === 'occ' && occ.result.id === 'XS2');
 });
+
+test('active viewer splits: this level first, then rest of the design', () => {
+  const sections = setup('m', { currentCell: 'STG' }); // M1/M2 in STG, M1/R1 in DIV, net mid in TOP
+  assert.equal(sections[0].viewer, 'schematic');
+  assert.equal(sections[0].scope, 'level');
+  assert.equal(sections[0].levelName, 'STG');
+  const levelCells = sections[0].entries.filter(e => e.type === 'occ').map(e => e.type === 'occ' ? e.result.cellName : '');
+  assert.ok(levelCells.every(c => c === 'STG'), `level rows stay in STG: ${levelCells}`);
+  assert.equal(sections[1].scope, 'rest');
+  const restRows = sections[1].entries.filter(e => e.type === 'occ');
+  assert.ok(restRows.some(e => e.type === 'occ' && e.result.cellName !== 'STG'));
+});
+
+test('the on-screen occurrence ranks first within the level', () => {
+  // STG is instantiated twice inside AMP (XS1, XS2); user stands in XS2.
+  const sections = setup('m1', {
+    currentCell: 'STG',
+    currentPathLabels: ['TOP', 'XU1', 'XS2'],
+  });
+  const level = sections.find(s => s.scope === 'level')!;
+  const first = level.entries.find(e => e.type === 'occ');
+  assert.ok(first && first.type === 'occ');
+  if (first && first.type === 'occ') {
+    assert.deepEqual(first.path.map(p => p.label), ['TOP', 'XU1', 'XS2']);
+  }
+});
+
+test('no currentCell means no split (single all-scope active section)', () => {
+  const sections = setup('m');
+  assert.equal(sections[0].scope, 'all');
+  assert.ok(sections.every(s => s.scope === 'all'));
+});

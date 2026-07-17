@@ -3,7 +3,7 @@ import { useViewerStore, type SelectionType, type BreadcrumbEntry } from '../sto
 import { useHybridStore } from '../store/hybridStore';
 import { buildSearchIndex, buildOccurrenceCounts, type SearchResult } from '../search/searchIndex';
 import { matchIndex } from '../chat/queries/match';
-import { buildViewerSections, type ViewerKind } from '../search/viewerRows';
+import { buildViewerSections, type SectionScope, type ViewerKind } from '../search/viewerRows';
 import { normSeg } from '../layout-viewer/correlate';
 import { HYBRID_ENABLED, LAYOUT_ENABLED } from '../flags';
 import type { Design } from '../parser/types';
@@ -28,11 +28,18 @@ const VIEWER_LABELS: Record<ViewerKind, string> = {
 
 // A clickable occurrence (a match reached via one instantiation path, opening
 // in one specific viewer), a muted "+N more" tail for items reused more than
-// MAX_OCC times, or a viewer section header (active viewer's section first).
+// MAX_OCC times, or a section header. Sections rank: the hierarchy level on
+// screen first, then the rest of the design, then the other viewers.
 type OccRow = { type: 'occ'; viewer: ViewerKind; result: SearchResult; path: BreadcrumbEntry[]; loc: string; clickIdx: number };
 type MoreRow = { type: 'more'; key: string; count: number };
-type HeaderRow = { type: 'header'; viewer: ViewerKind; current: boolean };
+type HeaderRow = { type: 'header'; viewer: ViewerKind; scope: SectionScope; levelName?: string };
 type Row = OccRow | MoreRow | HeaderRow;
+
+function headerLabel(row: HeaderRow): string {
+  if (row.scope === 'level') return `This level · ${row.levelName}`;
+  if (row.scope === 'rest') return `${VIEWER_LABELS[row.viewer]} · other levels`;
+  return VIEWER_LABELS[row.viewer];
+}
 
 // Instantiation path as a short "XI9 / XI26" trail (instance labels below the
 // top), so the same item reached via different parents is distinguishable. Keeps
@@ -51,8 +58,11 @@ function fullLoc(path: BreadcrumbEntry[]): string {
 // Mounted only while open (see SearchPalette below), so its local state
 // starts fresh every time the palette is opened — no reset effect needed.
 function SearchModal({ design, onClose }: { design: Design; onClose: () => void }) {
-  const { goToPath, setFocusNet, setSelection, selectAndFocus, setAppMode, appMode, layoutModel } = useViewerStore();
+  const { goToPath, setFocusNet, setSelection, selectAndFocus, setAppMode, appMode, layoutModel, currentCell, breadcrumb } = useViewerStore();
   const hybridJump = useHybridStore(s => s.jumpTo);
+  const hyModel = useHybridStore(s => s.model);
+  const hySelected = useHybridStore(s => s.selected);
+  const hyOpenPath = useHybridStore(s => s.openPath);
   const [query, setQuery] = useState('');
   const [activeIdx, setActiveIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,19 +93,44 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
     if (!q) return { rows, clickable };
 
     const matches = matchIndex(index, q);
+
+    // The "current level" is the hierarchy level on screen: the schematic/
+    // layout breadcrumb's cell, or in hybrid the selected (else deepest open)
+    // block's master cell with its label chain as the occurrence preference.
+    let levelCell: string | null = currentCell;
+    let levelLabels: string[] | null = breadcrumb.map(b => b.label);
+    if (appMode === 'hybrid') {
+      const blockPath = hySelected ?? (hyOpenPath.length > 0 ? hyOpenPath[hyOpenPath.length - 1] : '');
+      const block = hyModel?.blocks.get(blockPath);
+      if (block) {
+        levelCell = block.master;
+        const chain: string[] = [];
+        for (let p: string | null = blockPath; p; p = hyModel?.blocks.get(p)?.parent || null) {
+          chain.unshift(hyModel!.blocks.get(p)!.label);
+        }
+        levelLabels = [design.topCell, ...chain];
+      } else {
+        levelCell = design.topCell;
+        levelLabels = [design.topCell];
+      }
+    }
+
     const sections = buildViewerSections(design, matches, occCounts, {
       activeViewer: appMode as ViewerKind,
       hybridEnabled: HYBRID_ENABLED,
       layoutEnabled: LAYOUT_ENABLED,
       layoutNets,
       layoutInstances,
+      currentCell: levelCell,
+      currentPathLabels: levelLabels,
       activeCap: ACTIVE_CAP,
       otherCap: OTHER_CAP,
       maxOcc: MAX_OCC,
     });
 
+    const showHeaders = sections.length > 1 || sections.some(s => s.scope !== 'all');
     for (const section of sections) {
-      if (sections.length > 1) rows.push({ type: 'header', viewer: section.viewer, current: section.viewer === appMode });
+      if (showHeaders) rows.push({ type: 'header', viewer: section.viewer, scope: section.scope, levelName: section.levelName });
       for (const e of section.entries) {
         if (e.type === 'more') {
           rows.push({ type: 'more', key: e.key, count: e.count });
@@ -107,7 +142,7 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
       }
     }
     return { rows, clickable };
-  }, [index, occCounts, design, query, appMode, layoutNets, layoutInstances]);
+  }, [index, occCounts, design, query, appMode, layoutNets, layoutInstances, currentCell, breadcrumb, hyModel, hySelected, hyOpenPath]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -200,8 +235,8 @@ function SearchModal({ design, onClose }: { design: Design; onClose: () => void 
           {rows.map(row => {
             if (row.type === 'header') {
               return (
-                <div key={`hdr:${row.viewer}`} className="search-section">
-                  {VIEWER_LABELS[row.viewer]}{row.current ? ' · current' : ''}
+                <div key={`hdr:${row.viewer}:${row.scope}`} className="search-section">
+                  {headerLabel(row)}
                 </div>
               );
             }
