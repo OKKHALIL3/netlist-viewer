@@ -39,26 +39,33 @@ export default function App() {
   return (
     <div className="app">
       <TopBar />
-      {LAYOUT_ENABLED && appMode === 'layout' ? (
-        <LayoutView />
-      ) : HYBRID_ENABLED && appMode === 'hybrid' ? (
-        <CanvasErrorBoundary resetKey={design.topCell}>
-          <HybridViewer />
-        </CanvasErrorBoundary>
-      ) : (
-        <div className={shellClass}>
-          <HierarchyPanel />
-          <div className="canvas-col">
-            <PanelToggles />
-            <CanvasErrorBoundary resetKey={currentCell}>
-              <SchematicCanvas />
+      {/* The chat is a first-class layout slice: the active viewer and the
+          chat column share the row, so opening chat narrows the canvas
+          instead of overlaying it. */}
+      <div className="app-main">
+        <div className="app-viewer">
+          {LAYOUT_ENABLED && appMode === 'layout' ? (
+            <LayoutView />
+          ) : HYBRID_ENABLED && appMode === 'hybrid' ? (
+            <CanvasErrorBoundary resetKey={design.topCell}>
+              <HybridViewer />
             </CanvasErrorBoundary>
-          </div>
-          <InspectorPanel />
+          ) : (
+            <div className={shellClass}>
+              <HierarchyPanel />
+              <div className="canvas-col">
+                <PanelToggles />
+                <CanvasErrorBoundary resetKey={currentCell}>
+                  <SchematicCanvas />
+                </CanvasErrorBoundary>
+              </div>
+              <InspectorPanel />
+            </div>
+          )}
         </div>
-      )}
+        {CHAT_ENABLED && <ChatPanel />}
+      </div>
       <SearchPalette />
-      {CHAT_ENABLED && <ChatPanel />}
       {warnings.length > 0 && (
         <details className="warnings-bar">
           <summary>{warnings.length} parse warning{warnings.length !== 1 ? 's' : ''}</summary>

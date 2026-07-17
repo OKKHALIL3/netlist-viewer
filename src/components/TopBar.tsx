@@ -3,7 +3,8 @@ import { useViewerStore } from '../store/viewerStore';
 import { useHybridStore } from '../store/hybridStore';
 import { parseCDLAsync } from '../parser/pyodide/pyodideParser';
 import { parseDspfAsync } from '../layout-viewer/dspf/parseDspfAsync';
-import { HYBRID_ENABLED, LAYOUT_ENABLED } from '../flags';
+import { CHAT_ENABLED, HYBRID_ENABLED, LAYOUT_ENABLED } from '../flags';
+import { useChatStore } from '../chat/chatStore';
 import { BrandMark } from './BrandMark';
 
 export function TopBar() {
@@ -18,6 +19,8 @@ export function TopBar() {
   const hyModel = useHybridStore(s => s.model);
   const hyOpenPath = useHybridStore(s => s.openPath);
   const hyGoToCrumb = useHybridStore(s => s.goToCrumb);
+  const chatOpen = useChatStore(s => s.open);
+  const toggleChat = useChatStore(s => s.toggleOpen);
   const fileRef = useRef<HTMLInputElement>(null);
   const dspfRef = useRef<HTMLInputElement>(null);
   // 0..1 while a DSPF parse is running in the worker, null otherwise.
@@ -212,6 +215,15 @@ export function TopBar() {
             <button className="search-btn" onClick={() => setSearchOpen(true)} title="Search the design (/)">
               ⌕ Search <kbd>/</kbd>
             </button>
+            {CHAT_ENABLED && (
+              <button
+                className={`search-btn${chatOpen ? ' chat-on' : ''}`}
+                onClick={toggleChat}
+                title="Chat with the circuit"
+              >
+                ✦ Chat
+              </button>
+            )}
           </>
         )}
 

@@ -26,8 +26,19 @@ export interface ChatMsg {
 export type ChatStatus = 'idle' | 'thinking' | 'streaming' | { tool: string };
 
 const HISTORY_CAP = 20;
+const OPEN_STORAGE = 'cdl-viewer:chat-open';
 const NO_KEY_NOTICE =
   'No Claude API key set — running in basic parser mode with fixed phrasings. Add an Anthropic API key (chat header) for full natural-language chat.';
+
+// The chat column defaults to open (it is a first-class slice of the app, not
+// a hidden extra); the user's collapse choice persists across sessions.
+function initialOpen(): boolean {
+  try {
+    return localStorage.getItem(OPEN_STORAGE) !== 'closed';
+  } catch {
+    return true;
+  }
+}
 
 interface ChatState {
   open: boolean;
@@ -45,14 +56,23 @@ interface ChatState {
 let controller: AbortController | null = null;
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  open: false,
+  open: initialOpen(),
   messages: [],
   status: 'idle',
   error: null,
   noticeShown: false,
   apiHistory: [],
 
-  toggleOpen: () => set(s => ({ open: !s.open })),
+  toggleOpen: () =>
+    set(s => {
+      const open = !s.open;
+      try {
+        localStorage.setItem(OPEN_STORAGE, open ? 'open' : 'closed');
+      } catch {
+        // storage unavailable — keep in-memory state only
+      }
+      return { open };
+    }),
 
   stop: () => controller?.abort(),
 

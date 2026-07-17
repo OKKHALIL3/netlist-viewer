@@ -128,8 +128,8 @@ export function ChatPanel() {
 
   if (!open) {
     return (
-      <button className="chat-fab" onClick={toggleOpen} title="Chat with the circuit">
-        Chat
+      <button className="chat-tab" onClick={toggleOpen} title="Chat with the circuit">
+        <span className="chat-tab-label">✦ Chat</span>
       </button>
     );
   }
