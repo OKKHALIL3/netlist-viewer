@@ -597,6 +597,7 @@ function Canvas() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        proOptions={{ hideAttribution: true }}
         nodeTypes={nodeTypes}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
